@@ -50,7 +50,8 @@ var (
 	// The three ways this codebase introduces a name.
 	funcRe  = regexp.MustCompile(`function\s+([a-zA-Z_$][\w$]*)\s*\(`)
 	varFnRe = regexp.MustCompile(`(?:var|let|const)\s+([a-zA-Z_$][\w$]*)\s*=`)
-	paramRe = regexp.MustCompile(`function\s*\(([^)]*)\)`)
+	// Named or anonymous: the parameters of both are locals.
+	paramRe = regexp.MustCompile(`function\s*(?:[a-zA-Z_$][\w$]*)?\s*\(([^)]*)\)`)
 )
 
 // browserGlobals are names the runtime provides. Kept explicit rather than
@@ -66,6 +67,10 @@ var browserGlobals = map[string]bool{
 	"URLSearchParams": true, "Uint32Array": true, "Int32Array": true, "ArrayBuffer": true,
 	"TextEncoder": true, "TextDecoder": true, "URL": true, "Blob": true, "FormData": true,
 	"localStorage": true, "sessionStorage": true, "document": true, "window": true,
+	// The animation and event half of the window, called bare by the panel
+	// script: a canvas that draws itself and listens for its own resize.
+	"requestAnimationFrame": true, "cancelAnimationFrame": true, "matchMedia": true,
+	"addEventListener": true, "removeEventListener": true,
 	"history": true, "location": true, "console": true, "crypto": true, "navigator": true,
 	// Control flow, which the call regexp cannot tell from a call.
 	"if": true, "for": true, "while": true, "switch": true, "catch": true,

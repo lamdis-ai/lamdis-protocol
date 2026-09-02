@@ -8,35 +8,58 @@ package api
 // because the original bytes are the evidence — a canvas re-encode would strip
 // the EXIF that lets the verifier tell a photograph taken here today from one
 // taken somewhere else last year.
+//
+// The layout is the instrument panel the rest of the exchange uses: glass over
+// the gridded ground, mono eyebrows, the pay in gold. The one thing on this
+// page that must not be missed — the challenge code — is set huge, in mono,
+// with a gold glow, because it is the thing the photograph has to contain.
 const workPageHTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lamdis — your task</title>
 <style>` + themeCSS + `
-.job { max-width: 34rem; margin: 0 auto; }
-main { padding: 1.1rem 1rem 3rem; }
-@media (min-width: 40rem) { main { padding: 1.6rem 1.25rem 4rem; } }
+main { padding: 1.2rem 1rem 4rem; max-width: 40rem; margin: 0 auto; }
+@media (min-width: 40rem) { main { padding: 2rem 1.25rem 5rem; } }
 .top .back { font-size: .84rem; color: var(--ink-2); text-decoration: none; }
 .top .back:hover { color: var(--ink); }
-.code-card {
-  margin: 1.1rem 0; padding: 1.2rem 1rem; text-align: center;
-  border: 1px dashed var(--rule-2); border-radius: 3px; background: var(--panel);
-}
-.code-card .big {
-  display: block; margin: .45rem 0 .4rem;
-  font: 700 2.3rem/1 var(--mono); letter-spacing: .26em; text-indent: .26em;
-  color: var(--gold);
-}
-.code-card p { margin: 0; font-size: .83rem; color: var(--ink-3); }
-.drop {
-  display: grid; place-items: center; gap: .35rem;
-  min-height: 7rem; padding: 1.1rem; cursor: pointer; text-align: center;
-  border: 1px dashed var(--rule-2); border-radius: 3px; background: var(--panel);
-  color: var(--ink-2);
-}
-.drop:hover { border-color: var(--ink-3); color: var(--ink); }
-.drop .big { font-weight: 600; color: var(--ink); }
-.drop .sm { font-size: .8rem; color: var(--ink-3); }
+.eyebrow { display: block; font: 600 .62rem/1 var(--mono); letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink-3); }
+.eyebrow.gold { color: var(--gold); }
+.hdr { margin: 0 0 1.1rem; }
+.hdr h1 { font-size: 1.6rem; margin: .55rem 0 .3rem; }
+.hdr .lead { margin: 0; font-size: .95rem; }
+.hdr .lead b { color: var(--ink); font-weight: 600; }
+.hud { --cols: 2; margin-bottom: 1rem; }
+.hud .v.txt { font: 600 .98rem/1.3 var(--sans); letter-spacing: 0; color: var(--ink); }
+/* The code. Set as large as the viewport allows, glowing, on its own panel:
+   a person glancing at a phone in a street must be able to copy it onto a
+   piece of paper without zooming in. */
+.code-card { position: relative; overflow: hidden; margin: 0 0 1rem;
+  padding: 1.3rem 1rem 1.25rem; text-align: center;
+  border: 1px solid rgba(255,182,39,.38); border-radius: 8px; background: var(--glass);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 0 48px rgba(255,182,39,.10); }
+.code-card::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, var(--gold), transparent); }
+.code-card .big { display: block; margin: .75rem 0 .65rem;
+  font: 700 clamp(2.6rem, 11vw, 4.4rem)/1 var(--mono); letter-spacing: .2em; text-indent: .2em;
+  color: var(--gold); font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 18px rgba(255,182,39,.55), 0 0 56px rgba(255,182,39,.22); }
+.code-card p { margin: 0; font-size: .84rem; color: var(--ink-2); }
+/* The drop zone: one obvious target, gold when it is ready to take a file. */
+.drop { display: grid; place-items: center; gap: .3rem; min-height: 8.5rem;
+  padding: 1.2rem; cursor: pointer; text-align: center;
+  border: 1px dashed var(--rule-2); border-radius: 8px; background: var(--glass);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); color: var(--ink-2);
+  transition: border-color .15s, box-shadow .15s; }
+.drop:hover, .drop:focus-within, .drop.over { border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(255,182,39,.25), 0 0 28px rgba(255,182,39,.12); }
+.drop svg { width: 2rem; height: 2rem; stroke: var(--ink-3); fill: none; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round; margin-bottom: .2rem; }
+.drop:hover svg, .drop.over svg { stroke: var(--gold); }
+.drop .big { font-weight: 600; color: var(--ink); font-size: 1rem; }
+.drop .sm { font: 500 .68rem/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3); }
 input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
 /* The preview is bounded in both directions.
    It had width:100% and no height rule at all, so a photograph straight off a
@@ -46,15 +69,18 @@ input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
    that pays them.
    object-fit keeps the aspect ratio inside the box, and max-width rather than
    width stops a small image being blown up into a soft mess. */
-.shot { display: none; margin-bottom: .8rem; }
+.shot { display: none; margin-bottom: .8rem; padding: .6rem; border: 1px solid var(--rule);
+  border-radius: 8px; background: var(--glass);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 .shot.on { display: block; }
 img#preview { display: block; max-width: 100%; max-height: 42vh; height: auto;
-  margin: 0 auto; border-radius: 3px; border: 1px solid var(--rule);
+  margin: 0 auto; border-radius: 4px; border: 1px solid var(--rule);
   background: var(--bg); object-fit: contain; }
-.shot .cap { margin-top: .35rem; font: 500 .74rem/1.3 var(--mono); color: var(--ink-3);
-  text-align: center; }
-.done-card { padding: 1.6rem 1.2rem; text-align: center;
-  border: 1px solid #1C4530; border-radius: 3px; background: linear-gradient(180deg,#0A1711,var(--bg)); }
+.shot .cap { margin: .5rem 0 0; font: 500 .7rem/1.3 var(--mono); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3); text-align: center; }
+.shot .cap b { color: var(--blue); font-weight: 500; }
+.send { margin: .8rem 0 0; }
+.send .btn.go { height: 2.7rem; font-size: .95rem; }
 .next { color: var(--gold); font-weight: 600; }
 .ask { display: block; margin: .1rem 0 .35rem; font: 600 .82rem/1.3 var(--sans); }
 textarea { width: 100%; box-sizing: border-box; padding: .55rem .6rem;
@@ -62,20 +88,37 @@ textarea { width: 100%; box-sizing: border-box; padding: .55rem .6rem;
   color: var(--ink); font: inherit; font-size: .9rem; resize: vertical; }
 textarea:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 .ask-acts { display: flex; gap: .5rem; margin-top: .5rem; }
-.stage { margin: 1rem 0; padding: .9rem 1rem; border-left: 2px solid var(--gold);
-  background: var(--panel); border-radius: 0 3px 3px 0; }
-.stage-of { font: 600 .72rem/1 var(--sans); letter-spacing: .09em;
-  text-transform: uppercase; color: var(--ink-3); }
-.attempt { margin: 1rem 0; padding: .85rem .9rem; border: 1px dashed var(--rule-2);
-  border-radius: 3px; background: var(--panel); }
-.sha { margin-top: .6rem; font: 400 .72rem/1.4 var(--mono); color: var(--ink-3); word-break: break-all; }
+/* Stage progress as what it is: money-weighted, not a schedule. */
+.stage { margin: 1rem 0 0; position: relative; overflow: hidden; }
+.stage::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, var(--gold), transparent); }
+.stage h2 { margin: .35rem 0 .3rem; font: 700 1.1rem/1.25 var(--sans); letter-spacing: -.02em;
+  text-transform: none; color: var(--ink); }
+.stage .stagebar { margin-top: .75rem; }
+.stage .stagebar .seg { flex: var(--w, 1) 1 0; height: 6px; }
+.stage .note { margin: .6rem 0 0; }
+.attempt { margin: 1rem 0 0; border-style: dashed; }
+.attempt .eyebrow { margin-bottom: .6rem; }
+/* The outcome, as one HUD tile: green for accepted, amber for refused, gold
+   while the money is still being decided. */
+.outcome { --cols: 1; margin: 0 0 1rem; }
+.outcome .t { padding: 1.4rem 1.3rem 1.3rem; }
+.outcome .v { font-size: 2.1rem; }
+.outcome .lead { margin: .7rem 0 1rem; font-size: .93rem; }
+.outcome .acts { display: flex; gap: .6rem; flex-wrap: wrap; }
+.sha { margin-top: .9rem; font: 400 .66rem/1.5 var(--mono); color: var(--ink-3);
+  word-break: break-all; letter-spacing: .04em; }
+.sha b { color: var(--ink-3); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+.fine { margin: .9rem 0 0; font-size: .82rem; color: var(--ink-3); }
+.fine b { color: var(--ink-2); }
 </style>
 <header class="top">
   <a class="mark" href="/board">lamdis<b>.</b></a>
+  <span class="pill" id="pill"><span class="beacon"></span>Work order</span>
   <div class="right"><a class="back" href="/how-it-works">How this works</a>
     <a class="back" href="/board">&larr; Board</a></div>
 </header>
-<main id="app"><p style="color:var(--ink-3)">Loading&hellip;</p></main>
+<main id="app"><p class="eyebrow" style="padding:2rem 0">Loading the brief&hellip;</p></main>
 <script>
 "use strict";
 
@@ -106,30 +149,40 @@ function esc(s) {
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
   });
 }
+
+// tile draws one outcome as a HUD tile. variant is ok, wait or money; the
+// colour is the verdict, read before a word is.
+function tile(variant, eyebrow, big, lead, actions, extra) {
+  return '<div class="hud outcome rv"><div class="t ' + variant + '">' +
+    '<div class="k">' + eyebrow + '</div>' +
+    '<div class="v">' + big + '</div>' +
+    '<p class="lead">' + lead + '</p>' +
+    '<div class="acts">' + actions + '</div>' +
+    (extra || "") +
+  '</div></div>';
+}
+
 function showOutcome(b, sha) {
   try { sessionStorage.removeItem(STASH); } catch (e) {}
   var paid = b.amount_minor ? money(b.amount_minor, b.currency || "usd") : null;
   var accepted = b.status === "accepted" || b.status === "attempt recorded";
   var pending = !accepted && !b.why;
-  document.getElementById("app").innerHTML =
-    '<div class="done-card">' +
-      '<span class="chip ' + (accepted ? "ok" : (pending ? "" : "bad")) + '">' +
-        (accepted ? "Accepted" : (pending ? "Submitted" : "Not accepted")) + '</span>' +
-      '<h1 style="margin:.7rem 0 .3rem">' +
-        (accepted ? (paid ? paid + " earned" : "Accepted")
-                  : (pending ? "Sent for checking" : "This one did not pass")) + '</h1>' +
-      '<p class="lead" style="margin-bottom:1.1rem">' +
-        (accepted
-          ? "It is in your account. Payouts follow your payout setting."
-          : (pending
-              ? "You will be paid once the evidence is accepted. Your account shows the outcome."
-              : esc(b.why) +
-                " You are still here \u2014 you can take the job again and reshoot.")) +
-      '</p>' +
-      '<a class="btn go" href="/board">' +
-        (accepted ? "Take another job" : "Back to the board") + '</a>' +
-      '<div class="sha">' + esc(sha || "") + '</div>' +
-    '</div>';
+  var variant = accepted ? "ok" : (pending ? "money" : "wait");
+  var eyebrow = accepted ? "Accepted" : (pending ? "Submitted · being checked" : "Not accepted");
+  var big = accepted ? (paid ? paid + " earned" : "Accepted")
+          : (pending ? "Sent for checking" : "This one did not pass");
+  var lead = accepted
+    ? "It is in your account. Payouts follow your payout setting."
+    : (pending
+        ? "You will be paid once the evidence is accepted. Your account shows the outcome."
+        : esc(b.why) + " You are still here — you can take the job again and reshoot.");
+  var acts = '<a class="btn go" href="/board">' +
+    (accepted ? "Take another job" : "Back to the board") + '</a>' +
+    '<a class="btn" href="/console">Earnings</a>';
+  var extra = sha ? '<div class="sha"><b>Evidence sha-256</b><br>' + esc(sha) + '</div>' : "";
+  var pill = document.getElementById("pill");
+  if (pill) { pill.innerHTML = '<span class="beacon' + (accepted ? "" : " off") + '"></span>' + eyebrow; }
+  document.getElementById("app").innerHTML = tile(variant, eyebrow, big, lead, acts, extra);
 }
 
 function money(m, cur) {
@@ -217,63 +270,102 @@ var BRIEF = null;
 
 function load() {
   if (!SECRET) {
-    fail("This page is missing its access code \u2014 that happens if the link was " +
+    fail("This page is missing its access code — that happens if the link was " +
       "retyped or opened in a new tab. The job is still yours: open it again from " +
-      "the board.");
+      "the board.", "Access code missing");
     return;
   }
   var path = "/v1/work/" + encodeURIComponent(JOB);
   fetch(path, { headers: authHeaders("GET", path, null) })
     .then(function (r) { if (!r.ok) { throw new Error("This link is not valid any more."); } return r.json(); })
     .then(function (b) { BRIEF = b; render(); })
-    .catch(function (e) { fail(e.message); });
+    .catch(function (e) { fail(e.message, "Link not valid"); });
 }
 
-function fail(msg) {
-  document.getElementById("app").innerHTML =
-    '<div class="done-card" style="border-color:var(--rule-2);background:var(--panel)">' +
-      '<p class="lead" style="margin:0 0 1rem">' + esc(msg) + '</p>' +
-      '<a class="btn" href="/board">Back to the queue</a></div>';
+function fail(msg, eyebrow) {
+  var pill = document.getElementById("pill");
+  if (pill) { pill.innerHTML = '<span class="beacon off"></span>' + eyebrow; }
+  document.getElementById("app").innerHTML = tile("wait", eyebrow,
+    "This link cannot open", esc(msg),
+    '<a class="btn go" href="/board">Back to the queue</a>' +
+    '<a class="btn" href="/how-it-works">How this works</a>',
+    '<p class="fine">Work links end in a <b>#</b> and a code. The part after the # ' +
+      'never reaches the server, which is why it cannot be recovered from here.</p>');
+}
+
+// stageBar draws the run of stages weighted by money. Only this stage's pay
+// is known on this page, so it is drawn to scale against the whole job and
+// the other stages share what remains: the honest picture without inventing
+// figures for stages the brief did not send.
+function stageBar(b) {
+  var m = /^(\d+) of (\d+)$/.exec(b.stage_of || "");
+  if (!m) { return ""; }
+  var at = parseInt(m[1], 10), of = parseInt(m[2], 10);
+  var share = b.pay_minor > 0 ? b.stage_pay_minor / b.pay_minor : 1 / of;
+  share = Math.max(.06, Math.min(.9, share));
+  var rest = of > 1 ? (1 - share) / (of - 1) : 0;
+  var segs = "";
+  for (var i = 1; i <= of; i++) {
+    var cls = i < at ? " paid" : (i === at ? " now" : "");
+    segs += '<span class="seg' + cls + '" style="--w:' + (i === at ? share : rest).toFixed(3) + '"></span>';
+  }
+  return '<div class="stagebar" role="img" aria-label="' + esc("stage " + at + " of " + of) + '">' + segs + '</div>' +
+    '<div class="stagekey">' +
+      (at > 1 ? '<span class="paid"><b>' + (at - 1) + '</b> done</span>' : "") +
+      '<span class="now"><b>' + money(b.stage_pay_minor, b.currency) + '</b> this stage</span>' +
+      '<span><b>' + money(b.pay_minor, b.currency) + '</b> whole job</span>' +
+    '</div>';
 }
 
 function render() {
   var b = BRIEF;
+  var isDo = b.kind === "do";
+  var pill = document.getElementById("pill");
+  if (pill) { pill.innerHTML = '<span class="beacon"></span>' + (isDo ? "Do job" : "Observe job") + (b.tier ? ' · ' + esc(b.tier) : ""); }
   document.getElementById("app").innerHTML = '' +
-    '<span class="chip hot">' + (b.kind === "do" ? "Act" : "Check") + '</span>' +
-    '<h1 style="margin-top:.6rem">' + esc(b.title) + '</h1>' +
-    (b.where ? '<p class="lead">' + esc(b.where) + '</p>' : '') +
-    '<dl class="metrics" style="grid-template-columns:1fr 1fr">' +
-      '<div class="metric money"><dt>You get paid</dt><dd>' + money(b.pay_minor, b.currency) + '</dd></div>' +
+    '<div class="hdr rv" style="--i:0">' +
+      '<span class="chip ' + (isDo ? "do" : "obs") + '">' + (isDo ? "Act" : "Check") + '</span>' +
+      (b.tier ? '<span class="chip">' + esc(b.tier) + '</span>' : "") +
+      '<h1>' + esc(b.title) + '</h1>' +
+      (b.where ? '<p class="lead"><b>Where:</b> ' + esc(b.where) + '</p>' : '') +
+    '</div>' +
+    '<dl class="hud rv" style="--i:1">' +
+      '<div class="t money"><dt class="k">You get paid</dt><dd class="v" style="margin-left:0">' + money(b.pay_minor, b.currency) + '</dd>' +
+        '<div class="s">held before you started</div></div>' +
       (b.bonus_minor
-        ? '<div class="metric"><dt>Bonus if the answer is yes</dt><dd>+' + money(b.bonus_minor, b.currency) + '</dd></div>'
-        : '<div class="metric"><dt>Bring back</dt><dd style="font-size:.95rem">' +
-            esc(b.deliverable || "a clear photo") + '</dd></div>') +
+        ? '<div class="t soft"><dt class="k">Bonus if the answer is yes</dt><dd class="v" style="margin-left:0">+' + money(b.bonus_minor, b.currency) + '</dd>' +
+          '<div class="s">paid either way for a usable photo</div></div>'
+        : '<div class="t soft"><dt class="k">Bring back</dt><dd class="v txt" style="margin-left:0">' +
+            esc(b.deliverable || "a clear photo") + '</dd><div class="s">as the camera saved it</div></div>') +
     '</dl>' +
-    '<div class="code-card">' +
-      '<span class="label">Write this where the camera can see it</span>' +
+    '<div class="code-card rv" style="--i:2">' +
+      '<span class="eyebrow gold">Write this where the camera can see it</span>' +
       '<span class="big">' + esc(b.challenge) + '</span>' +
       '<p>Paper, a phone screen, anything. It proves the photo was taken now, for ' +
         'this job.</p>' +
     '</div>' +
     '<div class="shot" id="shot"><img id="preview" alt="The photograph you are about to send">' +
       '<p class="cap" id="shotcap"></p></div>' +
-    '<label class="drop" for="f">' +
-      '<span class="big">Take a photo</span>' +
-      '<span class="sm">Or choose one from your camera roll</span>' +
+    '<label class="drop rv" for="f" id="drop" style="--i:3">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>' +
+      '<span class="big" id="droptext">Take a photo</span>' +
+      '<span class="sm">or drop one here · camera roll works too</span>' +
     '</label>' +
     '<input id="f" type="file" accept="image/*,video/mp4" capture="environment">' +
-    '<p style="margin-top:.8rem"><button class="btn go wide" id="send" disabled>Submit</button></p>' +
+    '<p class="send rv" style="--i:4"><button class="btn go wide" id="send" disabled>Submit</button></p>' +
     '<div class="err" id="err"></div>' +
     (BRIEF.stage
-      ? '<div class="stage">' +
-          '<div class="stage-of">Stage ' + esc(BRIEF.stage_of) + '</div>' +
-          '<h2 style="margin:.15rem 0 .3rem">' + esc(BRIEF.stage) + '</h2>' +
+      ? '<div class="glass stage rv" style="--i:5">' +
+          '<span class="eyebrow gold">Stage ' + esc(BRIEF.stage_of) + '</span>' +
+          '<h2>' + esc(BRIEF.stage) + '</h2>' +
           '<p class="note" style="margin:0">Photograph ' + esc(BRIEF.stage_proves) +
             '. This stage pays ' + money(BRIEF.stage_pay_minor, BRIEF.currency) +
-            ' on its own \u2014 you do not wait for the whole job.</p>' +
+            ' on its own — you do not wait for the whole job.</p>' +
+          stageBar(BRIEF) +
         '</div>'
       : "") +
-    '<div class="attempt">' +
+    '<div class="glass attempt rv" style="--i:6">' +
+      '<span class="eyebrow">If it cannot be done</span>' +
       '<button type="button" class="btn" id="cant">I went, but this cannot be done</button>' +
       '<div id="cant-box" hidden>' +
         '<label class="ask" for="cant-why">What stopped you?</label>' +
@@ -288,12 +380,12 @@ function render() {
       '<p class="note next" id="cant-next" hidden></p>' +
     '</div>' +
     (BRIEF.tier === "V2" || BRIEF.tier === "V3"
-      ? '<p class="note"><b>Location must be on.</b> This job needs photographs ' +
+      ? '<p class="fine rv" style="--i:7"><b>Location must be on.</b> This job needs photographs ' +
         'that record where and when they were taken. Take them in the camera app ' +
-        'with location enabled \u2014 a picture sent through a messaging app has ' +
+        'with location enabled — a picture sent through a messaging app has ' +
         'that stripped and will be refused.</p>'
       : "") +
-    '<p class="note">Your photo uploads exactly as your camera saved it. You are paid ' +
+    '<p class="fine rv" style="--i:8">Your photo uploads exactly as your camera saved it. You are paid ' +
       'for a usable submission &mdash; the answer does not have to be the one anyone ' +
       'hoped for.</p>';
 
@@ -316,7 +408,7 @@ function render() {
       window.__lamdisAttemptWhy = why;
       cantBox.hidden = true;
       cant.hidden = false;
-      cant.textContent = "Attempt: " + (why.length > 40 ? why.slice(0, 40) + "\u2026" : why);
+      cant.textContent = "Attempt: " + (why.length > 40 ? why.slice(0, 40) + "…" : why);
       cant.disabled = true;
 
       // Marking an attempt is not submitting one. It still needs a photograph
@@ -336,10 +428,11 @@ function render() {
   }
   var input = document.getElementById("f");
   var send = document.getElementById("send");
+  var drop = document.getElementById("drop");
   var chosen = null;
 
-  input.addEventListener("change", function () {
-    chosen = input.files && input.files[0];
+  function took(file) {
+    chosen = file;
     if (!chosen) { return; }
     var img = document.getElementById("preview");
     img.src = URL.createObjectURL(chosen);
@@ -349,12 +442,27 @@ function render() {
     // starts, not after it fails.
     img.onload = function () {
       var mb = (chosen.size / (1024 * 1024)).toFixed(1);
-      document.getElementById("shotcap").textContent =
-        img.naturalWidth + " x " + img.naturalHeight + " \u00b7 " + mb + " MB";
+      document.getElementById("shotcap").innerHTML =
+        '<b>' + img.naturalWidth + " × " + img.naturalHeight + '</b> · ' + mb + " MB · " +
+        esc(chosen.type || "file") + " · sent as saved";
     };
     send.disabled = false;
-    document.querySelector("label.file").textContent = "Choose a different photo";
+    document.getElementById("droptext").textContent = "Choose a different photo";
+  }
+
+  input.addEventListener("change", function () {
+    took(input.files && input.files[0]);
   });
+  // A real drop target on a desktop, so the dashed zone does what it says.
+  if (drop) {
+    drop.addEventListener("dragover", function (ev) { ev.preventDefault(); drop.classList.add("over"); });
+    drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+    drop.addEventListener("drop", function (ev) {
+      ev.preventDefault(); drop.classList.remove("over");
+      var f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+      if (f) { took(f); }
+    });
+  }
 
   send.addEventListener("click", function () {
     if (!chosen) { return; }
@@ -380,7 +488,7 @@ function render() {
           // on the server unclaimed forever: the worker saw a success screen,
           // no submission was ever created, nothing was verified, and nobody
           // was ever paid.
-          send.textContent = "Checking\u2026";
+          send.textContent = "Checking…";
           var sub = "/v1/work/" + encodeURIComponent(JOB) + "/submit";
           var claim = attempted
             ? JSON.stringify({attempted: true, why: window.__lamdisAttemptWhy || ""})

@@ -6,15 +6,21 @@ package api
 // Two audiences read this page. An operator wants to know what they have
 // earned, what is holding it up, what they have agreed to take, and how a
 // fleet or business takes work over the API. A buyer wants to know what their
-// money is doing, what their agents bought, what came back, and — now — how to
-// post a job themselves without an agent in between. One rail serving both
-// meant a buyer navigated by anchors about capacity and payouts that had
-// nothing to do with them, so the page has a mode switch and a rail per side.
+// money is doing, what their agents bought, what came back, and how to post a
+// job themselves without an agent in between. One rail serving both meant a
+// buyer navigated by anchors about capacity and payouts that had nothing to do
+// with them, so the page has a mode switch and a rail per side.
+//
+// It is built as the cockpit the landing page promises: the five numbers that
+// decide what to do next in HUD tiles, a live radar of the work around the
+// operator, and every section as a glass panel over the gridded ground. The
+// shared instrument-panel pieces live in theme.go and panelJS; only what is
+// particular to this page is styled here.
 //
 // Everything here is wired to a real endpoint. A settings page whose controls
 // do not reach the dispatcher is worse than no settings page, because the
 // operator believes they are protected and finds work in their queue anyway.
-var consolePageHTML = consoleTop + themeCSS + consoleBody + workerJS + consoleScript
+var consolePageHTML = consoleTop + themeCSS + consoleBody + workerJS + panelJS + consoleScript
 
 const consoleTop = `<!doctype html>
 <meta charset="utf-8">
@@ -23,16 +29,51 @@ const consoleTop = `<!doctype html>
 <style>`
 
 const consoleBody = `
-.panes { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule);
-         border-radius: 3px; overflow: hidden; }
+/* The cockpit header: the title, the sign-in and payout state as pills, and
+   the switch between the two sides of the exchange. */
+.cockpit { display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin: 0 0 1.3rem; }
+.cockpit h1 { margin: 0 0 .25rem; }
+.cockpit .lead { margin: 0; max-width: 40rem; }
+.cockpit-r { margin-left: auto; display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+.pill.ok { color: var(--green); border-color: #1C4530; }
+.pill.warn { color: var(--warn); border-color: #3A2510; }
+.pill .beacon.warn { background: var(--warn); animation: none; }
+.pill .beacon.gold { background: var(--gold); animation: none; }
+.mode button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.mode-grp { display: contents; }
+
+/* Section heads: the eyebrow, a live count beside it, one line of why. */
+.sh { display: flex; align-items: baseline; gap: .7rem; flex-wrap: wrap; margin: 1.9rem 0 .7rem; }
+.sh h2 { margin: 0; }
+.sh .n { font: 600 .64rem/1 var(--mono); color: var(--gold); letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+.sh .n.quiet { color: var(--ink-3); }
+.sh .sub { font: 500 .68rem/1.4 var(--mono); color: var(--ink-3); }
+.main .lead { font-size: .86rem; margin: 0 0 .9rem; }
+
+/* Panels: every settings group is a glass tile over the ground. */
+.panes { display: grid; gap: .7rem; }
 @media (min-width: 50rem) { .panes { grid-template-columns: 1fr 1fr; } }
-.pane { background: var(--bg); padding: 1.05rem 1rem; }
-.pane h3 { margin: 0 0 .2rem; font: 600 .95rem/1.3 var(--sans); }
+.pane { background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 1.05rem 1.1rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04); min-width: 0; }
+.pane h3 { margin: 0 0 .3rem; font: 600 .62rem/1 var(--mono); letter-spacing: .15em;
+  text-transform: uppercase; color: var(--ink-2); }
 .pane p.why { margin: 0 0 .85rem; color: var(--ink-3); font-size: .82rem; }
+.hud .t { min-width: 0; }
+.hud .v { white-space: nowrap; }
+.hud .v.n { font-family: var(--mono); font-weight: 600; letter-spacing: 0; }
+.hud .s a { color: var(--gold); text-decoration: none; }
+.radar-wrap canvas { height: 17rem; }
+.radar-wrap .hint a { color: var(--gold); }
+.rows .r { font-variant-numeric: tabular-nums; }
+.rows .r .acts { margin-top: .45rem; }
+.empty { padding: 1.1rem 1rem; text-align: left; font: 500 .78rem/1.5 var(--mono); color: var(--ink-3); }
+.empty a { color: var(--ink-2); }
+.demo { margin: 0 0 1.2rem; }
 
 .ctl { display: flex; align-items: center; gap: .7rem; margin-bottom: .5rem; }
 .ctl input[type=range] { flex: 1; accent-color: var(--gold); }
-.ctl .v { font: 600 .92rem/1 var(--mono); min-width: 3.6rem; text-align: right; }
+.ctl .v { font: 600 .92rem/1 var(--mono); min-width: 3.6rem; text-align: right; font-variant-numeric: tabular-nums; }
 
 .toggle { display: flex; align-items: center; justify-content: space-between;
           gap: 1rem; padding: .6rem 0; border-top: 1px solid var(--rule); }
@@ -88,21 +129,10 @@ textarea:focus-visible, .amt-in:focus-visible { outline: 2px solid var(--gold);
   font: 600 .8rem/1.4 var(--mono); word-break: break-all; }
 .keyline .k { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .reveal { margin-top: .6rem; padding: .75rem .85rem; border-radius: 3px;
-  border: 1px solid #4A3410; background: #17110603; }
+  border: 1px solid #4A3410; background: rgba(23,17,6,.6); }
 .reveal .k { display: block; margin: .35rem 0; font: 600 .9rem/1.4 var(--mono);
   color: var(--gold); word-break: break-all; }
 .reveal p { margin: 0; font-size: .78rem; color: var(--ink-3); }
-
-/* The mode switch. Two audiences, one page: the switch decides which rail and
-   which sections are on screen, and remembers the answer. */
-.modes { display: inline-flex; gap: .2rem; margin: 0 0 1.1rem; padding: .2rem;
-  border: 1px solid var(--rule-2); border-radius: 3px; background: var(--panel); }
-.mode { appearance: none; border: 0; background: none; color: var(--ink-3);
-  font: 600 .84rem/1 var(--sans); padding: .5rem .95rem; border-radius: 2px; cursor: pointer; }
-.mode[aria-selected="true"] { background: var(--panel-2); color: var(--ink); }
-.mode:hover { color: var(--ink); }
-.mode:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
-.mode-grp { display: contents; }
 
 /* Forms. The post-a-job form is the first real form on the console, so the
    field styles live here rather than in the theme. */
@@ -113,6 +143,7 @@ textarea:focus-visible, .amt-in:focus-visible { outline: 2px solid var(--gold);
 .field input[type=month], .field select, .field textarea {
   width: 100%; padding: .55rem .65rem; border: 1px solid var(--rule-2); border-radius: 3px;
   background: var(--panel); color: var(--ink); font-size: .9rem; }
+.field input[type=number] { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .field select { appearance: auto; }
 .field input:focus, .field select:focus { outline: none; border-color: var(--gold); }
 .two { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr; }
@@ -123,9 +154,52 @@ textarea:focus-visible, .amt-in:focus-visible { outline: 2px solid var(--gold);
   border-left: 2px solid var(--green); background: var(--panel); font-size: .84rem;
   color: var(--ink-2); border-radius: 0 3px 3px 0; }
 .fund.short { border-left-color: var(--warn); }
-.fund b { color: var(--ink); }
+.fund b { color: var(--ink); font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-.tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; }
+/* Post a job: the fields, and beside them the row the board will show. The
+   preview follows every keystroke, so what the operator sees is never a
+   surprise the buyer discovers after posting. */
+.post-grid { display: grid; gap: .8rem; }
+@media (min-width: 62rem) {
+  .post-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); align-items: start; }
+  .pv-wrap { position: sticky; top: 4rem; }
+}
+.post-grid .panes { grid-template-columns: 1fr; }
+.pv { border: 1px solid var(--rule-2); border-radius: 8px; background: var(--glass-2);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); }
+.pv-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: .65rem .95rem; border-bottom: 1px solid var(--rule);
+  font: 600 .62rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.pv-top .live { display: flex; align-items: center; gap: .45rem; color: var(--green); }
+.pv-top .live .beacon { width: .38rem; height: .38rem; }
+.pv .jrow { cursor: default; border-left-color: var(--rule-2); }
+.pv .jrow:hover { background: none; }
+.pv.obs .jrow { border-left-color: var(--blue); }
+.pv.do .jrow { border-left-color: var(--gold); }
+.pv .jt.ph, .pv .dv.ph { color: var(--ink-3); font-weight: 400; }
+.pv .meta { font: 500 .72rem/1.6 var(--mono); color: var(--ink-3); }
+.pv .checks { padding: .75rem .95rem .9rem; border-top: 1px solid var(--rule); }
+.pv .checks .k { font: 600 .6rem/1 var(--mono); letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); }
+.pv .checks ul { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .32rem; }
+.pv .checks li { display: flex; gap: .55rem; align-items: center; color: var(--ink-3); font-size: .82rem; transition: color .3s; }
+.pv .checks li i { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--rule-2); flex: none;
+  display: inline-grid; place-items: center; font-style: normal; font-size: 8px; transition: all .3s; }
+.pv .checks li.on { color: var(--ink-2); }
+.pv .checks li.on i { background: var(--green); border-color: var(--green); color: #04160A; }
+.pv .checks li.on i::before { content: "\2713"; }
+.pv .hold { display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  padding: .8rem .95rem; border-top: 1px solid var(--rule);
+  background: linear-gradient(90deg, rgba(255,182,39,.10), transparent); }
+.pv .hold .amt { font: 700 1.3rem/1 var(--sans); color: var(--gold); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.pv .hold .who { display: block; margin-top: .25rem; font: 500 .68rem/1.4 var(--mono); color: var(--ink-3); }
+.pv .hold .st { font: 600 .62rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); text-align: right; }
+.pv .hold .st.ok { color: var(--green); }
+.pv .hold .st.short { color: var(--warn); }
+.pv .priv { padding: .6rem .95rem; border-top: 1px dashed var(--rule); font: 500 .7rem/1.5 var(--mono); color: var(--ink-3); }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--glass);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 table.stmt { width: 100%; border-collapse: collapse; font-size: .84rem; }
 table.stmt th, table.stmt td { padding: .5rem .6rem; border-bottom: 1px solid var(--rule);
   text-align: left; white-space: nowrap; }
@@ -134,19 +208,20 @@ table.stmt th { font: 600 .62rem/1 var(--mono); letter-spacing: .12em;
 table.stmt td.n, table.stmt th.n { text-align: right; font-family: var(--mono);
   font-variant-numeric: tabular-nums; }
 table.stmt tr.tot td { border-top: 1px solid var(--rule-2); font-weight: 600; }
+table.stmt tr.tot td.n { color: var(--gold); }
 table.stmt tr:last-child td { border-bottom: 0; }
 
 /* The receipt and the evidence behind it, read in the page rather than as
    JSON in a tab that a browser session could not even open. */
 .jx { margin-top: .5rem; }
-.receipt { border: 1px solid var(--rule); border-radius: 3px; padding: .9rem 1rem;
-  margin-top: .6rem; background: var(--panel); font-size: .86rem; }
-.receipt h4 { margin: .9rem 0 .35rem; font: 600 .64rem/1 var(--sans);
-  text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); }
+.receipt { border: 1px solid var(--rule); border-radius: 6px; padding: .9rem 1rem;
+  margin-top: .6rem; background: var(--glass-2); font-size: .86rem; }
+.receipt h4 { margin: .9rem 0 .35rem; font: 600 .6rem/1 var(--mono);
+  text-transform: uppercase; letter-spacing: .15em; color: var(--ink-3); }
 .receipt h4:first-child { margin-top: 0; }
 .receipt ul { margin: 0; padding-left: 1.1rem; color: var(--ink-2); }
 .receipt li { margin-bottom: .25rem; }
-.receipt .ceil { font: 600 1.5rem/1 var(--mono); color: var(--gold); }
+.receipt .ceil { font: 600 1.5rem/1 var(--mono); color: var(--gold); font-variant-numeric: tabular-nums; }
 .receipt .fn { margin-top: .3rem; }
 .receipt details { margin-top: .8rem; }
 .receipt summary { cursor: pointer; font-size: .8rem; color: var(--ink-3); }
@@ -193,7 +268,7 @@ table.stmt tr:last-child td { border-bottom: 0; }
     <div class="mode-grp" id="rail-operator">
       <span class="label grp">Work</span>
       <a href="/board">Queue</a>
-      <a href="/board#holding">In flight</a>
+      <a href="#flight">In flight</a>
       <span class="label grp">Operation</span>
       <a href="#earnings">Earnings</a>
       <a href="#payout">Payouts</a>
@@ -201,14 +276,15 @@ table.stmt tr:last-child td { border-bottom: 0; }
       <a href="#supplier">Business</a>
       <a href="#statement">Statement</a>
       <a href="#alerts">Alerts</a>
-      <a href="#larger">Larger jobs</a>
       <a href="#integration">Dispatch</a>
+      <a href="#larger">Larger jobs</a>
     </div>
     <div class="mode-grp" id="rail-buyer">
       <span class="label grp">Buying</span>
-      <a href="#spending">Spending</a>
       <a href="#post">Post a job</a>
+      <a href="#spending">Spending</a>
       <a href="#keys">Agent keys</a>
+      <a href="#funds">Add funds</a>
       <a href="#alerts-buyer">Alerts</a>
     </div>
     <div class="mode-grp">
@@ -218,13 +294,21 @@ table.stmt tr:last-child td { border-bottom: 0; }
     </div>
   </nav>
   <main class="main">
-    <div class="modes" role="tablist" aria-label="Which side of the exchange">
-      <button class="mode" role="tab" id="mode-operator" aria-selected="false">Operator</button>
-      <button class="mode" role="tab" id="mode-buyer" aria-selected="false">Buyer</button>
+    <div class="cockpit">
+      <div>
+        <h1>Your account</h1>
+        <p class="lead" id="lead">What you have earned, what you will take, and how your agents
+          connect.</p>
+      </div>
+      <div class="cockpit-r">
+        <span class="pill" id="pill-session"><span class="beacon off"></span><span id="pill-session-t">Not signed in</span></span>
+        <span class="pill" id="pill-payout" hidden><span class="beacon off"></span><span id="pill-payout-t">Payouts</span></span>
+        <div class="mode" role="group" aria-label="Which side of the exchange">
+          <button id="mode-operator" aria-pressed="false" aria-selected="false">Operator</button>
+          <button id="mode-buyer" aria-pressed="false" aria-selected="false">Buyer</button>
+        </div>
+      </div>
     </div>
-    <h1>Your account</h1>
-    <p class="lead" id="lead">What you have earned, what you will take, and how your agents
-      connect.</p>
     <div id="body"><div class="empty">Loading&hellip;</div></div>
   </main>
 </div>
@@ -233,19 +317,42 @@ table.stmt tr:last-child td { border-bottom: 0; }
 `
 
 const consoleScript = `
+// panelJS reaches the browser's animation and event globals unqualified. The
+// page audit in pagescript_test only credits names a page defines, so they are
+// bound here to window, which is where they live anyway. The event pair is
+// taken from the prototype: a top-level var shadows an inherited property
+// before this line runs, so window.addEventListener would already be undefined.
+var requestAnimationFrame = window.requestAnimationFrame.bind(window);
+var cancelAnimationFrame = window.cancelAnimationFrame.bind(window);
+var addEventListener = EventTarget.prototype.addEventListener.bind(window);
+var removeEventListener = EventTarget.prototype.removeEventListener.bind(window);
+
+// Set to true by the server for ?demo=1 on an exchange with no identity
+// provider. Never on a real one; see Console.handlePage.
+var DEMO_ALLOWED = false;
+var DEMO = false;
+
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
   });
 }
 function money(m, cur) {
-  var sign = m < 0 ? "-" : "", v = Math.abs(m || 0);
+  var sign = m < 0 ? "-" : "", v = Math.abs(Math.round(m || 0));
   var sym = (cur || "USD") === "USD" ? "$" : cur + " ";
-  return sign + sym + Math.floor(v / 100) + "." + String(v % 100).padStart(2, "0");
+  var whole = String(Math.floor(v / 100)).replace(/(\d)(?=(\d{3})+$)/g, "$1,");
+  return sign + sym + whole + "." + String(v % 100).padStart(2, "0");
 }
+// fmt is the count-up formatter for tiles that count things rather than money.
+function fmt(n) { return String(Math.round(n)); }
 function when(iso) {
   var d = new Date(iso);
   return isNaN(d) ? "" : d.toLocaleDateString(undefined, {month: "short", day: "numeric"});
+}
+function whenAt(iso) {
+  var d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString(undefined, {month: "short", day: "numeric"}) +
+    " " + d.toLocaleTimeString(undefined, {hour: "numeric", minute: "2-digit"});
 }
 // Dollars typed into a field, as minor units. Anything unreadable is zero.
 function minorOf(id) {
@@ -289,11 +396,43 @@ function errorOf(res, fallback) {
 
 var ME = null, CAP = null, KEYS = [], NEW_KEY = "";
 var SUP = null, STMT = null, ALERTS = null, PAYOUT = null;
+var HOLDING = [], BOARD = null;
+var RADAR_STOP = null;
 var MODE = "both";
 
-function metric(label, value, cls, trend) {
-  return '<div class="metric ' + (cls || "") + '"><dt>' + label + '</dt><dd>' + value + '</dd>' +
-    (trend ? '<div class="trend">' + trend + '</div>' : '') + '</div>';
+// --- arrival -----------------------------------------------------------------
+//
+// Rows and panels rise into place in the order they are read. The stagger is
+// capped so a long list does not keep somebody waiting on its tail.
+
+var RV = 0;
+function rv(extra) { return ' class="rv ' + (extra || "") + '" style="--i:' + Math.min(RV++, 14) + '"'; }
+function rvi(i, extra) { return ' class="rv ' + (extra || "") + '" style="--i:' + Math.min(i, 12) + '"'; }
+
+// A HUD tile: the label, the number (counted up after render), one line under.
+function tile(cls, label, target, kind, sub, cur) {
+  var v = kind === "money" ? money(0, cur) : "0";
+  return '<div' + rv("t " + (cls || "")) + '><div class="k">' + label + '</div>' +
+    '<div class="v' + (kind === "money" ? "" : " n") + '" data-target="' + (target || 0) +
+    '" data-kind="' + kind + '" data-cur="' + esc(cur || "USD") + '">' + v + '</div>' +
+    (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>';
+}
+function animateTiles() {
+  document.querySelectorAll(".hud .v[data-target]").forEach(function (el) {
+    var target = parseFloat(el.getAttribute("data-target")) || 0;
+    var cur = el.getAttribute("data-cur");
+    countUp(el, target, el.getAttribute("data-kind") === "money"
+      ? function (x) { return money(x, cur); } : fmt);
+    el.removeAttribute("data-target");
+  });
+}
+// head takes the h2 as markup rather than an id and a label, so every
+// anchor the rails point at is a literal in the page source, where the
+// no-dead-anchors test can see it.
+function head(h2, count, sub) {
+  return '<div class="sh">' + h2 +
+    (count != null ? '<span class="n' + (count ? "" : " quiet") + '">' + esc(count) + '</span>' : '') +
+    (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>';
 }
 
 // --- mode --------------------------------------------------------------------
@@ -331,14 +470,20 @@ function applyMode() {
     var sec = document.getElementById("sec-" + k);
     if (sec) { sec.hidden = !on; }
     document.getElementById("rail-" + k).hidden = !on;
-    document.getElementById("mode-" + k).setAttribute("aria-selected", MODE === k ? "true" : "false");
+    var b = document.getElementById("mode-" + k);
+    b.setAttribute("aria-pressed", MODE === k ? "true" : "false");
+    b.setAttribute("aria-selected", MODE === k ? "true" : "false");
   });
   var ex = document.getElementById("explain-both");
   if (ex) { ex.hidden = MODE !== "both"; }
+  var pp = document.getElementById("pill-payout");
+  if (pp) { pp.hidden = MODE === "buyer" || !ME; }
   document.getElementById("lead").textContent =
     MODE === "operator" ? "What you have earned, what you will take, and how work reaches you." :
     MODE === "buyer"    ? "What your money is doing, what came back, and the keys that spend it." :
     "One account, two sides. Operators take work and are paid for it; buyers post work and pay for it.";
+  // The radar only has a size once its section is on screen.
+  if (MODE !== "buyer") { drawConsoleRadar(); }
 }
 function explainer() {
   return '<div class="note-box" id="explain-both" hidden><b>Nothing has happened on this ' +
@@ -357,10 +502,29 @@ function jumpToHash() {
   el.scrollIntoView();
 }
 
+// The pills: signed in or not, and whether money can reach this person.
+function renderPills() {
+  var s = document.getElementById("pill-session"), st = document.getElementById("pill-session-t");
+  var p = document.getElementById("pill-payout"), pt = document.getElementById("pill-payout-t");
+  if (DEMO) {
+    s.className = "pill warn"; s.firstChild.className = "beacon warn"; st.textContent = "Sample data";
+  } else if (ME) {
+    s.className = "pill ok"; s.firstChild.className = "beacon";
+    st.textContent = ME.verified ? "Signed in · verified" : "Signed in";
+  }
+  if (!ME) { p.hidden = true; return; }
+  var po = (PAYOUT && PAYOUT.payout) || ME.payout || {};
+  if (po.unavailable) { p.className = "pill"; p.firstChild.className = "beacon off"; pt.textContent = "Payouts off"; }
+  else if (po.ready) { p.className = "pill ok"; p.firstChild.className = "beacon"; pt.textContent = "Payouts connected"; }
+  else if (po.connected) { p.className = "pill warn"; p.firstChild.className = "beacon warn"; pt.textContent = "Payouts checking"; }
+  else { p.className = "pill warn"; p.firstChild.className = "beacon warn"; pt.textContent = "Payouts not set up"; }
+  p.hidden = MODE === "buyer";
+}
+
 // The most useful sentence on the page is why the money has not arrived.
 function blockedStrip() {
   if (!ME.blocked) { return ""; }
-  return '<div class="strip warn"><span class="d"></span><span>' +
+  return '<div' + rv("strip warn") + '><span class="d"></span><span>' +
     esc(ME.blocked) + '</span>' +
     (ME.can_connect_payout ? '<a href="#payout" style="margin-left:auto">Payouts &rarr;</a>' : "") +
     '</div>';
@@ -454,12 +618,165 @@ function confirmTopup(session) {
   }).then(function () { load(); }).catch(function () { load(); });
 }
 
+// --- operator: the HUD -------------------------------------------------------
+//
+// Five numbers that decide what to do next: what is about to be paid, what is
+// stuck and until when, how much more work this account may carry, what it is
+// carrying, and whether there is verification to do.
+
+function operatorHud() {
+  var cur = ME.currency, p = PAYOUT || {};
+  var clear = p.clear_minor != null ? p.clear_minor : (ME.clear_minor || 0);
+  var held = ME.held_minor || 0;
+  var earliest = null;
+  (p.waiting || []).forEach(function (h) {
+    if (h.clears && (!earliest || new Date(h.clears) < new Date(earliest))) { earliest = h.clears; }
+  });
+  if (!held && (p.waiting || []).length) {
+    held = p.waiting.reduce(function (a, h) { return a + (h.amount_minor || 0); }, 0);
+  }
+  var threshold = p.threshold_minor || ME.payout_threshold || 0;
+  var clearSub = threshold && clear < threshold
+    ? "sent at " + money(threshold, cur)
+    : (clear > 0 ? "on the next run" : "past the review window");
+  var heldSub = held
+    ? (earliest ? "first clears " + esc(whenAt(earliest)) : "a buyer has raised a problem")
+    : "nothing waiting";
+  var room = ME.room_minor || 0;
+  var roomSub = (ME.tier ? esc(ME.tier) + " · " : "") + "ceiling " + money(ME.ceiling_minor || 0, cur);
+  var allowance = (CAP && CAP.ceiling) || 1;
+  var reviews = (BOARD && BOARD.reviews_waiting) || 0;
+  return '<div class="hud" style="--cols:5">' +
+    tile("money", "Clear to send", clear, "money", clearSub, cur) +
+    tile("wait", "Held", held, "money", heldSub, cur) +
+    tile(room > 0 ? "ok" : "wait", "Room left", room, "money", roomSub, cur) +
+    tile("soft", "Jobs in flight", HOLDING.length, "n", "of " + allowance + " you may hold") +
+    tile("", "Reviews waiting", reviews, "n", reviews ? '<a href="/board">open a panel</a>' : "none open to you") +
+  '</div>';
+}
+
+// --- operator: the radar -----------------------------------------------------
+//
+// Where the work is, from where the operator stands. Holdings first; failing
+// those, the open board within range. The board never publishes a job's
+// coordinates — a street address to seven decimal places is a street address —
+// but it does say how far each is from the reader, so every dot sits on a ring
+// at its true distance, on a bearing this page picks and says it picked.
+
+function radarPanel() {
+  return '<div' + rv("radar-wrap") + ' id="radar-wrap">' +
+    '<canvas id="radar" aria-label="Work around you"></canvas>' +
+    '<div class="cap"><span class="beacon"></span>Your range</div>' +
+    '<div class="legend"><span class="you"><i></i>You</span><span class="obs"><i></i>Find out</span><span class="do"><i></i>Make it true</span></div>' +
+    '<div class="hint" id="radar-hint"></div>' +
+  '</div>';
+}
+// bearingOf spreads ids that differ by one character across the whole
+// circle; a plain polynomial hash put "w-1" and "w-2" a degree apart.
+function bearingOf(id) {
+  var h = 0x811C9DC5, s = String(id || "");
+  for (var i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0; }
+  h ^= h >>> 13; h = Math.imul(h, 0x5BD1E995) >>> 0; h ^= h >>> 15;
+  return (h % 3600) / 10 * Math.PI / 180;
+}
+function placed(you, d, id) {
+  var a = bearingOf(id), ky = 69.17, kx = 69.17 * Math.cos(you.lat * Math.PI / 180) || 1;
+  return {lat: you.lat + d * Math.cos(a) / ky, lon: you.lon + d * Math.sin(a) / kx};
+}
+function drawConsoleRadar() {
+  var canvas = document.getElementById("radar"), hint = document.getElementById("radar-hint");
+  if (!canvas || !hint) { return; }
+  if (RADAR_STOP) { RADAR_STOP(); RADAR_STOP = null; }
+  var c = (CAP && CAP.capacity) || {};
+  var you = c.lat_e7 ? {lat: c.lat_e7 / 1e7, lon: c.lon_e7 / 1e7} : null;
+  var range = parseInt((document.getElementById("c-range") || {}).value || c.range_miles || 12, 10) || 12;
+  var jobs = [], source = "";
+  var mine = HOLDING.filter(function (h) { return h.lat_e7 || h.lat; });
+  if (mine.length && you) {
+    source = "your work";
+    jobs = mine.map(function (h) {
+      return {lat: h.lat || h.lat_e7 / 1e7, lon: h.lon || h.lon_e7 / 1e7, kind: h.kind, title: h.title,
+        job: h.job, pay: money(h.pay_minor || 0, h.currency), resume: h.resume};
+    });
+  } else if (you && BOARD && (BOARD.work || []).length) {
+    source = "the board";
+    jobs = BOARD.work.filter(function (w) { return isFinite(w.distance_miles) && w.distance_miles > 0 && w.distance_miles <= range; })
+      .map(function (w) {
+        var p = placed(you, w.distance_miles, w.job);
+        return {lat: p.lat, lon: p.lon, kind: w.kind, title: w.title, job: w.job,
+          pay: w.pay_minor ? money(w.pay_minor, w.currency) : "", miles: w.distance_miles};
+      });
+  }
+  if (!you) {
+    hint.innerHTML = 'No location set. <a href="#capacity">Set where you work from</a> and the board is drawn around you.';
+  } else if (source === "the board") {
+    hint.innerHTML = jobs.length + ' open job' + (jobs.length === 1 ? '' : 's') + ' within ' + range +
+      ' mi &middot; distance is real, bearing is not published';
+  } else if (source === "your work") {
+    hint.innerHTML = jobs.length + ' job' + (jobs.length === 1 ? '' : 's') + ' you hold.';
+  } else {
+    hint.innerHTML = 'Nothing on the board inside ' + range + ' mi of you right now.';
+  }
+  RADAR_STOP = drawRadar(canvas, {
+    jobs: jobs, you: you, rangeMiles: range,
+    empty: you ? "nothing within range" : "no location set",
+    onPick: function (j) {
+      location.href = j.resume ? j.resume : "/j/" + encodeURIComponent(j.job);
+    }
+  });
+}
+
+// --- operator: in flight -----------------------------------------------------
+
+// stageBar draws the plan as segments weighted by what each pays. Progress,
+// not a schedule: what somebody needs is which piece is in front of them and
+// what it is worth.
+function stageBar(h) {
+  if (!h.stages || !h.stages.length) { return ""; }
+  var done = h.stage_done || [];
+  var segs = h.stages.map(function (st, i) {
+    var cls = done[i] ? "paid" : (i === h.next_stage ? "now" : "");
+    return '<div class="seg ' + cls + '" style="flex:' + Math.max(1, st.pay_minor || 1) + '"></div>';
+  }).join("");
+  var keys = h.stages.map(function (st, i) {
+    var state = done[i] ? "paid" : (i === h.next_stage ? "now" : "");
+    return '<span class="' + state + '"><b>' + esc(st.name) + '</b> ' +
+      money(st.pay_minor || 0, h.currency || "USD") + (state ? " " + state : "") + '</span>';
+  }).join("");
+  return '<div class="stagebar">' + segs + '</div><div class="stagekey">' + keys + '</div>';
+}
+
+function inFlight() {
+  var rows = HOLDING.map(function (h, i) {
+    var blocked = (h.blocked_by || []).length > 0;
+    var mins = Math.max(0, Math.round((new Date(h.expires) - new Date()) / 60000));
+    var staged = h.stages && h.stages.length;
+    var chip = blocked ? '<span class="chip wait">Waiting on other work</span>'
+      : staged ? '<span class="chip ok">Stage ' + (h.next_stage + 1) + ' of ' + h.stages.length + '</span>'
+      : '<span class="chip ok">Yours for ' + mins + ' min</span>';
+    return '<div' + rvi(i, "r") + ' style="align-items:flex-start;--i:' + Math.min(i, 12) + '"><div class="grow">' +
+      '<div class="t">' + chip + '<span class="chip ' + (h.kind === "observe" ? "obs" : "do") + '">' +
+        (h.kind === "observe" ? "find out" : h.kind === "review" ? "review" : "make it true") + '</span>' +
+        esc(h.title) + '</div>' +
+      '<div class="m">' + (h.where ? esc(h.where) + ' &middot; ' : '') + 'lease ends ' + esc(whenAt(h.expires)) +
+        (h.project ? ' &middot; piece ' + esc(h.project.position) + ' of ' + esc(h.project.jobs) : '') + '</div>' +
+      stageBar(h) +
+      '<div class="acts"><a class="btn sm" href="' + esc(h.resume) + '">Open the work</a></div>' +
+      '</div><span class="amt">' + money(h.pay_minor || 0, h.currency) + '</span></div>';
+  }).join("");
+  return head('<h2 id="flight">In flight</h2>', HOLDING.length, "what you hold right now") +
+    (rows ? '<div class="rows">' + rows + '</div>'
+          : '<div' + rv("rows") + '><div class="empty">Nothing on at the moment. <a href="/board">Open work is on the board.</a></div></div>');
+}
+
+// --- operator: earnings ------------------------------------------------------
+
 function earnings() {
   var cur = ME.currency;
-  var rows = (ME.history || []).map(function (h) {
+  var rows = (ME.history || []).map(function (h, i) {
     var chip = h.status === "accepted" || h.status === "paid" ? "ok"
              : (h.status === "rejected" ? "bad" : "");
-    return '<div class="r"><div class="grow">' +
+    return '<div' + rvi(i, "r") + '><div class="grow">' +
       '<div class="t"><span class="chip ' + chip + '">' + esc(h.status) + '</span>' +
         esc(h.title || h.job) + '</div>' +
       '<div class="m">' + esc(when(h.at)) + (h.why ? ' &middot; ' + esc(h.why) : '') + '</div>' +
@@ -467,8 +784,8 @@ function earnings() {
       (h.amount_minor ? money(h.amount_minor, cur) : "&mdash;") + '</span></div>';
   }).join("");
 
-  var bids = (ME.bids || []).map(function (b) {
-    return '<div class="r"><div class="grow">' +
+  var bids = (ME.bids || []).map(function (b, i) {
+    return '<div' + rvi(i, "r") + '><div class="grow">' +
       '<div class="t"><span class="chip ' + (b.won ? "ok" : "hot") + '">' +
         (b.won ? "Won" : "Bid") + '</span>' + esc(b.title) + '</div>' +
       '<div class="m">' + esc(b.status) + '</div></div>' +
@@ -478,7 +795,7 @@ function earnings() {
   var tax = ME.tax;
   var taxNote = "";
   if (tax && (tax.reportable || tax.approaching)) {
-    taxNote = '<div class="strip"><span class="d"></span><span>' +
+    taxNote = '<div' + rv("strip") + '><span class="d"></span><span>' +
       (tax.reportable
         ? "You have earned " + money(tax.earned_minor, cur) + " here in " + tax.year +
           ", which is above the " + money(tax.threshold_minor, cur) +
@@ -491,24 +808,21 @@ function earnings() {
       '</span></div>';
   }
 
-  return '<h2 id="earnings">Earnings</h2>' + blockedStrip() + taxNote +
-    '<dl class="metrics">' +
-      metric("Waiting to be paid", money(ME.pending_minor, cur), "money") +
-      metric("Paid out", money(ME.paid_minor, cur)) +
-      metric("Earned in total", money(ME.earned_minor, cur), "money") +
-      metric("Payout at", money(ME.payout_threshold, cur), "", "then it is sent") +
-    '</dl>' +
+  return head('<h2 id="earnings">Earnings</h2>', null,
+      money(ME.earned_minor, cur) + " earned &middot; " + money(ME.paid_minor, cur) + " paid out &middot; " +
+      money(ME.pending_minor, cur) + " waiting") +
+    blockedStrip() + taxNote +
     (ME.pending_minor > 0
-      ? '<div class="ctl" style="margin:0 0 1rem">' +
+      ? '<div' + rv("pane") + ' style="margin-bottom:.7rem"><div class="ctl" style="margin:0">' +
           '<button class="btn" id="cash-now">Send what I am owed now</button>' +
-          '<span class="why" style="margin:0">Below the threshold the ' +
+          '<span class="why" style="margin:0;font-size:.8rem;color:var(--ink-3)">Below the threshold the ' +
             'provider’s transfer fee comes out of it — your call, not ours.' +
-          '</span></div><div class="err" id="cash-err"></div>'
+          '</span></div><div class="err" id="cash-err"></div></div>'
       : "") +
-    (bids ? '<h2>Offers you have out</h2><div class="rows">' + bids + '</div>' : "") +
-    '<h2>What you have done</h2>' +
+    (bids ? '<h2 style="margin-top:1rem">Offers you have out</h2><div class="rows">' + bids + '</div>' : "") +
+    '<h2 style="margin-top:1rem">What you have done</h2>' +
     (rows ? '<div class="rows">' + rows + '</div>'
-          : '<div class="empty">Nothing yet. <a href="/board">Find work</a>.</div>');
+          : '<div' + rv("rows") + '><div class="empty">Nothing yet. <a href="/board">Find work.</a></div></div>');
 }
 
 // Where the money goes, and whether it can yet. Read from /v1/payout rather
@@ -539,32 +853,30 @@ function payoutPanel() {
   else if ((clear || 0) >= threshold) { next = "on the next automatic run"; }
   else { next = "when what is clear to send reaches " + money(threshold, cur); }
 
-  var waiting = (p.waiting || []).map(function (h) {
-    return '<div class="r"><div class="grow"><div class="t">' + esc(h.job) + '</div>' +
+  var waiting = (p.waiting || []).map(function (h, i) {
+    return '<div' + rvi(i, "r") + '><div class="grow"><div class="t">' + esc(h.job) + '</div>' +
       '<div class="m">' + esc(h.status) +
-      (h.clears ? ' &middot; clears ' + esc(when(h.clears)) : '') +
+      (h.clears ? ' &middot; clears ' + esc(whenAt(h.clears)) : '') +
       (h.reason ? ' &middot; ' + esc(h.reason) : '') + '</div></div>' +
       '<span class="amt">' + money(h.amount_minor, cur) + '</span></div>';
   }).join("");
 
-  return '<h2 id="payout">Payouts</h2>' +
-    '<div class="strip' + (chip === "warn" ? " warn" : "") + '"><span class="d"></span>' +
+  return head('<h2 id="payout">Payouts</h2>', null, "next payout " + next) +
+    '<div' + rv("strip" + (chip === "warn" ? " warn" : "")) + '><span class="d"></span>' +
       '<span><span class="chip ' + chip + '">' +
         (st.unavailable ? "off" : st.ready ? "connected" : st.connected ? "checking" : "not set up") +
       '</span>' + state + '</span>' +
       (ME.can_connect_payout
-        ? '<button class="btn sm" id="pay-connect" style="margin-left:auto">' +
+        ? '<button class="btn sm go" id="pay-connect" style="margin-left:auto">' +
           (st.connected ? "Finish setup" : "Set up payouts") + '</button>'
         : "") +
     '</div><div class="err" id="pay-err"></div>' +
-    '<dl class="metrics">' +
-      metric("Owed to you", money(owed, cur), "money") +
-      metric("Clear to send", money(clear || 0, cur), "money", "past the buyer’s review window") +
-      metric("Threshold", money(threshold, cur), "", "sent once reached") +
-      metric("Next payout", "&mdash;", "", next) +
-    '</dl>' +
-    (waiting ? '<h3 style="margin:0 0 .5rem;font-size:.92rem">Still waiting</h3>' +
-      '<div class="rows">' + waiting + '</div>' : "");
+    '<div class="hud" style="--cols:3">' +
+      tile("money", "Owed to you", owed, "money", "credited, not yet sent", cur) +
+      tile("money", "Clear to send", clear || 0, "money", "past the buyer’s review window", cur) +
+      tile("", "Threshold", threshold, "money", "sent once reached", cur) +
+    '</div>' +
+    (waiting ? '<h2 style="margin-top:.2rem">Still waiting</h2><div class="rows">' + waiting + '</div>' : "");
 }
 
 var KINDS = [["observe", "Checks"], ["do", "Errands & jobs"], ["review", "Verification"]];
@@ -609,21 +921,20 @@ function largerJobs() {
     }).join("");
   }
 
-  return '<h2 id="larger">Larger jobs</h2>' +
-  '<p class="lead">Work that takes more than one visit, more than one place, or ' +
-    'more than one trade. Everything below is live on the board right now as a ' +
+  return head('<h2 id="larger">Larger jobs</h2>', null, "more than one visit, place or trade") +
+  '<p class="lead">Everything below is live on the board right now as a ' +
     'demonstration you can read, price and bid against without a cent moving.</p>' +
 
   (pieces
-    ? '<div class="scope">' +
+    ? '<div' + rv("scope") + '>' +
         '<div class="hd"><b>' + esc((sc.project && sc.project.title) || "Demonstration scope") +
           '</b><span>' + esc(sc.jobs.length) + ' pieces &middot; ' +
           ((sc.project && sc.project.one_visit) ? "one address" : (sc.project.sites + " sites")) +
           '</span></div>' + pieces +
       '</div>'
-    : '<div class="note-box">The demonstration scope is not on this board.</div>') +
+    : '<div' + rv("note-box") + '>The demonstration scope is not on this board.</div>') +
 
-  '<div class="note-box"><b>Why the grouping matters.</b> Getting a crew and a ' +
+  '<div' + rv("note-box") + '><b>Why the grouping matters.</b> Getting a crew and a ' +
     'paver to a site is most of the cost of a small job. Three jobs at one ' +
     'address is <b>one</b> mobilisation. Shown as three unrelated listings, you ' +
     'either price three of them and lose, or price one and are ruined if you win ' +
@@ -631,19 +942,19 @@ function largerJobs() {
     'for the whole thing.</div>' +
 
   '<div class="panes">' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>One offer, all or nothing</h3>' +
       '<p class="why">Price each piece, send it as one bid. It is awarded ' +
         'together or not at all, so the piece carrying your mobilisation cannot ' +
         'be cherry-picked away from the pieces that pay for it.</p>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Order that is enforced</h3>' +
       '<p class="why">A piece that depends on another cannot be claimed until ' +
         'that one is finished <i>and accepted</i>. Nobody else can book the ' +
         'ground you need on the morning you need it.</p>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>You write the stages</h3>' +
       '<p class="why">On these jobs the buyer says what they want and what they ' +
         'will pay. <b>You</b> say how it breaks down &mdash; prep, base, binder, ' +
@@ -651,7 +962,7 @@ function largerJobs() {
         'each is accepted. A homeowner does not know what a binder course is, ' +
         'and neither does their agent.</p>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Many sites, one buyer</h3>' +
       '<p class="why">A project can span locations as easily as trades. Each ' +
         'piece carries the buyer\'s own site reference, so four hundred stores ' +
@@ -659,7 +970,7 @@ function largerJobs() {
     '</div>' +
   '</div>' +
 
-  '<h3 style="margin:1.4rem 0 .6rem;font-size:.92rem">What your agent calls</h3>' +
+  '<h2>What your agent calls</h2>' +
   '<pre class="api">' +
     '<b>GET</b>  /v1/scope/' + esc(DEMO_PROJECT) + '\n' +
     '     the whole scope, in the order it has to happen, with what blocks what\n\n' +
@@ -674,7 +985,7 @@ function largerJobs() {
     '                    "pay_minor":150000}, ... ] }\n' +
     '     your breakdown; the stages must add up to the price you were awarded' +
   '</pre>' +
-  '<p class="why" style="margin-bottom:1.4rem">Same signing as every other ' +
+  '<p class="why" style="margin-bottom:1.4rem;font-size:.82rem;color:var(--ink-3)">Same signing as every other ' +
     'route. Full reference in <a href="/docs">the docs</a>.</p>';
 }
 
@@ -689,11 +1000,9 @@ function pieceNumber(sc, job) {
 
 function capacity() {
   var c = CAP.capacity, st = CAP.standing || {};
-  return '<h2 id="capacity">Capacity</h2>' +
-  '<p class="lead">What you will take, how much at once, and how far out. The exchange ' +
-    'only dispatches inside these limits.</p>' +
+  return head('<h2 id="capacity">Capacity</h2>', null, "the exchange only dispatches inside these limits") +
   '<div class="panes">' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Concurrency</h3>' +
       '<p class="why">How many jobs you will hold at the same time. You can hold up to ' +
         '<b>' + CAP.ceiling + '</b> right now &mdash; finishing jobs raises it.</p>' +
@@ -708,10 +1017,7 @@ function capacity() {
         '<div class="tx">Taking work</div>' +
         '<div class="sx">Turn off to finish what you hold and stop.</div>' +
       '</div><button class="sw" id="c-accept" aria-pressed="' + !!c.accepting + '" aria-label="Taking work"></button></div>' +
-    '</div>' +
-
-    '<div class="pane">' +
-      '<p class="why" style="margin:.5rem 0 0">' +
+      '<p class="why" style="margin:.8rem 0 0">' +
         (CAP.ceiling >= 12
           ? 'Your ceiling is ' + CAP.ceiling + ', because a reviewer has checked ' +
             'your licences and cover.'
@@ -722,9 +1028,9 @@ function capacity() {
       '</p>' +
     '</div>' +
 
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Range</h3>' +
-      '<p class="why">How far from you a job can be.</p>' +
+      '<p class="why">How far from you a job can be. The radar above redraws as you move it.</p>' +
       '<div class="ctl">' +
         '<input type="range" min="1" max="60" value="' + c.range_miles + '" id="c-range" aria-label="Range in miles">' +
         '<span class="v" id="c-range-v">' + c.range_miles + ' mi</span>' +
@@ -743,7 +1049,7 @@ function capacity() {
       '</div><button class="sw" id="c-auto" aria-pressed="' + !!c.auto_accept + '" aria-label="Auto-accept"></button></div>' +
     '</div>' +
 
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>What you take</h3>' +
       '<p class="why">Only these kinds of job reach you.</p>' +
       '<div class="kinds">' + KINDS.map(function (k) {
@@ -761,13 +1067,14 @@ function capacity() {
       }).join("") + '</div>' +
     '</div>' +
 
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Standing</h3>' +
       '<p class="why">Earned by finishing what you take.</p>' +
-      '<div class="r" style="padding:.5rem 0;border:0"><div class="grow">' +
-        '<div class="t"><span class="chip ok">' + (st.completed || 0) + ' done</span>Completion</div>' +
-        '<div class="m">' + (st.abandoned || 0) + ' abandoned &middot; you can hold ' +
-          (st.allowance || 1) + ' at once</div></div></div>' +
+      '<div class="hud" style="--cols:3;margin:0">' +
+        tile("ok", "Done", st.completed || 0, "n", "settled and paid") +
+        tile(st.abandoned ? "wait" : "", "Abandoned", st.abandoned || 0, "n", "taken and let lapse") +
+        tile("soft", "At once", st.allowance || 1, "n", "jobs you may hold") +
+      '</div>' +
     '</div>' +
   '</div>' +
   '<div class="err" id="cap-err"></div>';
@@ -809,15 +1116,14 @@ function supplier() {
   var mail = "mailto:support@lamdis.ai?subject=" +
     encodeURIComponent("Vetting request: " + ((sup && (sup.legal_name || sup.trading_name)) || ME.worker));
 
-  return '<h2 id="supplier">Business</h2>' +
-  '<p class="lead">If you work as a company, say so here. Buyers see the name, the checked ' +
-    'licences and the cover; your crews claim against the company’s ceiling rather ' +
-    'than each starting as a stranger.</p>' +
+  return head('<h2 id="supplier">Business</h2>', null, sup && sup.vetted ? "vetted" : "if you work as a company, say so here") +
+  '<p class="lead">Buyers see the name, the checked licences and the cover; your crews claim ' +
+    'against the company’s ceiling rather than each starting as a stranger.</p>' +
   (sup && sup.vetted
-    ? '<div class="strip"><span class="d"></span><span><span class="chip ok">vetted</span>' +
+    ? '<div' + rv("strip") + '><span class="d"></span><span><span class="chip ok">vetted</span>' +
       'A reviewer has checked this business' + (sup.vetted_at ? ' (' + esc(when(sup.vetted_at)) + ')' : '') +
       '. You can hold up to <b>' + esc(d.ceiling) + '</b> jobs at once.</span></div>'
-    : '<div class="note-box"><b>Vetting is done by a person, not a button.</b> Fill this in, ' +
+    : '<div' + rv("note-box") + '><b>Vetting is done by a person, not a button.</b> Fill this in, ' +
       'then <a href="' + mail + '">write to support@lamdis.ai</a> with the job id of ' +
       'something you have finished here. A reviewer checks the licence numbers against ' +
       'the issuing register and the cover with the carrier, and raises your ceiling from ' +
@@ -825,7 +1131,7 @@ function supplier() {
       '. Changing a licence or policy afterwards clears its check.</div>') +
   (attention ? '<ul class="attn">' + attention + '</ul>' : '') +
   '<div class="panes" style="margin-top:1rem">' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Who you are</h3>' +
       '<div class="field"><label for="s-kind">Working as</label>' +
         '<select id="s-kind">' +
@@ -853,7 +1159,7 @@ function supplier() {
       (ins.carrier ? '<p class="why">' + (ins.verified ? '<span class="chip ok">checked</span>' :
         '<span class="chip">not checked yet</span>') + '</p>' : '') +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Licences</h3>' +
       '<p class="why">One row per credential, with the number a reviewer can look up.</p>' +
       '<div id="lic-list">' + lics + '</div>' +
@@ -861,11 +1167,11 @@ function supplier() {
       '<div style="margin-top:1rem"><button class="btn go" id="s-save">Save profile</button></div>' +
       '<div class="err" id="s-err"></div>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Crew</h3>' +
       '<p class="why">People who take work on the company’s behalf. Their claims count ' +
         'against the company’s ceiling and their earnings are attributed to it.</p>' +
-      (members || '<div class="why" style="color:var(--ink-3)">Nobody yet.</div>') +
+      (members || '<div class="empty" style="padding:.2rem 0 .6rem">Nobody yet.</div>') +
       '<div class="ctl" style="margin-top:.8rem;gap:.5rem">' +
         '<input type="text" id="m-add" placeholder="Their account id, e.g. cognito:&hellip;" style="flex:1">' +
         '<button class="btn sm" id="m-add-btn">Add</button></div>' +
@@ -914,7 +1220,7 @@ function refreshSupplier() {
   return api("GET", "/v1/supplier").then(function (res) {
     if (res.ok) { SUP = res.body; }
     var host = document.getElementById("supplier-wrap");
-    if (host) { host.innerHTML = supplier(); wireSupplier(); }
+    if (host) { RV = 0; host.innerHTML = supplier(); wireSupplier(); }
   }).catch(function () {});
 }
 
@@ -984,21 +1290,20 @@ function statement() {
       '<td class="n">' + money(l.net_minor, cur) + '</td></tr>';
   }).join("");
   var q = "?from=" + esc(st.from || "") + "&to=" + esc(st.to || "");
-  return '<h2 id="statement">Statement</h2>' +
-  '<p class="lead">What you earned, job by job, in a form a bookkeeper can reconcile ' +
-    'against the bank. The totals are checked against the ledger and it says if they disagree.</p>' +
-  '<div class="ctl" style="gap:.6rem;flex-wrap:wrap">' +
+  return head('<h2 id="statement">Statement</h2>', lines.length ? lines.length + " lines" : null,
+      "job by job, in a form a bookkeeper can reconcile against the bank") +
+  '<div' + rv("pane") + ' style="margin-bottom:.7rem"><div class="ctl" style="gap:.6rem;flex-wrap:wrap;margin:0">' +
     '<input type="month" id="stmt-month" value="' + esc(month) + '" aria-label="Month" class="amt-in" style="width:auto">' +
     '<button class="btn sm" id="stmt-csv">Download CSV</button>' +
     '<button class="btn sm" id="stmt-json">Show JSON</button>' +
-    '<span class="why" style="margin:0;font-size:.76rem;color:var(--ink-3)">' +
-      '<code>GET /v1/statement' + q + '</code> &middot; <code>GET /v1/statement.csv' + q + '</code>, signed with your session</span>' +
-  '</div>' +
+    '<span class="why" style="margin:0;font-size:.72rem;color:var(--ink-3);font-family:var(--mono)">' +
+      'GET /v1/statement' + q + ' &middot; GET /v1/statement.csv' + q + ', signed with your session</span>' +
+  '</div></div>' +
   (st.reconciles === false
-    ? '<div class="strip warn"><span class="d"></span><span>' + esc(st.reconciliation_note) + '</span></div>'
+    ? '<div' + rv("strip warn") + '><span class="d"></span><span>' + esc(st.reconciliation_note) + '</span></div>'
     : '') +
   (lines.length
-    ? '<div class="tablewrap"><table class="stmt"><thead><tr>' +
+    ? '<div' + rv("tablewrap") + '><table class="stmt"><thead><tr>' +
         '<th>Date</th><th>Job</th><th>By</th><th class="n">Gross</th><th class="n">Fee</th>' +
         '<th class="n">Expenses</th><th class="n">Net</th></tr></thead><tbody>' + rows +
         '<tr class="tot"><td colspan="3">' + esc(t.jobs) + ' job' + (t.jobs === 1 ? '' : 's') + '</td>' +
@@ -1007,7 +1312,7 @@ function statement() {
         '<td class="n">' + money(t.expense_minor || 0, cur) + '</td>' +
         '<td class="n">' + money(t.net_minor, cur) + '</td></tr>' +
       '</tbody></table></div>'
-    : '<div class="empty">Nothing earned in ' + esc(month) + '.</div>') +
+    : '<div' + rv("rows") + '><div class="empty">Nothing earned in ' + esc(month) + '.</div></div>') +
   '<div class="err" id="stmt-err"></div>' +
   '<pre class="api" id="stmt-raw" hidden>' + esc(JSON.stringify(st, null, 2)) + '</pre>';
 }
@@ -1021,7 +1326,7 @@ function loadStatement(month) {
     if (!res.ok) { throw new Error(errorOf(res, "could not load the statement")); }
     STMT = res.body;
     var host = document.getElementById("statement-wrap");
-    if (host) { host.innerHTML = statement(); wireStatement(); }
+    if (host) { RV = 0; host.innerHTML = statement(); wireStatement(); }
   }).catch(function (e) {
     var err = document.getElementById("stmt-err");
     if (err) { err.textContent = e.message; }
@@ -1069,8 +1374,8 @@ function wireStatement() {
 
 function alertsOperator() {
   var a = ALERTS || {};
-  return '<h2 id="alerts">Alerts</h2>' +
-  '<div class="panes"><div class="pane">' +
+  return head('<h2 id="alerts">Alerts</h2>', null, a.alerts_on ? "on" : "off") +
+  '<div class="panes"><div' + rv("pane") + '>' +
     '<div class="toggle" style="border-top:0;padding-top:0"><div>' +
       '<div class="tx">Email me when work appears that I could take</div>' +
       '<div class="sx">' + esc(a.note || "At most once every few hours, and only for jobs inside your capacity settings.") + '</div>' +
@@ -1086,8 +1391,8 @@ function alertsOperator() {
 
 function alertsBuyer() {
   var a = ALERTS || {};
-  return '<h2 id="alerts-buyer">Alerts</h2>' +
-  '<div class="panes"><div class="pane">' +
+  return head('<h2 id="alerts-buyer">Alerts</h2>', null, "when a job of yours is not being taken") +
+  '<div class="panes"><div' + rv("pane") + '>' +
     '<div class="toggle" style="border-top:0;padding-top:0"><div>' +
       '<div class="tx">Email me when a job of mine is not being taken</div>' +
       '<div class="sx">Sent once, when a job has sat unfilled for a third of its life, with the ' +
@@ -1115,24 +1420,25 @@ function setAlerts(on) {
 // --- integration -------------------------------------------------------------
 
 function keysPane() {
-  var rows = KEYS.length ? KEYS.map(function (k) {
-    return '<div class="r"><div class="grow">' +
+  var live = KEYS.filter(function (k) { return !k.revoked; }).length;
+  var rows = KEYS.length ? KEYS.map(function (k, i) {
+    return '<div' + rvi(i, "r") + '><div class="grow">' +
       '<div class="t"><span class="chip ' + (k.revoked ? "bad" : "ok") + '">' +
         (k.revoked ? "Revoked" : "Active") + '</span>' + esc(k.label || "agent") + '</div>' +
       '<div class="m">&bull;&bull;&bull;&bull;' + esc(k.last4) +
-        (k.last_used ? ' &middot; last used ' + esc(when(k.last_used)) : ' &middot; never used') + '</div>' +
+        (k.last_used ? ' &middot; last used ' + esc(when(k.last_used)) : ' &middot; never used') +
+        (k.max_per_job_minor ? ' &middot; up to ' + money(k.max_per_job_minor) + ' a job' : '') + '</div>' +
       '</div>' +
       (k.revoked ? '' : '<button class="btn sm" data-revoke="' + esc(k.id) + '">Revoke</button>') +
     '</div>';
   }).join("") : '<div class="empty">No keys yet. Issue one so an agent can buy on your behalf.</div>';
 
-  return '<h2 id="keys">Agent keys</h2>' +
-  '<p class="lead">Give an agent a key and it can post jobs from your balance &mdash; inside ' +
-    'limits you set here, enforced by us. Your account id is <code>' + esc(ME.worker) + '</code>.</p>' +
-  '<div class="rows">' + rows + '</div>' +
+  return head('<h2 id="keys">Agent keys</h2>', live, "keys spend your balance inside limits you set here") +
+  '<p class="lead">Your account id is <code>' + esc(ME.worker) + '</code>.</p>' +
+  '<div' + rv("rows") + '>' + rows + '</div>' +
   '<div id="new-key">' + NEW_KEY + '</div>' +
-  '<div class="panes" style="margin-top:1.2rem">' +
-    '<div class="pane">' +
+  '<div class="panes" style="margin-top:.7rem">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Issue a key</h3>' +
       '<p class="why">Shown once. Nothing here can show it to you again.</p>' +
       '<input type="text" id="k-label" placeholder="What is it for? e.g. dispatch bot" maxlength="60">' +
@@ -1144,30 +1450,32 @@ function keysPane() {
       '<button class="btn go" id="k-make">Issue key</button>' +
       '<div class="err" id="k-err"></div>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>What a key can do</h3>' +
       '<p class="why">Post jobs, read their status, evidence and receipts, and accept ' +
         'offers &mdash; all against your balance, never above the per-job cap. It cannot ' +
         'add funds, issue other keys, or take work. Full reference in ' +
         '<a href="/docs">the docs</a>.</p>' +
+      '<h3 style="margin-top:.6rem">Webhook</h3>' +
+      '<p class="why">A key does not call you back. Your agent polls <code>GET /v1/jobs/{job}</code>, ' +
+        'or reads the signed receipt once the job is done.</p>' +
     '</div>' +
   '</div>';
 }
 
 function dispatchPane() {
-  return '<h2 id="integration">Dispatch</h2>' +
-  '<p class="lead">For fleets and businesses that take work over the API rather than from ' +
-    'the board.</p>' +
+  var hook = (CAP.capacity && CAP.capacity.webhook) || "";
+  return head('<h2 id="integration">Dispatch endpoint</h2>', null, hook ? "set" : "for fleets that take work over the API") +
   '<div class="panes">' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Dispatch endpoint</h3>' +
       '<p class="why">We post offers here; reply 202 to accept.</p>' +
       '<input type="text" id="c-hook" placeholder="https://your.host/lamdis/dispatch" ' +
-        'value="' + esc((CAP.capacity && CAP.capacity.webhook) || "") + '">' +
+        'value="' + esc(hook) + '">' +
       '<p class="why" style="margin:.6rem 0 0">HTTPS only. Auto-accept stays off until ' +
         'this is set.</p>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       ((CAP.capacity && CAP.capacity.webhook_secret)
         ? '<h3>Signing secret</h3>' +
           '<p class="why">Every offer carries <code>X-Lamdis-Signature</code>, an ' +
@@ -1179,18 +1487,45 @@ function dispatchPane() {
   '</div>';
 }
 
+// --- buyer: the HUD ----------------------------------------------------------
+
+function thisMonth(iso) {
+  var d = new Date(iso), n = new Date();
+  return !isNaN(d) && d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth();
+}
+function buyerHud() {
+  var sp = SPEND || {}, cur = sp.currency || "USD", jobs = sp.jobs || [];
+  var open = 0, spentMonth = 0, release = 0;
+  jobs.forEach(function (j) {
+    var done = j.status === "done", back = String(j.status).indexOf("refunding") > -1;
+    if (!done && !back) { open++; }
+    if (done && thisMonth(j.posted)) { spentMonth += j.committed_minor || 0; }
+    if (j.review && j.review.awaiting_release_minor) { release += j.review.awaiting_release_minor; }
+  });
+  var need = sp.awaiting_review || 0;
+  return '<div class="hud" style="--cols:5">' +
+    tile("money", "Balance", sp.balance_minor || 0, "money", '<a href="#funds">add funds</a>', cur) +
+    tile("", "Committed to open jobs", sp.held_minor || 0, "money", "back if nobody takes them", cur) +
+    tile("", "Spent this month", spentMonth, "money", "on jobs posted this month, done", cur) +
+    tile("soft", "Jobs open", open, "n", jobs.length ? "of " + jobs.length + " ever posted" : "nothing posted yet") +
+    tile(need ? "wait" : "", "Awaiting your release", need, "n", need ? money(release, cur) + " goes out unless you object" : "nothing waiting on you") +
+  '</div>';
+}
+
 // --- spending ----------------------------------------------------------------
 
-function spendRow(j, cur) {
+function spendRow(j, cur, i) {
   var review = j.review || {};
   var waiting = review.awaiting_release_minor;
   var chip = waiting ? "hot"
            : (j.status === "done" ? "ok"
            : (j.status.indexOf("refunding") > -1 ? "bad" : ""));
   var bidding = j.status === "collecting offers";
-  return '<div class="r" style="align-items:flex-start"><div class="grow">' +
+  return '<div' + rvi(i, "r") + ' style="align-items:flex-start;--i:' + Math.min(i, 12) + '"><div class="grow">' +
     '<div class="t"><span class="chip ' + chip + '">' +
       (waiting ? "needs you" : esc(j.status)) + '</span>' +
+      (j.kind ? '<span class="chip ' + (j.kind === "observe" ? "obs" : "do") + '">' +
+        (j.kind === "observe" ? "find out" : "make it true") + '</span>' : '') +
       esc(j.title) + '</div>' +
     '<div class="m">' + esc(when(j.posted)) +
       (j.where ? ' &middot; ' + esc(j.where) : '') +
@@ -1204,7 +1539,7 @@ function spendRow(j, cur) {
       (j.agent ? ' &middot; via key ' + esc(j.agent) : '') +
       ' &middot; <a href="/j/' + encodeURIComponent(j.job) + '">public page</a>' +
     '</div>' +
-    '<div class="acts" style="margin-top:.45rem">' +
+    '<div class="acts">' +
       (j.evidence ? '<button class="btn sm" data-evidence="' + esc(j.job) + '">See what came back</button>' : '') +
       (j.receipt ? '<button class="btn sm" data-receipt="' + esc(j.job) + '">Receipt</button>' : '') +
       (bidding ? '<button class="btn sm" data-bids="' + esc(j.job) + '">See offers</button>' : '') +
@@ -1219,7 +1554,7 @@ function spendRow(j, cur) {
           ' unless you say otherwise.' +
         '</div>' +
         '<div class="acts" style="margin-top:.45rem">' +
-          '<button class="btn sm" data-release="' + esc(j.job) + '">Looks good, pay now</button>' +
+          '<button class="btn sm go" data-release="' + esc(j.job) + '">Looks good, pay now</button>' +
           '<button class="btn sm" data-hold="' + esc(j.job) + '">Something is wrong</button>' +
         '</div><div class="err" id="rv-' + esc(j.job) + '"></div>'
       : (review.held_minor
@@ -1235,43 +1570,44 @@ function spending() {
   var sp = SPEND || {jobs: []};
   var cur = sp.currency || "USD";
   var jobs = sp.jobs || [];
-  var rows = jobs.map(function (j) { return spendRow(j, cur); }).join("");
+  var rows = jobs.map(function (j, i) { return spendRow(j, cur, i); }).join("");
   var need = sp.awaiting_review || 0;
-  return '<h2 id="spending">Spending</h2>' +
+  return head('<h2 id="spending">Spending</h2>', jobs.length, "by you from the form above, or by an agent holding one of your keys") +
     (need
-      ? '<div class="strip warn"><span class="d"></span><span>' + need +
+      ? '<div' + rv("strip warn") + '><span class="d"></span><span>' + need +
         (need === 1 ? ' job is' : ' jobs are') + ' finished and waiting on you. ' +
         'Payment goes out when the review window closes.</span></div>'
       : "") +
-    '<p class="lead">What has been bought with your balance, by you from ' +
-      '<a href="#post">the form below</a> or by an agent holding one of your keys.</p>' +
-    '<dl class="metrics">' +
-      metric("Balance", money(sp.balance_minor || 0, cur), "money") +
-      metric("Held for open jobs", money(sp.held_minor || 0, cur), "money",
-             "returned if nobody takes them") +
-      metric("Committed all time", money(sp.committed_minor || 0, cur), "money") +
-    '</dl>' +
-    '<div class="ctl" style="margin:.2rem 0 .3rem;gap:.5rem">' +
-      '<span class="cur">$</span>' +
-      '<input type="number" id="topup-amt" value="50" min="1" step="1" ' +
-        'aria-label="Amount to add" class="amt-in">' +
-      '<button class="btn go" id="s-topup">Add funds</button></div>' +
-    '<div class="err" id="topup-err"></div>' +
     (rows ? '<div class="rows">' + rows + '</div>'
-          : '<div class="empty">Nothing bought yet. <a href="#post">Post a job</a>.</div>');
+          : '<div' + rv("rows") + '><div class="empty">Nothing bought yet. <a href="#post">Post a job.</a></div></div>');
+}
+
+// Adding funds happens on the provider's hosted page: the exchange never sees
+// a card number, and the balance moves only once they confirm the payment.
+function fundsPane() {
+  var sp = SPEND || {}, cur = sp.currency || "USD";
+  return head('<h2 id="funds">Add funds</h2>', null, money(sp.balance_minor || 0, cur) + " on the account") +
+    '<div class="panes"><div' + rv("pane") + '>' +
+      '<div class="ctl" style="margin:0;gap:.5rem">' +
+        '<span class="cur">$</span>' +
+        '<input type="number" id="topup-amt" value="50" min="1" step="1" ' +
+          'aria-label="Amount to add" class="amt-in">' +
+        '<button class="btn go" id="s-topup">Add funds</button></div>' +
+      '<div class="err" id="topup-err"></div>' +
+      '<p class="why" style="margin:.4rem 0 0">Paid on Stripe’s own page; the balance moves once they confirm it. ' +
+        'It is held when you post and paid when proof is accepted; if nobody takes a job, it comes back.</p>' +
+    '</div></div>';
 }
 
 function refreshSpending() {
   return api("GET", "/v1/spend").then(function (res) {
     if (res.ok) { SPEND = res.body; }
     var host = document.getElementById("spending-wrap");
-    if (host) { host.innerHTML = spending(); wireSpending(); }
+    if (host) { RV = 0; host.innerHTML = buyerHud() + postForm() + spending(); wireSpending(); wirePost(); animateTiles(); }
     fundingNote();
   }).catch(function () {});
 }
 
-// Adding funds happens on the provider's hosted page: the exchange never sees
-// a card number, and the balance moves only once they confirm the payment.
 function addFunds(btn) {
   var field = document.getElementById("topup-amt");
   if (!field) { return; }
@@ -1346,7 +1682,7 @@ function showReceipt(job) {
         (e.why ? '<div class="fn">' + esc(e.why) + '</div>' : '') +
         (files ? '<ul style="margin-top:.3rem">' + files + '</ul>' : '') + '</li>';
     }).join("");
-    host.innerHTML = '<div class="receipt">' +
+    host.innerHTML = '<div class="receipt rv">' +
       '<div><span class="chip ' + (r.accepted ? "ok" : "warn") + '">' +
         (r.accepted ? "accepted" : "not accepted") + '</span><b>' + esc(r.predicate) + '</b>' +
         ' <span style="color:var(--ink-3)">&middot; ' + esc(r.kind) +
@@ -1397,7 +1733,7 @@ function showEvidence(job) {
       if (f.looks_generated) { flags.push("scores as generated"); }
       if (f.looks_like_a_screen_or_print) { flags.push("looks like a screen or print"); }
       if (f.text_aimed_at_the_checker) { flags.push("contains text aimed at the checker"); }
-      return '<figure id="ev-' + i + '"><div class="slot"></div><figcaption>' +
+      return '<figure id="ev-' + i + '" class="rv" style="--i:' + Math.min(i, 12) + '"><div class="slot"></div><figcaption>' +
         '<b>' + esc(f.kind || f.mime) + '</b> &middot; <span class="chip ' + (f.verified ? "ok" : "") + '">' +
           (f.verified ? "accepted" : "submitted") + '</span><br>' +
         esc(when(f.captured_at || f.at)) +
@@ -1446,7 +1782,7 @@ function showStatus(job) {
         '</span>' + esc(when(r.at)) + ' &middot; ' + esc(r.files) + ' file' + (r.files === 1 ? '' : 's') +
         (r.why ? ' &middot; ' + esc(r.why) : '') + '</li>';
     }).join("");
-    host.innerHTML = '<div class="receipt">' +
+    host.innerHTML = '<div class="receipt rv">' +
       '<div><b>' + esc(s.predicate) + '</b> <span style="color:var(--ink-3)">&middot; ' + esc(s.kind) + '</span></div>' +
       '<div class="fn">' + esc(s.taken || 0) + ' of ' + esc(s.slots || 1) + ' seat' + (s.slots === 1 ? '' : 's') + ' taken &middot; ' +
         esc(s.submissions || 0) + ' submitted &middot; expires ' + esc(when(s.expires)) +
@@ -1468,7 +1804,7 @@ function showBids(job) {
   api("GET", "/v1/jobs/" + encodeURIComponent(job) + "/bids").then(function (res) {
     if (!res.ok) { throw new Error(errorOf(res, "could not read the offers")); }
     var b = res.body, bids = b.bids || [];
-    host.innerHTML = '<div class="receipt">' +
+    host.innerHTML = '<div class="receipt rv">' +
       '<div class="fn">Ceiling ' + money(b.ceiling_minor, "USD") + ' &middot; offers close ' + esc(when(b.closes)) +
         (b.awarded ? ' &middot; awarded' : '') + '</div>' +
       (bids.length ? bids.map(function (x) {
@@ -1553,21 +1889,19 @@ function wireSpending() {
 // The buyer's own hand on the board. Until this existed a person could sign
 // in, add funds and issue keys, and then had to hand the actual buying to an
 // agent or to curl. The form speaks the board's language: what should be true,
-// what to do about it, what proof looks like, where, and what it pays.
+// what to do about it, what proof looks like, where, and what it pays. Beside
+// it, the row the board will show, redrawn on every keystroke.
 
 var PKIND = "do", PPRICING = "fixed";
 
 function postForm() {
-  return '<h2 id="post">Post a job</h2>' +
-  '<p class="lead">Ask somebody to find out whether something is true, or to make it true. ' +
-    'The money is held when you post and paid when the proof is accepted; if nobody takes ' +
-    'it, it comes back.</p>' +
+  return head('<h2 id="post">Post a job</h2>', null, "ask somebody to find out whether something is true, or to make it true") +
   (!ME.verified
-    ? '<div class="strip warn"><span class="d"></span><span>Posting needs a verified account. ' +
+    ? '<div' + rv("strip warn") + '><span class="d"></span><span>Posting needs a verified account. ' +
       '<a href="/signin">Sign in with your email</a> to verify.</span></div>'
     : '') +
-  '<div class="panes">' +
-    '<div class="pane">' +
+  '<div class="post-grid"><div id="post-form"><div class="panes">' +
+    '<div' + rv("pane") + '>' +
       '<h3>What</h3>' +
       '<div class="field"><label>Kind</label><div class="seg">' +
         '<button class="kind" data-pkind="observe" aria-pressed="' + (PKIND === "observe") + '">Find out</button>' +
@@ -1587,7 +1921,7 @@ function postForm() {
         '<div class="hint">Up to six: the site, the access, the number on the door. Published with the job so people can price it.</div>' +
         '<div class="refs" id="p-refs-preview"></div></div>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Where</h3>' +
       '<div class="field"><label for="p-where">Address</label>' +
         '<input type="text" id="p-where" placeholder="812 Marlow Street, Dearborn MI">' +
@@ -1606,7 +1940,7 @@ function postForm() {
         '<input type="number" id="p-ttl" min="1" max="720" value="24">' +
         '<div class="hint">After this the job expires and the money comes back.</div></div>' +
     '</div>' +
-    '<div class="pane">' +
+    '<div' + rv("pane") + '>' +
       '<h3>Pay</h3>' +
       '<div class="field"><label>Pricing</label><div class="seg">' +
         '<button class="kind" data-ppricing="fixed" aria-pressed="' + (PPRICING === "fixed") + '">Fixed price</button>' +
@@ -1636,34 +1970,85 @@ function postForm() {
       '<div class="err" id="p-err"></div>' +
       '<div id="p-out"></div>' +
     '</div>' +
+  '</div></div>' +
+  '<div class="pv-wrap"><div' + rv("pv") + ' id="p-preview"></div></div>' +
   '</div>';
 }
 
 // What posting will hold, against what the balance can cover. Recomputed on
 // every keystroke so the shortfall is known before the button is pressed
 // rather than as a 402 after it.
+function escrowNeed() {
+  if (PPRICING === "bids") { return minorOf("p-max"); }
+  var per = minorOf("p-fee"), attempt = minorOf("p-attempt");
+  if (attempt > per) { per = attempt; }
+  return per + minorOf("p-expense");
+}
 function fundingNote() {
   var out = document.getElementById("p-fund");
   if (!out) { return; }
   var sp = SPEND || {};
   var balance = sp.balance_minor || 0, held = sp.held_minor || 0;
   var avail = balance - held;
-  var need, sentence;
+  var need = escrowNeed(), sentence;
   if (PPRICING === "bids") {
-    need = minorOf("p-max");
     sentence = "Asking for bids up to <b>" + money(need) + "</b> holds nothing yet, but you need " +
       "that much available to ask.";
   } else {
-    var per = minorOf("p-fee"), attempt = minorOf("p-attempt");
-    if (attempt > per) { per = attempt; }
-    need = per + minorOf("p-expense");
     sentence = "Posting holds <b>" + money(need) + "</b> in escrow until the proof is accepted or the job expires.";
   }
   var short = need > avail;
   out.className = "fund" + (short ? " short" : "");
   out.innerHTML = sentence + " Available: <b>" + money(avail) + "</b>" +
     (held ? " (" + money(balance) + " less " + money(held) + " held for open jobs)" : "") + "." +
-    (short ? " Short by <b>" + money(need - avail) + "</b> — <a href=\"#spending\">add funds</a> first." : "");
+    (short ? " Short by <b>" + money(need - avail) + "</b> — <a href=\"#funds\">add funds</a> first." : "");
+  updatePreview();
+}
+
+// The row the board will show, as the fields stand. Everything the board
+// publishes is here and nothing it withholds: the address and the what-to-do
+// are listed as private so the buyer sees the line the exchange draws.
+function updatePreview() {
+  var host = document.getElementById("p-preview");
+  if (!host) { return; }
+  var pred = val("p-pred"), deliv = val("p-deliv"), area = val("p-area"), instr = val("p-instr");
+  var lat = parseFloat(val("p-lat")), lon = parseFloat(val("p-lon")), radius = parseInt(val("p-radius") || "0", 10);
+  var ttl = Math.max(1, parseInt(val("p-ttl") || "24", 10));
+  var located = !isNaN(lat) && !isNaN(lon) && radius > 0;
+  var fee = minorOf("p-fee"), max = minorOf("p-max"), attempt = minorOf("p-attempt"), expense = minorOf("p-expense");
+  var refs = ((document.getElementById("p-refs") || {}).files || []).length;
+  var sp = SPEND || {}, avail = (sp.balance_minor || 0) - (sp.held_minor || 0), need = escrowNeed();
+  var bids = PPRICING === "bids";
+  var amt = bids ? (max ? "up to " + money(max) : "&mdash;") : (fee ? money(fee) : "&mdash;");
+  var kindChip = '<span class="chip ' + (PKIND === "observe" ? "obs" : "do") + '">' +
+    (PKIND === "observe" ? "find out" : "make it true") + '</span>';
+  var checks = [
+    [!!deliv, deliv ? "Proof matches: " + esc(deliv) : "Proof: say what it looks like"],
+    [true, "Code in frame, taken at the time"],
+    [located, located ? "Within " + radius + " m of the address" : "No location: photos are not tied to a place"]
+  ];
+  if (PKIND === "do") { checks.push([attempt > 0, attempt > 0 ? "Wasted trip pays " + money(attempt) : "Nothing paid for a wasted trip"]); }
+  if (expense > 0) { checks.push([true, "Expenses reclaimable up to " + money(expense)]); }
+  host.className = "pv rv " + (PKIND === "observe" ? "obs" : "do");
+  host.innerHTML =
+    '<div class="pv-top"><span>What the operator sees</span><span class="live"><span class="beacon"></span>As typed</span></div>' +
+    '<div class="job"><div class="jrow"><div class="jbody">' +
+      '<div class="jt' + (pred ? '' : ' ph') + '">' + kindChip + (pred ? esc(pred) : "What should be true") + '</div>' +
+      '<div class="meta">' + (area ? esc(area) : "anywhere") + ' &middot; open ' + ttl + ' h' +
+        (bids ? ' &middot; sealed bids' : '') + (refs ? ' &middot; ' + refs + ' photo' + (refs === 1 ? '' : 's') : '') + '</div>' +
+      '<div class="dv' + (deliv ? '' : ' ph') + '">' + (deliv ? esc(deliv) : "What proof looks like") + '</div>' +
+    '</div><div class="amt"><div class="n' + ((bids ? max : fee) ? '' : ' quiet') + '">' + amt + '</div>' +
+      '<div class="s">' + (bids ? "best offer wins" : "on completion") + '</div></div></div></div>' +
+    '<div class="checks"><span class="k">Checked before a cent moves</span><ul>' + checks.map(function (c) {
+      return '<li class="' + (c[0] ? "on" : "") + '"><i></i>' + c[1] + '</li>';
+    }).join("") + '</ul></div>' +
+    '<div class="hold"><div><span class="amt">' + money(need) + '</span><span class="who">' +
+      (bids ? "must be available to ask; held when you accept an offer" : "held when you post; back if nobody takes it") +
+      '</span></div><span class="st ' + (need ? (need > avail ? "short" : "ok") : "") + '">' +
+      (need ? (need > avail ? "short " + money(need - avail) : "covered") : "&mdash;") + '</span></div>' +
+    '<div class="priv">' + (PKIND === "do"
+      ? (instr ? "What to do, and the address, go only to the person who takes it." : "The address, and what to do, go only to the person who takes it.")
+      : "The address goes only to the person who takes it.") + '</div>';
 }
 
 function setPKind(k) {
@@ -1741,7 +2126,7 @@ function checkFeasibility() {
   }).then(function (res) {
     if (!res.ok) { throw new Error(errorOf(res, "could not check that")); }
     var q = res.body, s = q.settled_here;
-    out.innerHTML = '<div class="receipt" style="margin-top:.6rem">' +
+    out.innerHTML = '<div class="receipt rv" style="margin-top:.6rem">' +
       '<div><span class="chip ' + (q.refused ? "bad" : q.feasible ? "ok" : "warn") + '">' +
         (q.refused ? "would be refused" : q.feasible ? "somebody could take this" : "nobody in range") + '</span>' +
         esc(q.reachable ? q.reachable + " operators reachable" : "") + '</div>' +
@@ -1812,7 +2197,7 @@ function submitJob() {
     return uploadReferences(posted.job, files, function (msg) { btn.textContent = msg; });
   }).then(function (attached) {
     var job = posted.job;
-    out.innerHTML = '<div class="receipt">' +
+    out.innerHTML = '<div class="receipt rv">' +
       '<div><span class="chip ok">posted</span><b>' + esc(job) + '</b></div>' +
       '<div class="fn">' + money(posted.escrowed || 0) + ' held &middot; expires ' + esc(when(posted.expires)) +
         (attached ? ' &middot; ' + attached + ' photo' + (attached === 1 ? '' : 's') + ' attached' : '') + '</div>' +
@@ -1838,10 +2223,11 @@ function wirePost() {
   document.querySelectorAll("[data-ppricing]").forEach(function (b) {
     b.addEventListener("click", function () { setPPricing(b.dataset.ppricing); });
   });
-  ["p-fee", "p-max", "p-attempt", "p-expense"].forEach(function (id) {
-    var el = document.getElementById(id);
-    if (el) { el.addEventListener("input", fundingNote); }
-  });
+  var form = document.getElementById("post-form");
+  if (form) {
+    form.addEventListener("input", function () { fundingNote(); });
+    form.addEventListener("change", function () { fundingNote(); });
+  }
   var locate = document.getElementById("p-locate");
   if (locate) {
     locate.addEventListener("click", function () {
@@ -1852,6 +2238,7 @@ function wirePost() {
         document.getElementById("p-lat").value = pos.coords.latitude.toFixed(6);
         document.getElementById("p-lon").value = pos.coords.longitude.toFixed(6);
         note.textContent = "Set from this device. Adjust if the job is somewhere else.";
+        fundingNote();
       }, function () {
         note.textContent = "Location refused. Type the coordinates instead.";
       });
@@ -1865,6 +2252,7 @@ function wirePost() {
       host.innerHTML = files.slice(0, 6).map(function (f) {
         return '<img alt="" src="' + URL.createObjectURL(f) + '">';
       }).join("") + (files.length > 6 ? '<div class="hint">Only the first six are attached.</div>' : '');
+      fundingNote();
     });
   }
   var quote = document.getElementById("p-quote");
@@ -1880,22 +2268,27 @@ function wirePost() {
 // --- assembly ----------------------------------------------------------------
 
 function render() {
+  RV = 0;
   document.getElementById("body").innerHTML =
+    (DEMO ? '<div class="strip warn demo"><span class="d"></span><span><b>Sample data.</b> ' +
+      'Every figure on this page is invented to show the layout. Nothing here is an account, ' +
+      'and nothing can be saved.</span></div>' : '') +
     explainer() +
     '<section id="sec-operator">' +
-      earnings() + payoutPanel() + capacity() +
+      operatorHud() + radarPanel() + inFlight() + earnings() + payoutPanel() + capacity() +
       '<div id="supplier-wrap">' + supplier() + '</div>' +
       '<div id="statement-wrap">' + statement() + '</div>' +
-      alertsOperator() + largerJobs() + dispatchPane() +
+      alertsOperator() + dispatchPane() + largerJobs() +
     '</section>' +
     '<section id="sec-buyer">' +
-      '<div id="spending-wrap">' + spending() + '</div>' +
-      postForm() +
+      '<div id="spending-wrap">' + buyerHud() + postForm() + spending() + '</div>' +
       '<div id="keys-wrap">' + keysPane() + '</div>' +
-      alertsBuyer() +
+      fundsPane() + alertsBuyer() +
     '</section>';
   wire();
   applyMode();
+  renderPills();
+  animateTiles();
 }
 
 function saveCapacity() {
@@ -1932,6 +2325,7 @@ function saveCapacity() {
     CAP = {capacity: j.capacity, standing: CAP.standing, ceiling: j.ceiling};
     err.className = "err ok";
     err.textContent = j.note || "Saved.";
+    drawConsoleRadar();
   }).catch(function () {
     err.className = "err";
     err.textContent = "Could not save that.";
@@ -1998,6 +2392,7 @@ function wire() {
         CAP.capacity.lon_e7 = Math.round(pos.coords.longitude * 1e7);
         out.textContent = "Set — jobs are sorted by distance from here.";
         saveCapacity();
+        drawConsoleRadar();
       }, function () {
         out.textContent = "Location refused. Range stays off until you allow it.";
       });
@@ -2013,6 +2408,7 @@ function wire() {
   if (range) {
     range.addEventListener("input", function () {
       document.getElementById("c-range-v").textContent = this.value + " mi";
+      drawConsoleRadar();
     });
     range.addEventListener("change", saveCapacity);
   }
@@ -2058,7 +2454,7 @@ function issueKey() {
     if (!res.ok) { throw new Error(res.body && res.body.error || "could not issue a key"); }
     // Kept in a variable rather than only in the DOM: the key list re-renders
     // after issuing, and the one-time reveal must survive that.
-    NEW_KEY = '<div class="reveal"><span class="label">Copy this now</span>' +
+    NEW_KEY = '<div class="reveal rv"><span class="label">Copy this now</span>' +
       '<span class="k">' + esc(res.body.key) + '</span>' +
       '<p>It will not be shown again. Anything using it spends your balance, up to $' +
       (perJob / 100) + ' a job.</p></div>';
@@ -2085,7 +2481,7 @@ function loadKeys() {
     .then(function (j) {
       KEYS = (j && j.keys) || [];
       var host = document.getElementById("keys-wrap");
-      if (host) { host.innerHTML = keysPane(); wireKeys(); }
+      if (host) { RV = 0; host.innerHTML = keysPane(); wireKeys(); }
     })
     .catch(function () { KEYS = []; });
 }
@@ -2115,7 +2511,9 @@ function load() {
     softGet("/v1/supplier"),
     softGet("/v1/statement"),
     softGet("/v1/alerts"),
-    softGet("/v1/payout")
+    softGet("/v1/payout"),
+    softGet("/v1/workers/holdings"),
+    softGet("/v1/board")
   ]).then(function (rs) {
     if (handleAuthFailure(rs[0].status)) { return null; }
     return Promise.all(rs.map(function (r) {
@@ -2133,6 +2531,8 @@ function load() {
     STMT = out[7] || null;
     ALERTS = out[8] || null;
     PAYOUT = out[9] || null;
+    HOLDING = (out[10] && out[10].holding) || [];
+    BOARD = out[11] || null;
     MODE = defaultMode();
     render();
     jumpToHash();
@@ -2142,10 +2542,93 @@ function load() {
   });
 }
 
+// --- sample data -------------------------------------------------------------
+//
+// Only reachable through ?demo=1 on an exchange with no identity provider,
+// which the server decides. Every figure is invented and the page says so at
+// the top; nothing can be saved because every request is refused before it
+// leaves the browser.
+
+function demoData() {
+  var now = Date.now(), h = 3600000;
+  var iso = function (t) { return new Date(t).toISOString(); };
+  ME = {worker: "cognito:sample-operator", verified: true, enrolled: true, currency: "USD",
+    earned_minor: 184500, paid_minor: 121000, pending_minor: 63500, held_minor: 12000, clear_minor: 41500,
+    ceiling_minor: 30000, exposure_minor: 9000, room_minor: 21000, tier: "proven", payout_threshold: 2000,
+    blocked: "", can_connect_payout: false, payout: {connected: true, ready: true}, tax: null,
+    history: [
+      {job: "j-3c1d", kind: "do", title: "Replace the porch light and photograph it lit", at: iso(now - 26 * h), status: "accepted", amount_minor: 12000, currency: "USD"},
+      {job: "j-88e2", kind: "observe", title: "Is the loading dock gate locked after 8pm", at: iso(now - 50 * h), status: "paid", amount_minor: 2300, currency: "USD"},
+      {job: "j-4a90", kind: "do", title: "Move the bins to the kerb before 7am", at: iso(now - 74 * h), status: "paid", amount_minor: 1800, currency: "USD"},
+      {job: "j-19bf", kind: "observe", title: "Photograph the storefront with the new sign", at: iso(now - 120 * h), status: "rejected", amount_minor: 0, currency: "USD", why: "the house number was not legible"}
+    ],
+    bids: [{job: "b-77", title: "Pressure-wash the driveway and both walks", amount_minor: 18500, currency: "USD", status: "Sealed. Offers close tomorrow; the buyer has not chosen.", won: false}]};
+  CAP = {capacity: {max_concurrent: 2, range_miles: 18, accepting: true, auto_accept: false,
+    lat_e7: 423314000, lon_e7: -830458000, kinds: [], skills: []},
+    ceiling: 4, standing: {completed: 7, abandoned: 0, allowance: 4}};
+  HOLDING = [
+    {job: "j-7f3a", kind: "do", title: "Clear both gutter runs on the north side", where: "Dearborn, MI",
+      expires: iso(now + 2 * h), resume: "/board#holding", pay_minor: 9000, currency: "USD", next_stage: 1,
+      stages: [{name: "Ladder up, before photos", pay_minor: 2000}, {name: "Clear both runs", pay_minor: 5000}, {name: "After photos, downpipe", pay_minor: 2000}],
+      stage_done: [true, false, false]},
+    {job: "j-a1c4", kind: "observe", title: "Is the pop-up still trading at the corner of Michigan and Schaefer", where: "Dearborn, MI",
+      expires: iso(now + 0.75 * h), resume: "/board#holding", pay_minor: 2500, currency: "USD", next_stage: -1}
+  ];
+  BOARD = {personalized: true, reviews_waiting: 2, work: [
+    {job: "w-1", kind: "observe", title: "Is the sign still up on the corner", distance_miles: 3.2, pay_minor: 2300, currency: "USD"},
+    {job: "w-2", kind: "do", title: "Deliver the keys to the tenant at unit 4", distance_miles: 6.8, pay_minor: 4000, currency: "USD"},
+    {job: "w-3", kind: "do", title: "Photograph the meter and send the reading", distance_miles: 1.4, pay_minor: 1500, currency: "USD"},
+    {job: "w-4", kind: "observe", title: "Count the cars in the lot at noon", distance_miles: 11.9, pay_minor: 2000, currency: "USD"},
+    {job: "w-5", kind: "do", title: "Take the parcel from the porch inside", distance_miles: 9.1, pay_minor: 2200, currency: "USD"},
+    {job: "w-6", kind: "observe", title: "Is the crane still on the Fort Street site", distance_miles: 15.5, pay_minor: 3100, currency: "USD"},
+    {job: "w-7", kind: "do", title: "Replace the battery in the lockbox", distance_miles: 4.6, pay_minor: 3500, currency: "USD"}
+  ]};
+  PAYOUT = {payout: {connected: true, ready: true}, owed_minor: 63500, clear_minor: 41500, threshold_minor: 2000, currency: "USD",
+    waiting: [
+      {job: "j-3c1d", amount_minor: 12000, status: "waiting out the buyer's review window", clears: iso(now + 31 * h)},
+      {job: "j-0e77", amount_minor: 10000, status: "the buyer has raised a problem", reason: "the downpipe is still blocked"}
+    ]};
+  SPEND = {currency: "USD", balance_minor: 92000, held_minor: 31500, committed_minor: 143800, awaiting_review: 1, jobs: [
+    {job: "s-51", kind: "do", title: "Fit the new house number plate by the door", posted: iso(now - 4 * h), where: "Detroit, MI",
+      committed_minor: 6500, status: "checking what came back", submissions: 1, worker: "op-4c2e", worker_completed: 12,
+      review: {awaiting_release_minor: 6500, hours_left: 18}, evidence: "/v1/jobs/s-51/evidence", receipt: "/v1/jobs/s-51/receipt"},
+    {job: "s-48", kind: "observe", title: "Is the pharmacy on Woodward open on Sunday", posted: iso(now - 30 * h), where: "Detroit, MI",
+      committed_minor: 2500, status: "somebody is working on it", submissions: 0, worker: "op-91aa", worker_completed: 3, agent: "dispatch bot"},
+    {job: "s-44", kind: "do", title: "Pressure-wash the driveway and both walks", posted: iso(now - 40 * h), where: "Dearborn, MI",
+      committed_minor: 22500, status: "collecting offers", submissions: 0},
+    {job: "s-39", kind: "do", title: "Replace the porch light and photograph it lit", posted: iso(now - 20 * h), where: "Detroit, MI",
+      committed_minor: 12000, status: "done", submissions: 1, accepted: 1, worker: "op-4c2e", worker_completed: 12,
+      evidence: "/v1/jobs/s-39/evidence", receipt: "/v1/jobs/s-39/receipt"},
+    {job: "s-31", kind: "observe", title: "Photograph the frontage at 3 Marlow", posted: iso(now - 200 * h), where: "Dearborn, MI",
+      committed_minor: 2300, status: "nobody took it — refunding", submissions: 0}
+  ]};
+  KEYS = [{id: "k1", label: "dispatch bot", last4: "a8f1", last_used: iso(now - 5 * h), max_per_job_minor: 10000},
+          {id: "k0", label: "first try", last4: "0c3d", revoked: true}];
+  SKILLS = []; SUP = null; SCOPE = null; ALERTS = {alerts_on: true};
+  STMT = {from: new Date().toISOString().slice(0, 7) + "-01", totals: {jobs: 2, gross_minor: 14300, fee_minor: 1430, expense_minor: 0, net_minor: 12870, currency: "USD"},
+    lines: [
+      {done: iso(now - 26 * h), job: "j-3c1d", title: "Replace the porch light and photograph it lit", by: "you", gross_minor: 12000, fee_minor: 1200, net_minor: 10800},
+      {done: iso(now - 50 * h), job: "j-88e2", title: "Is the loading dock gate locked after 8pm", by: "you", gross_minor: 2300, fee_minor: 230, net_minor: 2070}
+    ]};
+}
+function startDemo() {
+  DEMO = true;
+  workerHeaders = function () { return Promise.reject(new Error("Sample data — nothing is saved.")); };
+  document.getElementById("h-text").textContent = "Sample data";
+  demoData();
+  MODE = loadMode() || "operator";
+  render();
+  jumpToHash();
+}
+
 document.getElementById("mode-operator").addEventListener("click", function () { setMode("operator"); });
 document.getElementById("mode-buyer").addEventListener("click", function () { setMode("buyer"); });
 window.addEventListener("hashchange", jumpToHash);
 
-session().then(load).then(afterPayoutReturn);
+if (DEMO_ALLOWED && new URLSearchParams(location.search).get("demo") === "1") {
+  startDemo();
+} else {
+  session().then(load).then(afterPayoutReturn);
+}
 </script>
 `

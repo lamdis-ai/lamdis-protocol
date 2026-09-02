@@ -33,40 +33,52 @@ func jobPage(l *Listing) string {
 <style>` + themeCSS + jobCSS + `</style>
 ` + shellTop("queue", "") + `
     <p class="crumb"><a href="/board">&larr; Queue</a></p>
-    <div class="strip" id="strip"></div>
+    <div class="strip" id="strip" hidden></div>
+    <p class="eyebrow" id="eyebrow">Open job</p>
     <h1 id="title">` + title + `</h1>
     <div class="m" id="facts"></div>
+    <div class="hud" id="jhud" style="--cols:5" hidden></div>
     <div id="job"><div class="empty">Loading&hellip;</div></div>
     <div class="err" id="e-` + html.EscapeString(l.Job) + `"></div>
 ` + shellBottom + `
 <script>
 "use strict";
 var JOB = ` + string(id) + `;
-` + workerJS + boardJS + jobScript + `
+` + workerJS + boardJS + panelJS + jobScript + `
 </script>
 `
 }
 
 const jobCSS = `
-.crumb { margin: 0 0 .8rem; font: 500 .78rem/1 var(--mono); }
+.crumb { margin: 0 0 .8rem; font: 500 .72rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
 .crumb a { color: var(--ink-3); text-decoration: none; }
 .crumb a:hover { color: var(--ink); }
-#facts { margin: .3rem 0 1rem; font: 400 .8rem/1.5 var(--mono); color: var(--ink-3); }
-.jd { border: 1px solid var(--rule); border-radius: 3px; padding: 1rem 1.1rem; }
-.jd .pay { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 .9rem; }
-.jd .pay .n { font: 600 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums; }
-.jd .pay .n.quiet { color: var(--ink-3); font-weight: 500; }
-.jd .pay .s { font-size: .78rem; color: var(--ink-3); }
-.jd .pay .net { font: 500 .78rem/1 var(--mono); color: var(--ink-3); }
-.jd .acts { display: flex; gap: .5rem; margin-top: 1rem; flex-wrap: wrap; }
+h1 { font-size: 1.75rem; max-width: 46rem; }
+#facts { margin: .3rem 0 1.2rem; font: 400 .76rem/1.7 var(--mono); color: var(--ink-3); }
+#facts b { color: var(--ink-2); font-weight: 500; }
+.hud .t.do .v { color: var(--gold); }
+.hud .t.do::after { background: linear-gradient(90deg, var(--gold), transparent); }
+.hud .v .pill { vertical-align: .3em; }
+.jd { padding: 0; overflow: hidden; }
+.jd .jgrid { padding: 1.1rem 1.25rem; border-top: 0; gap: 1.2rem 1.6rem; }
+.jd .jgrid h4 { font: 600 .6rem/1 var(--mono); letter-spacing: .15em; }
+.jd .fx { font-size: .9rem; color: var(--ink); }
+.jd .fx b { font-weight: 600; }
+.jd .shots { margin: 0; padding: 0 1.25rem 1.1rem; }
 .jd .stages { margin: 0; padding: 0; list-style: none; }
 .jd .stages li { display: flex; justify-content: space-between; gap: 1rem;
-  padding: .35rem 0; border-bottom: 1px solid var(--rule); font-size: .84rem; }
+  padding: .4rem 0; border-bottom: 1px solid var(--rule); font-size: .86rem; }
 .jd .stages li:last-child { border-bottom: 0; }
 .jd .stages b { color: var(--ink); font-weight: 600; }
-.jd .stages span { color: var(--ink-3); font: 500 .8rem var(--mono); white-space: nowrap; }
+.jd .stages span { color: var(--gold); font: 600 .84rem var(--mono); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
 .jd .stages small { display: block; color: var(--ink-3); font-weight: 400; }
-.bid { display: grid; gap: .5rem; margin-top: .8rem; }
+.jd .cta { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: .95rem 1.25rem; border-top: 1px solid var(--rule); background: rgba(18,26,34,.5); }
+.jd .cta .who { font: 500 .72rem/1.5 var(--mono); color: var(--ink-3); flex: 1; min-width: 12rem; }
+.jd .cta .btn.go { height: 2.6rem; padding: 0 1.4rem; font-size: .92rem; }
+.jd .acts { display: contents; }
+.bid { display: grid; gap: .5rem; margin: 0; padding: 0 1.25rem 1.1rem; }
 .bid-row { display: flex; gap: .45rem; align-items: stretch; }
 .bid-row .cur {
   display: grid; place-items: center; width: 2.1rem; flex: none;
@@ -75,6 +87,7 @@ const jobCSS = `
 }
 .bid-row input { flex: 1; min-width: 0; font-family: var(--mono); }
 .hint { margin: 0; font-size: .78rem; color: var(--ink-3); }
+.ref { width: 8.5rem; }
 `
 
 const jobScript = `
@@ -82,19 +95,25 @@ var WORK = null;
 
 function renderHealth() {
   var el = document.getElementById("h-text");
-  var b = document.querySelector(".beacon");
+  var b = document.getElementById("h-beacon");
+  var a = document.getElementById("h-auth");
   if (signedIn()) {
     el.textContent = "Taking work";
     b.classList.remove("off");
+    a.textContent = "Console";
+    a.href = "/console";
   } else {
     el.textContent = "Not signed in";
     b.classList.add("off");
+    a.textContent = "Sign in";
+    a.href = "/signin?next=" + encodeURIComponent(location.pathname);
   }
 }
 
 function renderStrip() {
   var el = document.getElementById("strip");
   if (!signedIn()) {
+    el.hidden = false;
     el.className = "strip warn";
     el.innerHTML = '<span class="d"></span><span><b>You are not signed in.</b> ' +
       'You can read this job; sign in to take it or bid on it &mdash; one email ' +
@@ -102,9 +121,55 @@ function renderStrip() {
       '">Sign in</a></span>';
     return;
   }
-  el.className = "strip";
-  el.innerHTML = '<span class="d"></span><span>Taking work. ' +
-    '<a href="/board">Queue</a> &middot; <a href="/console">Your earnings</a></span>';
+  el.hidden = true;
+  el.innerHTML = "";
+}
+
+// renderLive fills the masthead's reading from the same /v1/board call that
+// fetches the terms.
+function renderLive(b) {
+  var work = (b && b.work) || [];
+  var n = document.getElementById("live-n"), s = document.getElementById("live-sum");
+  if (n) { n.textContent = String(work.length); }
+  if (s) {
+    s.textContent = money(work.reduce(function (a, w) { return a + (w.pay_minor || 0); }, 0), "USD");
+  }
+}
+
+// renderHud is the header: the five readings that decide whether this job is
+// worth a closer look, in the same tiles the queue uses.
+function renderHud(w) {
+  var host = document.getElementById("jhud");
+  var bidding = w.pricing === "bids";
+  var net = takeHome(w.pay_minor);
+  var tile = function (cls, k, v, s, i) {
+    return '<div class="t' + (DREW ? " " : " rv ") + cls + '" style="--i:' + i + '"><div class="k">' + k + '</div>' +
+      '<div class="v">' + v + '</div><div class="s">' + s + '</div></div>';
+  };
+  var payV = bidding ? "Your bid" : '<span id="hud-pay">' + money(w.pay_minor, w.currency) + '</span>';
+  var payS = bidding
+    ? "nobody has told you a budget"
+    : (w.practice ? "practice run, pays nothing"
+      : (net !== null && net !== w.pay_minor ? money(net, w.currency) + " to you" : "on completion"));
+  if (!bidding && w.bonus_minor) { payS += " · +" + money(w.bonus_minor, w.currency) + " if yes"; }
+  host.hidden = false;
+  host.innerHTML =
+    tile(bidding || !w.pay_minor ? "" : "money", "Pays", payV, payS, 0) +
+    tile(w.kind === "do" ? "do" : "soft", "Kind", kindLabel(w.kind),
+      w.kind === "do" ? "make something true" : "find something out", 1) +
+    tile("", "Where", w.area ? esc(w.area) : "&mdash;",
+      w.area ? "exact address once you take it" : "the buyer gave no area", 2) +
+    tile(w.distance_miles ? "ok" : "", "Distance",
+      w.distance_miles ? w.distance_miles + '<small>mi</small>' : "&mdash;",
+      w.distance_miles ? "from your location" : (signedIn() ? "set your location in Capacity" : "sign in to see"), 3) +
+    tile("wait", bidding ? "Bids close" : "Closes",
+      left(bidding && w.bids_close_at ? w.bids_close_at : w.expires),
+      bidding ? "then the buyer picks one" : "unless somebody takes it first", 4);
+  if (!bidding) {
+    countUp(document.getElementById("hud-pay"), w.pay_minor || 0, function (v) {
+      return money(Math.round(v), w.currency);
+    });
+  }
 }
 
 // facts is the one-line summary under the title: the same items, in the same
@@ -128,19 +193,6 @@ function facts(w) {
   if (w.expense_cap_minor) { f.push("expenses to " + money(w.expense_cap_minor, w.currency)); }
   if (w.expires) { f.push("open for " + left(w.expires)); }
   return f.join(" &middot; ");
-}
-
-function payLine(w) {
-  if (w.pricing === "bids") {
-    return '<div class="pay"><span class="n quiet">Your bid</span>' +
-      '<span class="s">nobody has told you a budget, and other bids are not shown</span></div>';
-  }
-  var net = takeHome(w.pay_minor);
-  return '<div class="pay"><span class="n">' + money(w.pay_minor, w.currency) + '</span>' +
-    '<span class="s">on completion</span>' +
-    (net !== null && net !== w.pay_minor
-      ? '<span class="net">' + money(net, w.currency) + ' to you</span>' : "") +
-    '</div>';
 }
 
 function section(h, body) {
@@ -178,7 +230,9 @@ function projectLine(w) {
 
 function actions(w) {
   if (w.pricing === "bids") {
-    return '<div class="acts"><button class="btn go" id="open-bid">Bid</button></div>' +
+    return '<div class="cta"><span class="who">You are naming your own price. Nobody has told you ' +
+        'a budget, and other bids are not shown.</span>' +
+        '<button class="btn go" id="open-bid">' + (signedIn() ? "Bid on this job" : "Sign in to bid") + '</button></div>' +
       '<div class="bid" id="bid-' + esc(w.job) + '" hidden>' +
         '<div class="bid-row"><span class="cur">$</span>' +
           '<input type="text" inputmode="decimal" placeholder="45.00" data-bid="' + esc(w.job) + '">' +
@@ -189,15 +243,29 @@ function actions(w) {
           'and other bids are not shown.</p>' +
       '</div>';
   }
-  return '<div class="acts"><button class="btn go" data-job="' + esc(w.job) + '">' +
+  var who = w.practice
+    ? "A practice run: the buttons are real, the money is not."
+    : (w.posted_by_agent ? "Posted by an agent. Paid on proof, released on acceptance."
+      : "Paid on proof, released on acceptance.");
+  return '<div class="cta"><span class="who">' + who + '</span>' +
+    '<button class="btn go" data-job="' + esc(w.job) + '">' +
     (signedIn() ? "Take this job" : "Sign in to take this job") + '</button></div>';
 }
 
+var DREW = false;
+
 function render() {
   var w = WORK, host = document.getElementById("job");
+  // The page renders once for the job and again when the terms arrive; the
+  // arrival animation belongs to the first.
+  var rv = DREW ? "" : " rv";
+  DREW = true;
   document.getElementById("facts").innerHTML = facts(w);
+  document.getElementById("eyebrow").textContent = w.practice ? "Practice job"
+    : (w.pricing === "bids" ? "Open for bids" : "Open job");
+  renderHud(w);
   var blocked = (w.blocked_by || []).length > 0;
-  host.innerHTML = '<div class="jd">' + payLine(w) +
+  host.innerHTML = '<div class="jd glass' + rv + '" style="--i:5">' +
     '<div class="jgrid">' +
       section("What proves it", w.deliverable ? '<p class="fx">' + esc(w.deliverable) + '</p>' : "") +
       section("The job", w.brief ? '<p class="fx">' + esc(w.brief) + '</p>' : "") +
@@ -251,6 +319,7 @@ function load() {
   // The fee and payout terms, so the take-home reads the same as on the queue.
   fetch("/v1/board").then(function (r) { return r.json(); }).then(function (b) {
     TERMS = (b && b.terms) || null;
+    renderLive(b);
     if (WORK) { render(); }
   }).catch(function () {});
 }

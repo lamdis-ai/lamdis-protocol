@@ -22,100 +22,122 @@ const reviewPageTop = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Review request</title>
-<style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#020617; color:#e2e8f0;
-         font:17px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-  main { max-width:34rem; margin:0 auto; padding:1.25rem 1.25rem 4rem; }
-  h1 { font-size:1.05rem; font-weight:600; color:#94a3b8; letter-spacing:.02em;
-       text-transform:uppercase; margin:0 0 1.25rem; }
-  .q { font-size:1.35rem; line-height:1.35; font-weight:600; margin:0 0 .75rem; }
-  .ctx { color:#94a3b8; margin:0 0 1.25rem; }
-  .pay { display:flex; gap:1.5rem; padding:.9rem 1rem; background:#0f172a;
-         border:1px solid #1e293b; border-radius:.6rem; margin:0 0 1.25rem; }
-  .pay div { flex:1 }
-  .pay dt { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:#64748b; }
-  .pay dd { margin:.15rem 0 0; font-size:1.15rem; font-variant-numeric:tabular-nums; }
-  img { width:100%; border-radius:.6rem; border:1px solid #1e293b; display:block;
-        margin-bottom:1rem; background:#0f172a; min-height:8rem; }
-  textarea { width:100%; box-sizing:border-box; min-height:5.5rem; padding:.75rem;
-             background:#0f172a; color:#e2e8f0; border:1px solid #1e293b;
-             border-radius:.6rem; font:inherit; resize:vertical; }
-  .row { display:flex; gap:.6rem; margin:1rem 0 .6rem; }
-  button { flex:1; min-height:3.1rem; font:600 1rem/1 inherit; color:#e2e8f0;
-           background:#1e293b; border:1px solid #334155; border-radius:.6rem;
-           cursor:pointer; transition:filter .15s; }
-  button:hover:not(:disabled) { filter:brightness(1.25) }
-  button:disabled { opacity:.45; cursor:not-allowed }
-  button.yes { background:#14532d; border-color:#166534 }
-  button.no  { background:#4c1d1d; border-color:#7f1d1d }
-  .unsure { width:100%; min-height:2.6rem; background:transparent; border-style:dashed }
-  .note { color:#64748b; font-size:.85rem; margin-top:.75rem }
-  .done { padding:1.25rem; background:#0f172a; border:1px solid #1e293b;
-          border-radius:.6rem; text-align:center }
-  .err { color:#fca5a5; margin-top:.75rem; min-height:1.2rem }
-  .muted { color:#64748b }
+<style>` + themeCSS + `
+  main { max-width: 40rem; margin: 0 auto; padding: 1.4rem 1rem 4rem; }
+  @media (min-width: 40rem) { main { padding: 2rem 1.25rem 5rem; } }
+  .top .back { font-size: .84rem; color: var(--ink-2); text-decoration: none; }
+  .top .back:hover { color: var(--ink); }
+  .eyebrow { display: block; font: 600 .62rem/1 var(--mono); letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-3); }
+  .eyebrow.blue { color: var(--blue); }
+  .eyebrow.gold { color: var(--gold); }
+  .kicker { margin: 0 0 1.2rem; font-size: .88rem; color: var(--ink-3); }
 
-  /* A page that never says what it is, is a page nobody trusts with a
-     photograph of somebody's property. The header does that in two lines. */
-  .hd { display:flex; gap:.7rem; align-items:center; margin:0 0 1.5rem;
-        padding-bottom:1rem; border-bottom:1px solid #1e293b }
-  .mark { width:2rem; height:2rem; flex:none; border-radius:.45rem;
-          background:linear-gradient(140deg,#38bdf8,#6366f1); color:#020617;
-          font:700 1.1rem/2rem ui-sans-serif,sans-serif; text-align:center }
-  .brand { margin:0; font-weight:650; letter-spacing:-.01em }
-  .kicker { margin:.1rem 0 0; font-size:.8rem; color:#64748b; line-height:1.35 }
+  /* The question is the page. Everything else is in service of answering it. */
+  .ask { position: relative; overflow: hidden; margin: 0 0 1rem; }
+  .ask::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+    background: linear-gradient(90deg, var(--blue), transparent); }
+  .q { margin: .6rem 0 .4rem; font: 700 clamp(1.35rem, 3.6vw, 1.7rem)/1.25 var(--sans);
+    letter-spacing: -.03em; color: var(--ink); }
+  .ctx { margin: 0; color: var(--ink-2); font-size: .95rem; }
+
+  /* Evidence, large. The whole judgement is made from this frame. */
+  .look { margin: 0 0 .5rem; font-size: .84rem; color: var(--ink-2); }
+  figure { margin: 0 0 1rem; padding: .6rem; border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  figure img { display: block; width: 100%; max-height: 62vh; object-fit: contain;
+    border-radius: 4px; border: 1px solid var(--rule); background: var(--bg); min-height: 12rem; }
+  figcaption { margin: .5rem 0 0; font: 500 .68rem/1.4 var(--mono); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3); display: flex; justify-content: space-between;
+    gap: 1rem; flex-wrap: wrap; }
+  figcaption b { color: var(--blue); font-weight: 500; }
+
+  textarea { width: 100%; box-sizing: border-box; min-height: 5rem; padding: .7rem .8rem;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--rule-2);
+    border-radius: 6px; font: inherit; font-size: .95rem; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--gold); }
+
+  /* Three big buttons. Green is yes, red is no, and "cannot tell" is a real
+     answer with a real button, not a small grey escape hatch. */
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin: .8rem 0 .6rem; }
+  .row button, button.unsure { appearance: none; min-height: 3.4rem; border-radius: 6px;
+    border: 1px solid var(--rule-2); background: var(--glass); color: var(--ink);
+    font: 700 1.05rem/1 var(--sans); letter-spacing: -.01em; cursor: pointer;
+    transition: box-shadow .15s, border-color .15s, background .15s; }
+  .row button:hover:not(:disabled), button.unsure:hover:not(:disabled) { border-color: var(--ink-3); }
+  .row button:disabled, button.unsure:disabled { opacity: .45; cursor: not-allowed; }
+  .row button:focus-visible, button.unsure:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  button.yes { border-color: #1C4530; color: var(--green); background: rgba(63,207,113,.08); }
+  button.yes:hover:not(:disabled) { border-color: var(--green); box-shadow: 0 0 18px rgba(63,207,113,.25); }
+  button.no { border-color: #43201F; color: var(--bad); background: rgba(224,108,108,.08); }
+  button.no:hover:not(:disabled) { border-color: var(--bad); box-shadow: 0 0 18px rgba(224,108,108,.22); }
+  button.unsure { width: 100%; min-height: 2.9rem; font-size: .92rem; font-weight: 600;
+    border-style: dashed; color: var(--ink-2); }
+  .note { color: var(--ink-3); font-size: .84rem; margin-top: .75rem; }
+  .note a { color: var(--gold); }
+  .err { color: var(--bad); margin-top: .6rem; min-height: 1.2rem; font-size: .86rem; }
+  .err a { color: var(--gold); }
+  .muted { color: var(--ink-2); }
+
+  /* Pay and panel position, as HUD tiles under the question. */
+  .hud { --cols: 3; margin: 0 0 1.1rem; }
+  .hud .v { font-size: 1.35rem; }
+  .prog { display: flex; gap: .3rem; margin-top: .6rem; }
+  .prog span { flex: 1; height: 5px; border-radius: 1px; background: var(--panel-2); }
+  .prog span.in { background: var(--blue); }
+  .prog span.you { background: var(--gold); box-shadow: 0 0 8px rgba(255,182,39,.5); }
 
   /* Loading was the word "Loading". A shape that resembles the answer reads
      as a page that is working rather than one that has stopped. */
-  .sk { background:#0f172a; border-radius:.5rem; margin-bottom:.8rem;
-        animation:pulse 1.4s ease-in-out infinite }
-  .sk-q { height:2.6rem } .sk-c { height:1.2rem; width:70% } .sk-img { height:11rem }
+  .sk { background: var(--glass); border: 1px solid var(--rule); border-radius: 8px;
+    margin-bottom: .8rem; animation: pulse 1.4s ease-in-out infinite; }
+  .sk-q { height: 5rem } .sk-c { height: 4.2rem; } .sk-img { height: 14rem }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
 
-  .demo { display:flex; gap:.6rem; padding:.7rem .85rem; margin:0 0 1.1rem;
-          background:#1c1917; border:1px solid #44403c; border-left:3px solid #f59e0b;
-          border-radius:.5rem; font-size:.86rem; color:#d6d3d1 }
-  .steps { list-style:none; margin:0 0 1.25rem; padding:0; counter-reset:s }
-  .steps li { position:relative; padding:0 0 .55rem 1.7rem; font-size:.86rem;
-              color:#94a3b8; counter-increment:s }
-  .steps li::before { content:counter(s); position:absolute; left:0; top:.05rem;
-        width:1.15rem; height:1.15rem; border-radius:50%; background:#1e293b;
-        color:#94a3b8; font-size:.68rem; font-weight:700; text-align:center;
-        line-height:1.15rem }
-  .steps li.now { color:#e2e8f0 }
-  .steps li.now::before { background:#38bdf8; color:#020617 }
+  .demo { border-color: #3A2510; margin-bottom: 1rem; }
+  .demo b { color: var(--warn); }
+  .demo > span:last-child { flex: 1; min-width: 0; }
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; display: grid; gap: .45rem; }
+  .steps li { position: relative; padding: 0 0 0 1.9rem; font-size: .86rem; color: var(--ink-3);
+    counter-increment: s; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: .1rem;
+    width: 1.25rem; height: 1.25rem; border-radius: 50%; border: 1px solid var(--rule-2);
+    color: var(--ink-3); font: 600 .66rem/1.25rem var(--mono); text-align: center; }
+  .steps li.now { color: var(--ink); }
+  .steps li.now::before { background: var(--blue); border-color: var(--blue); color: #04101C; }
 
-  .prog { display:flex; gap:.3rem; margin:0 0 1.25rem }
-  .prog span { flex:1; height:.28rem; border-radius:.15rem; background:#1e293b }
-  .prog span.in { background:#38bdf8 }
-  .prog span.you { background:#facc15 }
+  details { margin: 1.2rem 0 0; }
+  summary { cursor: pointer; color: var(--ink-2); font-size: .86rem; list-style: none; }
+  summary::-webkit-details-marker { display: none }
+  summary::before { content: "›"; display: inline-block; margin-right: .4rem; color: var(--gold);
+    transition: transform .15s }
+  details[open] summary::before { transform: rotate(90deg) }
+  details p { font-size: .86rem; color: var(--ink-2); margin: .7rem 0 0 }
+  details a { color: var(--gold); }
 
-  .look { margin:0 0 .6rem; font-size:.82rem; color:#64748b }
-  figure { margin:0 0 1rem }
-  figcaption { font-size:.78rem; color:#64748b; margin-top:-.6rem }
-
-  details { margin:1.25rem 0 0; border-top:1px solid #1e293b; padding-top:.9rem }
-  summary { cursor:pointer; color:#94a3b8; font-size:.86rem; list-style:none }
-  summary::-webkit-details-marker { display:none }
-  summary::before { content:"›"; display:inline-block; margin-right:.4rem;
-                    transition:transform .15s }
-  details[open] summary::before { transform:rotate(90deg) }
-  details p { font-size:.84rem; color:#64748b; margin:.7rem 0 0 }
-  .empty { padding:1.5rem 1.25rem; background:#0f172a; border:1px solid #1e293b;
-           border-radius:.6rem }
-  .empty h2 { margin:0 0 .5rem; font-size:1.05rem }
-  .empty p { margin:0 0 .7rem; color:#94a3b8; font-size:.9rem }
-  .empty a { color:#7dd3fc }
+  /* Done, and closed: one HUD tile each, with the way forward on it. */
+  .outcome { --cols: 1; margin: 0 0 1rem; }
+  .outcome .t { padding: 1.4rem 1.3rem 1.3rem; }
+  .outcome .v { font-size: 1.7rem; }
+  .outcome p { margin: .5rem 0 0; font-size: .92rem; }
+  .outcome .row { grid-template-columns: 1fr; margin-top: 1rem; }
+  .outcome .row button { border-color: var(--gold); background: var(--gold); color: #120C00; }
+  .outcome .row button:hover:not(:disabled) { box-shadow: 0 0 18px rgba(255,182,39,.35); }
+  .outcome .t.empty { text-align: left; padding: 1.4rem 1.3rem 1.3rem; color: inherit; }
+  .empty h2 { margin: .5rem 0 .4rem; font: 700 1.3rem/1.2 var(--sans); letter-spacing: -.03em;
+    text-transform: none; color: var(--ink); }
+  .empty p { margin: 0 0 .6rem; color: var(--ink-2); font-size: .92rem; }
+  .empty p b { color: var(--gold); }
 </style>
+<header class="top">
+  <a class="mark" href="/board">lamdis<b>.</b></a>
+  <span class="pill"><span class="beacon"></span>Panel review</span>
+  <div class="right"><a class="back" href="/how-it-works">How this works</a>
+    <a class="back" href="/board">&larr; Board</a></div>
+</header>
 <main>
-  <header class="hd">
-    <div class="mark" aria-hidden="true">L</div>
-    <div>
-      <p class="brand">Lamdis</p>
-      <p class="kicker">A person is being asked, because software was not sure</p>
-    </div>
-  </header>
+  <p class="kicker rv" style="--i:0"><span class="eyebrow blue" style="margin-bottom:.35rem">Human verification</span>
+    A person is being asked, because software was not sure.</p>
   <div id="app" class="skel" aria-live="polite">
     <div class="sk sk-q"></div><div class="sk sk-c"></div><div class="sk sk-img"></div>
   </div>
@@ -333,42 +355,42 @@ const reviewPageScript = `
       pips += '<span class="' + (i < have ? "in" : i === have ? "you" : "") + '"></span>';
     }
 
-    var imgs = (brief.evidence || []).map(function (sha) {
-      return '<figure><img alt="The photograph submitted for this job" ' +
-        'data-sha="' + esc(sha) + '">' +
-        '<figcaption>Submitted by whoever did the work. ' +
-        'Tap to open it full size.</figcaption></figure>';
+    var imgs = (brief.evidence || []).map(function (sha, i) {
+      return '<figure class="rv" style="--i:' + (3 + i) + '">' +
+        '<img alt="The photograph submitted for this job" data-sha="' + esc(sha) + '">' +
+        '<figcaption><span><b>Evidence ' + (i + 1) + '</b> · sha ' + esc(String(sha).slice(0, 12)) + '</span>' +
+        '<span>Tap to open full size</span></figcaption></figure>';
     }).join("");
 
     app.className = "";
     app.innerHTML =
       (brief.practice
-        ? '<div class="demo"><div>&#9888;</div><div><b>This is a demonstration.</b> ' +
+        ? '<div class="strip warn demo rv" style="--i:1"><span class="d"></span><span><b>This is a demonstration.</b> ' +
           'Nothing here is real work, no money moves, and the photograph is a ' +
           'drawing rather than a place. Everything else &mdash; the question, ' +
           'the panel, how an answer is recorded &mdash; is exactly what a real ' +
-          'review does.</div></div>'
+          'review does.</span></div>'
         : "") +
 
-      '<div class="prog" role="img" aria-label="' +
-        esc(have + " of " + total + " reviewers have answered") + '">' + pips + '</div>' +
+      '<div class="glass ask rv" style="--i:1">' +
+        '<span class="eyebrow blue">The question</span>' +
+        '<p class="q">' + esc(brief.question) + '</p>' +
+        (brief.context ? '<p class="ctx">' + esc(brief.context) + '</p>' : '') +
+      '</div>' +
 
-      '<ol class="steps">' +
-        '<li>Automated verification ran and was not confident enough</li>' +
-        '<li class="now">' + esc(total) + ' people are asked the same question, separately</li>' +
-        '<li>' + esc(brief.agreement || 2) + ' answering the same way settles it, and money moves</li>' +
-      '</ol>' +
-
-      '<p class="q">' + esc(brief.question) + '</p>' +
-      (brief.context ? '<p class="ctx">' + esc(brief.context) + '</p>' : '') +
-
-      '<dl class="pay">' +
-        '<div><dt>To look</dt><dd>' + money(brief.fee_minor, brief.currency) + '</dd></div>' +
-        '<div><dt>If the panel agrees with you</dt><dd>+' +
-          money(brief.bonus_minor, brief.currency) + '</dd></div>' +
+      '<dl class="hud rv" style="--i:2">' +
+        '<div class="t money"><dt class="k">To look</dt><dd class="v" style="margin-left:0">' +
+          money(brief.fee_minor, brief.currency) + '</dd><div class="s">paid whichever way you answer</div></div>' +
+        '<div class="t money"><dt class="k">If the panel agrees</dt><dd class="v" style="margin-left:0">+' +
+          money(brief.bonus_minor, brief.currency) + '</dd><div class="s">on top, not instead</div></div>' +
+        '<div class="t soft"><dt class="k">Panel</dt><dd class="v" style="margin-left:0">' + esc(have) +
+          '<small>of ' + esc(total) + ' in</small></dd>' +
+          '<div class="prog" role="img" aria-label="' +
+            esc(have + " of " + total + " reviewers have answered") + '">' + pips + '</div></div>' +
       '</dl>' +
 
-      '<p class="look">Answer only from what is in the photograph. ' +
+      '<p class="look rv" style="--i:3"><span class="eyebrow" style="margin-bottom:.3rem">Evidence</span>' +
+        'Answer only from what is in the photograph. ' +
         'If it does not show enough to tell, say so &mdash; that is the answer, ' +
         'and it pays the same.</p>' +
       imgs +
@@ -380,6 +402,14 @@ const reviewPageScript = `
       '</div>' +
       '<button class="unsure" id="unsure">I cannot tell from this</button>' +
       '<p class="err" id="err"></p>' +
+
+      '<div class="glass" style="margin-top:1rem">' +
+      '<span class="eyebrow" style="margin-bottom:.7rem">Where this sits</span>' +
+      '<ol class="steps">' +
+        '<li>Automated verification ran and was not confident enough</li>' +
+        '<li class="now">' + esc(total) + ' people are asked the same question, separately</li>' +
+        '<li>' + esc(brief.agreement || 2) + ' answering the same way settles it, and money moves</li>' +
+      '</ol>' +
 
       '<details><summary>How this works, and why you</summary>' +
         '<p>Somebody paid for a job to be done and the money is held until ' +
@@ -395,7 +425,7 @@ const reviewPageScript = `
         '<p>You were assigned this. Nobody on the exchange chooses which ' +
           'evidence they judge, because anybody who could choose would ' +
           'eventually choose their own work.</p>' +
-      '</details>';
+      '</details></div>';
 
     // Images are fetched with the capability, so they cannot be hotlinked.
     Array.prototype.forEach.call(app.querySelectorAll("img[data-sha]"), async function (img) {
@@ -439,9 +469,10 @@ const reviewPageScript = `
         // them on a page with no way forward wastes that and reads as broken.
         var got = out.data.received, want = brief.reviewers;
         var settled = got >= want;
-        app.innerHTML = '<div class="done">' +
-          '<p><strong>Thank you &mdash; that is recorded.</strong></p>' +
-          '<p class="muted">' + esc(got) + ' of ' + esc(want) + ' answers in. ' +
+        app.innerHTML = '<div class="hud outcome rv"><div class="t ok">' +
+          '<div class="k">Recorded</div>' +
+          '<div class="v">' + money(brief.fee_minor, brief.currency) + ' for looking</div>' +
+          '<p class="muted">Thank you &mdash; that is recorded. ' + esc(got) + ' of ' + esc(want) + ' answers in. ' +
             (settled
               ? 'The panel is complete, and the money settles on it.'
               : 'It settles once ' + esc(want) + ' people have looked.') +
@@ -455,7 +486,7 @@ const reviewPageScript = `
             '. It reaches your account with your next payout.</p>' +
           '<div class="row"><button id="next">Verify another</button></div>' +
           '<p class="err" id="nexterr"></p>' +
-          '<p class="note"><a href="/board">Back to open work</a></p></div>';
+          '<p class="note"><a href="/board">Back to open work</a></p></div></div>';
 
         wireNext();
       };
@@ -475,40 +506,42 @@ const reviewPageScript = `
       if (!secret) {
         app.className = "";
         app.innerHTML =
-          '<div class="empty">' +
+          '<div class="hud outcome rv"><div class="t wait empty">' +
+            '<div class="k">Access code missing</div>' +
             '<h2>This link needs its access code</h2>' +
             '<p>Review links end in a <b>#</b> followed by a code, and the part ' +
               'after the # is what proves the link is yours. It is never sent ' +
               'to us, which is why it cannot be recovered from this page.</p>' +
             '<p>Open the original link again, in full. If it came in a ' +
               'message, follow it from there rather than copying the address.</p>' +
-          '</div>' +
-          '<details open><summary>What is this page?</summary>' +
+          '</div></div>' +
+          '<div class="glass rv" style="--i:2"><details open><summary>What is this page?</summary>' +
             '<p>Lamdis is an exchange where software agents pay people to do ' +
               'things in the physical world, and payment settles against ' +
               'evidence that the work happened. When automated checks on that ' +
               'evidence are not confident enough, a small panel of people is ' +
               'asked instead. This is that page.</p>' +
             '<p><a href="/board">See work that is open now</a> &middot; ' +
-              '<a href="/docs">How the exchange works</a></p>' +
-          '</details>';
+              '<a href="/how-it-works">How the exchange works</a></p>' +
+          '</details></div>';
         return;
       }
       var out = await call("GET", "/v1/claims/" + job, null);
       if (!out.ok) {
         app.className = "";
         app.innerHTML =
-          '<div class="empty">' +
+          '<div class="hud outcome rv"><div class="t soft empty">' +
+            '<div class="k">Closed</div>' +
             '<h2>This review is closed</h2>' +
             '<p>Either enough people answered and the panel settled, or the ' +
               'link ran out of time. Both end the same way: there is nothing ' +
               'left to look at here.</p>' +
             '<p>If you answered before it closed, your review still counts and ' +
               'is still paid.</p>' +
-          '</div>' +
-          '<div class="row"><button id="next">Verify something else</button></div>' +
-          '<p class="err" id="nexterr"></p>' +
-          '<p class="note"><a href="/board">Back to open work</a></p>';
+            '<div class="row"><button id="next">Verify something else</button></div>' +
+            '<p class="err" id="nexterr"></p>' +
+            '<p class="note"><a href="/board">Back to open work</a></p>' +
+          '</div></div>';
         wireNext();
         return;
       }

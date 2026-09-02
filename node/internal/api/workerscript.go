@@ -325,3 +325,106 @@ function placeBid(button, job) {
        {amount_minor: amount, note: note, assumptions: assumptions});
 }
 `
+
+// panelJS is the instrument panel's shared script: the live radar canvas and
+// the count-up used by HUD tiles. Included by any page that draws either.
+//
+// drawRadar(canvas, opts) draws jobs around a centre: opts.jobs is a list of
+// {lat, lon, kind, title, job, pay}, opts.you is {lat, lon} or null, and
+// opts.rangeMiles the ring to draw. Without coordinates it still draws the
+// ground and says so, rather than a blank rectangle. It returns a stop().
+const panelJS = `
+function countUp(el, target, fmt) {
+  if (!el) { return; }
+  var t0 = null, from = parseFloat(el.getAttribute("data-from") || "0") || 0;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = fmt(target); return; }
+  function step(ts) {
+    if (!t0) { t0 = ts; }
+    var p = Math.min(1, (ts - t0) / 700); p = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(from + (target - from) * p);
+    if (p < 1) { requestAnimationFrame(step); } else { el.setAttribute("data-from", String(target)); }
+  }
+  requestAnimationFrame(step);
+}
+
+function drawRadar(canvas, opts) {
+  if (!canvas || !canvas.getContext) { return function () {}; }
+  var ctx = canvas.getContext("2d"), raf = 0, t0 = performance.now(), hover = -1;
+  var jobs = (opts.jobs || []).filter(function (j) { return isFinite(j.lat) && isFinite(j.lon) && (j.lat || j.lon); });
+  var you = opts.you && isFinite(opts.you.lat) ? opts.you : null;
+  var range = opts.rangeMiles || 20;
+  var cx = you ? you.lat : (jobs.length ? jobs.reduce(function (a, j) { return a + j.lat; }, 0) / jobs.length : 0);
+  var cz = you ? you.lon : (jobs.length ? jobs.reduce(function (a, j) { return a + j.lon; }, 0) / jobs.length : 0);
+  var dpr = Math.min(devicePixelRatio || 1, 2);
+  function size() {
+    var r = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, r.width * dpr); canvas.height = Math.max(1, r.height * dpr);
+  }
+  function project(lat, lon) {
+    var W = canvas.width, H = canvas.height, R = Math.min(W, H) * 0.42;
+    var kx = 69.17 * Math.cos(cx * Math.PI / 180), ky = 69.17;
+    var dx = (lon - cz) * kx / range, dy = (lat - cx) * ky / range;
+    return [W / 2 + dx * R, H / 2 - dy * R];
+  }
+  function frame(now) {
+    var W = canvas.width, H = canvas.height, R = Math.min(W, H) * 0.42, s = (now - t0) / 1000;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save(); ctx.scale(1, 1);
+    // grid
+    ctx.strokeStyle = "rgba(43,57,69,.45)"; ctx.lineWidth = 1;
+    var g = 28 * dpr;
+    for (var x = (W / 2) % g; x < W; x += g) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (var y = (H / 2) % g; y < H; y += g) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    // range rings
+    [0.33, 0.66, 1].forEach(function (f, i) {
+      ctx.beginPath(); ctx.arc(W / 2, H / 2, R * f, 0, Math.PI * 2);
+      ctx.strokeStyle = i === 2 ? "rgba(95,176,255,.35)" : "rgba(95,176,255,.16)"; ctx.stroke();
+    });
+    ctx.fillStyle = "rgba(147,164,179,.7)"; ctx.font = (10 * dpr) + "px ui-monospace, Menlo, monospace";
+    ctx.fillText(Math.round(range) + " mi", W / 2 + R + 4 * dpr, H / 2 - 4 * dpr);
+    // sweep
+    var a = (s * 0.6) % (Math.PI * 2);
+    var grad = ctx.createConicGradient ? ctx.createConicGradient(a, W / 2, H / 2) : null;
+    if (grad) {
+      grad.addColorStop(0, "rgba(95,176,255,.18)"); grad.addColorStop(0.12, "rgba(95,176,255,0)"); grad.addColorStop(1, "rgba(95,176,255,0)");
+      ctx.beginPath(); ctx.moveTo(W / 2, H / 2); ctx.arc(W / 2, H / 2, R, 0, Math.PI * 2); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    }
+    // you
+    if (you) {
+      ctx.beginPath(); ctx.arc(W / 2, H / 2, 4 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = "#3FCF71"; ctx.shadowColor = "#3FCF71"; ctx.shadowBlur = 12 * dpr; ctx.fill(); ctx.shadowBlur = 0;
+    }
+    // jobs
+    jobs.forEach(function (j, i) {
+      var p = project(j.lat, j.lon), col = j.kind === "observe" ? "#5FB0FF" : "#FFB627";
+      var pulse = (s * 0.9 + i * 0.37) % 1;
+      ctx.beginPath(); ctx.arc(p[0], p[1], (4 + pulse * 14) * dpr, 0, Math.PI * 2);
+      ctx.strokeStyle = col; ctx.globalAlpha = (1 - pulse) * 0.5; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(p[0], p[1], (i === hover ? 5 : 3.5) * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 10 * dpr; ctx.fill(); ctx.shadowBlur = 0;
+      if (i === hover && j.title) {
+        ctx.fillStyle = "rgba(237,241,245,.95)"; ctx.font = (11 * dpr) + "px ui-monospace, Menlo, monospace";
+        ctx.fillText((j.pay ? j.pay + "  " : "") + j.title.slice(0, 48), p[0] + 9 * dpr, p[1] - 8 * dpr);
+      }
+    });
+    if (!jobs.length) {
+      ctx.fillStyle = "rgba(93,110,124,.9)"; ctx.font = (11 * dpr) + "px ui-monospace, Menlo, monospace";
+      ctx.textAlign = "center"; ctx.fillText(opts.empty || "nothing on the board carries a location yet", W / 2, H / 2 + 4 * dpr); ctx.textAlign = "left";
+    }
+    ctx.restore();
+    raf = requestAnimationFrame(frame);
+  }
+  function onMove(e) {
+    var r = canvas.getBoundingClientRect(), mx = (e.clientX - r.left) * dpr, my = (e.clientY - r.top) * dpr, best = -1, bd = 14 * dpr;
+    jobs.forEach(function (j, i) { var p = project(j.lat, j.lon), d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; best = i; } });
+    hover = best; canvas.style.cursor = best >= 0 ? "pointer" : "default";
+  }
+  function onClick() { if (hover >= 0 && opts.onPick) { opts.onPick(jobs[hover]); } }
+  size(); addEventListener("resize", size, {passive: true});
+  canvas.addEventListener("mousemove", onMove); canvas.addEventListener("click", onClick);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { frame(t0); cancelAnimationFrame(raf); }
+  else { raf = requestAnimationFrame(frame); }
+  return function () { cancelAnimationFrame(raf); removeEventListener("resize", size); };
+}
+`

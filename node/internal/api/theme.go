@@ -361,9 +361,114 @@ input:focus, textarea:focus { outline: none; border-color: var(--gold); }
 .empty { padding: 2.5rem 1rem; text-align: center; color: var(--ink-3); font-size: .9rem; }
 .note { margin: 1rem 0 0; font-size: .84rem; color: var(--ink-3); }
 
+/* --- instrument panel ------------------------------------------------------
+   The exchange is the console the landing page promises: a dark ground with a
+   faint grid, glass panels over it, big tabular numbers, and one live canvas
+   that shows where the work is. Blue is software (an observe job, an agent);
+   gold is money and a do job; green is proven. Nothing else borrows them. */
+:root { --blue: #5FB0FF; --glass: rgba(13, 18, 24, .72); --glass-2: rgba(18, 26, 34, .8); }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(120% 70% at 75% -10%, rgba(95,176,255,.10), transparent 60%),
+    radial-gradient(80% 60% at 10% 110%, rgba(255,182,39,.07), transparent 60%),
+    linear-gradient(rgba(43,57,69,.22) 1px, transparent 1px) 0 0 / 3.5rem 3.5rem,
+    linear-gradient(90deg, rgba(43,57,69,.22) 1px, transparent 1px) 0 0 / 3.5rem 3.5rem,
+    var(--bg);
+  mask-image: radial-gradient(100% 100% at 50% 40%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(100% 100% at 50% 40%, #000 30%, transparent 100%);
+}
+.top { background: rgba(9,13,18,.82); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.rail { background: rgba(9,13,18,.6); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.glass, .metrics, .rows, .glance, .scope, .strip, .note-box, .unk, pre.api {
+  background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.metric, .glance .g, .r { background: transparent; }
+.r:hover, .jrow:hover, .job.on > .jrow { background: rgba(18,26,34,.7); }
+.glass { border: 1px solid var(--rule); border-radius: 6px; padding: 1.1rem 1.2rem; }
+/* HUD: the four or five numbers that decide what to do next. */
+.hud { display: grid; gap: .7rem; grid-template-columns: repeat(2, 1fr); margin: 0 0 1.4rem; }
+@media (min-width: 46rem) { .hud { grid-template-columns: repeat(var(--cols, 4), 1fr); } }
+.hud .t { position: relative; overflow: hidden; border: 1px solid var(--rule); border-radius: 6px;
+  padding: .95rem 1.05rem; background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.hud .t::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, var(--rule-2), transparent); }
+.hud .t.money::after { background: linear-gradient(90deg, var(--gold), transparent); }
+.hud .t.ok::after { background: linear-gradient(90deg, var(--green), transparent); }
+.hud .t.wait::after { background: linear-gradient(90deg, var(--warn), transparent); }
+.hud .t.soft::after { background: linear-gradient(90deg, var(--blue), transparent); }
+.hud .k { font: 600 .6rem/1 var(--mono); letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); }
+.hud .v { margin-top: .5rem; font: 700 1.6rem/1 var(--sans); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.hud .v small { font: 500 .7rem/1 var(--mono); color: var(--ink-3); margin-left: .25rem; letter-spacing: 0; }
+.hud .t.money .v { color: var(--gold); }
+.hud .t.ok .v { color: var(--green); }
+.hud .t.wait .v { color: var(--warn); }
+.hud .t.soft .v { color: var(--blue); }
+.hud .s { margin-top: .4rem; font: 500 .7rem/1.4 var(--mono); color: var(--ink-3); }
+/* Kind chips: blue for finding out, gold for making it true. */
+.chip.obs { color: var(--blue); border-color: #1F3C5A; }
+.chip.do  { color: var(--gold); border-color: #4A3410; }
+/* The live canvas: where the work is, from where you stand. */
+.radar-wrap { position: relative; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden;
+  background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); margin: 0 0 1.4rem; }
+.radar-wrap canvas { display: block; width: 100%; height: 15rem; }
+.radar-wrap .cap { position: absolute; left: .9rem; top: .75rem; font: 600 .6rem/1 var(--mono);
+  letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3); display: flex; gap: .6rem; align-items: center; }
+.radar-wrap .cap .beacon { width: .38rem; height: .38rem; }
+.radar-wrap .legend { position: absolute; right: .9rem; bottom: .7rem; display: flex; gap: .9rem;
+  font: 500 .62rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.radar-wrap .legend i { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; margin-right: .35rem; vertical-align: -.02em; }
+.radar-wrap .legend .obs i { background: var(--blue); box-shadow: 0 0 6px var(--blue); }
+.radar-wrap .legend .do i { background: var(--gold); box-shadow: 0 0 6px var(--gold); }
+.radar-wrap .legend .you i { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.radar-wrap .hint { position: absolute; left: .9rem; bottom: .7rem; font: 500 .66rem/1.4 var(--mono); color: var(--ink-3); max-width: 60%; }
+/* Arrival: rows and panels rise into place, staggered. */
+.rv { opacity: 0; transform: translateY(10px); animation: rise .5s cubic-bezier(.2,.7,.2,1) forwards; animation-delay: calc(var(--i, 0) * 45ms); }
+@keyframes rise { to { opacity: 1; transform: none; } }
+.btn.go { box-shadow: 0 0 0 0 rgba(255,182,39,.0); transition: box-shadow .2s, background .14s; }
+.btn.go:hover:not(:disabled) { box-shadow: 0 0 18px rgba(255,182,39,.35); }
+.pill { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .6rem; border-radius: 999px;
+  border: 1px solid var(--rule-2); font: 600 .62rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+.pill .beacon { width: .38rem; height: .38rem; }
+.mode { display: inline-flex; border: 1px solid var(--rule-2); border-radius: 999px; padding: 2px; gap: 2px; }
+.mode button { appearance: none; border: 0; background: none; color: var(--ink-3); border-radius: 999px;
+  padding: .35rem .8rem; font: 600 .72rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.mode button[aria-pressed="true"] { background: var(--gold); color: #120C00; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+  .rv { opacity: 1; transform: none; }
 }
+
+/* --- masthead, rail and page furniture (queue, job, sign-in) ---------------
+   The top bar carries one live reading — how much work is open and what it
+   adds up to — and the rail's counts glow when they are non-zero. Eyebrows
+   are the mono uppercase captions the landing page uses over every panel. */
+.top { height: 3.4rem; gap: 1.1rem; }
+.top .mark { display: flex; align-items: center; gap: .5rem; font-size: 1rem; }
+.top .mark i { width: .5rem; height: .5rem; border-radius: 1px; background: var(--gold);
+  box-shadow: 0 0 10px rgba(255,182,39,.55); transform: rotate(45deg); }
+.top .live { gap: .45rem; color: var(--ink-3); white-space: nowrap; }
+.top .live .n { color: var(--ink); }
+.top .live b { color: var(--gold); font-weight: 600; }
+.top .live .sep { color: var(--rule-2); }
+.top .live .beacon { animation-duration: 1.8s; }
+.top .right .auth { padding: .38rem .7rem; border: 1px solid var(--rule-2); border-radius: 999px;
+  font: 600 .64rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+.top .right .auth:hover { border-color: var(--gold); color: var(--gold); }
+@media (max-width: 46rem) { .top .live { display: none; } .top .health { display: none; } }
+.rail .n:empty { display: none; }
+.rail .n.hot { box-shadow: 0 0 10px rgba(255,182,39,.3); }
+.rail .n.soft { background: #14283B; color: var(--blue); box-shadow: 0 0 10px rgba(95,176,255,.25); }
+.eyebrow { margin: 0 0 .45rem; font: 600 .62rem/1 var(--mono); letter-spacing: .18em;
+  text-transform: uppercase; color: var(--gold); }
+.eyebrow.blue { color: var(--blue); }
+.eyebrow.dim { color: var(--ink-3); }
+.hud .v.flash { animation: flash .9s ease-out; }
+@keyframes flash { 0% { text-shadow: 0 0 18px currentColor; } 100% { text-shadow: 0 0 0 transparent; } }
+.pill.quiet { color: var(--ink-3); border-style: dashed; }
+.pill.ok { color: var(--green); border-color: #1C4530; }
+.pill.warn { color: var(--warn); border-color: #3A2510; }
 `
 
 // shellTop renders the masthead and left rail.
@@ -379,15 +484,21 @@ func shellTop(current, status string) string {
 		}
 		return `<a href="` + href + `"` + cur + `>` + label + `</a>`
 	}
-	beacon := `<span class="beacon"></span>`
+	beacon := `<span class="beacon" id="h-beacon"></span>`
 	if status == "" {
-		beacon = `<span class="beacon off"></span>`
+		beacon = `<span class="beacon off" id="h-beacon"></span>`
 		status = "Not signed in"
 	}
+	// The live pill is filled by whichever page includes it: the board and the
+	// job page both read /v1/board and write the count and the sum here.
 	return `<header class="top">
-  <a class="mark" href="/board">lamdis<b>.</b></a>
+  <a class="mark" href="/board"><i></i><span>lamdis<b>.</b></span></a>
+  <span class="pill live" id="live"><span class="beacon" id="live-beacon"></span>Live` +
+		`<span class="sep">&middot;</span><span class="n" id="live-n">&ndash;</span>&nbsp;open` +
+		`<span class="sep">&middot;</span><b id="live-sum">&ndash;</b>&nbsp;on the board</span>
   <div class="right">
     <span class="health">` + beacon + `<span id="h-text">` + status + `</span></span>
+    <a class="auth" id="h-auth" href="/signin">Sign in</a>
   </div>
 </header>
 <div class="shell">
@@ -398,6 +509,7 @@ func shellTop(current, status string) string {
     <span class="label grp">Operation</span>
     ` + nav("/console", "Earnings", "earnings") + `
     ` + nav("/console#capacity", "Capacity", "capacity") + `
+    ` + nav("/console#sec-buyer", "Buyer", "buyer") + `
     <span class="label grp">About</span>
     ` + nav("/how-it-works", "How this works", "trust") + `
     ` + nav("/docs", "API", "docs") + `

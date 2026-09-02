@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -104,7 +105,16 @@ func (c *Console) Register(mux *http.ServeMux) {
 func (c *Console) handlePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Write([]byte(consolePageHTML))
+	page := consolePageHTML
+	// ?demo=1 renders the cockpit with labelled sample figures so the layout
+	// can be looked at without an account. Only on an exchange with no
+	// identity provider configured — a development box — and never where
+	// real people sign in, because a page of invented money next to a real
+	// sign-in is a page somebody will one day believe.
+	if r.URL.Query().Get("demo") == "1" && os.Getenv("LAMDIS_COGNITO_POOL") == "" {
+		page = strings.Replace(page, "var DEMO_ALLOWED = false;", "var DEMO_ALLOWED = true;", 1)
+	}
+	w.Write([]byte(page))
 }
 
 // handleMe answers every question the console asks, in one call.
@@ -154,9 +164,12 @@ func (c *Console) handleMe(w http.ResponseWriter, r *http.Request) {
 	// What this account may still take on, which is the other half of the
 	// answer to "what can I do next". See assurance.go.
 	var ceiling, exposure int64
+	tier := ""
 	if c.Board != nil {
-		ceiling = ValueCeiling(c.Board.StandingFor(worker.ID))
+		standing := c.Board.StandingFor(worker.ID)
+		ceiling = ValueCeiling(standing)
 		exposure = c.Board.ExposureOf(worker.ID)
+		tier = tierName(standing)
 	}
 	room := ceiling - exposure
 	if room < 0 {
@@ -206,6 +219,7 @@ func (c *Console) handleMe(w http.ResponseWriter, r *http.Request) {
 		"ceiling_minor":    ceiling,
 		"exposure_minor":   exposure,
 		"room_minor":       room,
+		"tier":             tier,
 		"currency":         currency,
 		"payout":           payout,
 		"payout_threshold": c.PayoutThresholdMinor,
@@ -213,6 +227,26 @@ func (c *Console) handleMe(w http.ResponseWriter, r *http.Request) {
 		"history":          history,
 		"bids":             bids,
 	})
+}
+
+// tierName is the word for where an account's ceiling comes from, so the
+// console can say "proven" next to the figure rather than leaving somebody to
+// work out from a dollar amount what the exchange thinks of them. It follows
+// ValueCeiling exactly; a name that disagreed with the number would be worse
+// than no name.
+func tierName(s Standing) string {
+	switch ValueCeiling(s) {
+	case ShakenCeilingMinor:
+		return "shaken"
+	case VettedCeilingMinor:
+		return "vetted"
+	case EstablishedCeilingMinor:
+		return "established"
+	case ProvenCeilingMinor:
+		return "proven"
+	default:
+		return "new"
+	}
 }
 
 // joinWords renders a list the way a person would say it.

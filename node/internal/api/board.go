@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -172,6 +173,13 @@ type Listing struct {
 	LatE7   int64 `json:"lat_e7,omitempty"`
 	LonE7   int64 `json:"lon_e7,omitempty"`
 	RadiusM int64 `json:"radius_m,omitempty"`
+
+	// AreaLat and AreaLon are the public, coarse point: the position above
+	// rounded to two decimal places, about a kilometre. Set only by Public(),
+	// never by a caller, and precise enough to put a dot on the board's map
+	// without being precise enough to find a front door. See Public.
+	AreaLat float64 `json:"area_lat,omitempty"`
+	AreaLon float64 `json:"area_lon,omitempty"`
 
 	// Pricing is "fixed" or "bids". Empty means fixed.
 	Pricing string `json:"pricing,omitempty"`
@@ -419,13 +427,20 @@ func (l *Listing) Public() *Listing {
 		PostedByAgent: l.PostedByAgent, Practice: l.Practice,
 		SiteID: l.SiteID,
 		Report: l.Report,
-		// Coordinates are deliberately absent.
+		// Exact coordinates are deliberately absent.
 		//
 		// Removing the street address from the board is undone by publishing
 		// the same property to seven decimal places, which is roughly a
 		// centimetre. Distance is computed server-side and returned as
-		// DistanceMiles; nothing a caller does needs the point itself.
+		// DistanceMiles. What the board does need is a dot on a map, and a
+		// dot rounded to two decimal places (about a kilometre, the same
+		// grain as Area) says which part of town without saying which house.
+		// That is AreaLat and AreaLon, set below.
 		ExpenseCapMinor: l.ExpenseCapMinor,
+	}
+	if HasPosition(l.LatE7, l.LonE7) {
+		p.AreaLat = coarseDeg(l.LatE7)
+		p.AreaLon = coarseDeg(l.LonE7)
 	}
 	// Instructions and Brief are published so a job can be priced, but only
 	// after being checked. Post refuses entry details in them; this is the
@@ -736,6 +751,10 @@ func (b *Board) ForOperator(worker string, cap Capacity) []*Listing {
 }
 
 func round1(f float64) float64 { return float64(int64(f*10+.5)) / 10 }
+
+// coarseDeg rounds a stored position to two decimal places of a degree —
+// roughly a kilometre — which is the only precision the open board publishes.
+func coarseDeg(e7 int64) float64 { return math.Round(Deg(e7)*100) / 100 }
 
 // Get returns a listing whether or not it is still open.
 func (b *Board) Get(job string) (*Listing, bool) {

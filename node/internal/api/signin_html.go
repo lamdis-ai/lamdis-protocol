@@ -7,43 +7,57 @@ const signInPageHTML = `<!doctype html>
 <title>Sign in — Lamdis</title>
 <style>` + themeCSS + `
 body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-main { width: 100%; max-width: 23rem; padding: 2rem 1.5rem; }
-.mark { display: inline-block; margin-bottom: 1.6rem; font-size: 1.05rem; }
-h1 { font-size: 1.5rem; margin-bottom: .4rem; }
+main { width: 100%; max-width: 24rem; padding: 2rem 1.25rem; }
+.mark { display: flex; align-items: center; justify-content: center; gap: .5rem;
+  margin-bottom: 1.3rem; font-size: 1.15rem; }
+.mark i { width: .55rem; height: .55rem; border-radius: 1px; background: var(--gold);
+  box-shadow: 0 0 12px rgba(255,182,39,.6); transform: rotate(45deg); }
+.card { padding: 1.6rem 1.5rem 1.4rem; border-color: var(--rule-2);
+  box-shadow: 0 30px 80px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.04); }
+.card .eyebrow { margin-bottom: .6rem; }
+h1 { font-size: 1.45rem; margin-bottom: .3rem; }
+.lead { margin-bottom: 1.1rem; font-size: .9rem; }
 label { display: block; margin-bottom: .4rem; }
 input#code {
   font: 700 1.35rem/1 var(--mono); letter-spacing: .28em;
   text-align: center; padding: .85rem 1rem;
 }
-button.go { width: 100%; height: 2.8rem; margin-top: .8rem; }
-.muted { margin-top: 1.2rem; text-align: center; font-size: .84rem; color: var(--ink-3); }
+button.go { width: 100%; height: 2.8rem; margin-top: .9rem; }
+.muted { margin: 1rem 0 0; text-align: center; font-size: .82rem; color: var(--ink-3); }
 .back { display: block; width: 100%; margin-top: .6rem; padding: .5rem;
   background: none; border: 0; color: var(--ink-3); font-size: .84rem; cursor: pointer; }
 .back:hover { color: var(--ink); }
+.foot { margin: 1.1rem 0 0; text-align: center; font: 600 .62rem/1.5 var(--mono);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
 </style>
 <main>
-  <a class="mark" href="/board">lamdis<b style="color:var(--gold)">.</b></a>
-  <div id="step1">
-    <h1>Sign in</h1>
-    <p class="lead">We will email you a code. No password to choose or forget.</p>
-    <label class="label" for="email">Email address</label>
-    <input id="email" type="email" autocomplete="email" inputmode="email"
-           autocapitalize="off" autocorrect="off" placeholder="you@example.com">
-    <button class="btn go" id="send">Send me a code</button>
-    <div class="err" id="err1"></div>
-    <p class="muted">Signing in creates an account if you do not have one.</p>
-  </div>
+  <a class="mark" href="/board"><i></i><span>lamdis<b style="color:var(--gold)">.</b></span></a>
+  <div class="glass card">
+    <div id="step1">
+      <p class="eyebrow">Operator sign-in</p>
+      <h1>Sign in</h1>
+      <p class="lead">We will email you a code.</p>
+      <label class="label" for="email">Email address</label>
+      <input id="email" type="email" autocomplete="email" inputmode="email"
+             autocapitalize="off" autocorrect="off" placeholder="you@example.com">
+      <button class="btn go" id="send">Send me a code</button>
+      <div class="err" id="err1"></div>
+      <p class="muted">Signing in creates an account if you do not have one.</p>
+    </div>
 
-  <div id="step2" hidden>
-    <h1>Check your email</h1>
-    <p class="lead">We sent a code to <b id="sentto"></b>. It is good for fifteen minutes.</p>
-    <label class="label" for="code">Code from the email</label>
-    <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code"
-           maxlength="8" placeholder="00000000">
-    <button class="btn go" id="verify" disabled>Sign in</button>
-    <div class="err" id="err2"></div>
-    <button class="back" id="back">Use a different address</button>
+    <div id="step2" hidden>
+      <p class="eyebrow ok" style="color:var(--green)">Code sent</p>
+      <h1>Check your email</h1>
+      <p class="lead">We sent a code to <b id="sentto"></b>. It is good for fifteen minutes.</p>
+      <label class="label" for="code">Code from the email</label>
+      <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+             maxlength="8" placeholder="00000000">
+      <button class="btn go" id="verify" disabled>Sign in</button>
+      <div class="err" id="err2"></div>
+      <button class="back" id="back">Use a different address</button>
+    </div>
   </div>
+  <p class="foot">No password to choose or forget.</p>
 </main>
 <script>
 "use strict";
