@@ -303,6 +303,14 @@ func trimSlash(s string) string {
 // them. Absent is not an error: an account without a reachable address simply
 // does not get told.
 func (s *Server) emailFor(person string) (string, bool) {
+	// A job posted without an account: the only address is the one the
+	// payment rail reported for the card.
+	if isGuest(person) {
+		if l, ok := s.Board.Get(guestJob(person)); ok && l.Funding != nil && l.Funding.Email != "" {
+			return l.Funding.Email, true
+		}
+		return "", false
+	}
 	if s.Workers == nil {
 		return "", false
 	}

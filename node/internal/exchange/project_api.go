@@ -173,6 +173,10 @@ func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request, key *ac
 			released, l.Currency); err != nil {
 			// The listing is already withdrawn; the money follows on the sweep.
 			released = 0
+		} else {
+			// Nothing was paid out, so a card behind this job is released
+			// in full and never charged.
+			s.settleCard(r.Context(), l, released)
 		}
 	}
 	writeJSONResponse(w, map[string]any{

@@ -101,6 +101,11 @@ type Server struct {
 	// reference and somewhere to pay. Nil means this exchange cannot take
 	// money, which is said plainly rather than shown as a dead link.
 	Deposit func(ctx context.Context, person string, amountMinor int64, currency string) (ref, payAt string, err error)
+	// Authorize opens a hosted checkout that authorises a card for a job's
+	// ceiling without capturing it; Authorized asks the rail whether one
+	// completed. Both nil when there is no rail, which the pay page says.
+	Authorize  func(ctx context.Context, job string, amountMinor int64, currency, successURL, cancelURL string) (session, payAt string, err error)
+	Authorized func(ctx context.Context, session string) (ok bool, intent string, amountMinor int64, email string, err error)
 	// Payout sends accumulated earnings out. Nil means nothing can leave.
 	Payout func(ctx context.Context, person string, amountMinor int64, currency string) (ref string, err error)
 	// Rail is the payout side of the payment provider: opening a payee
@@ -137,6 +142,9 @@ type Server struct {
 	// buyers remembers who funded each job, because a refund has to go back to
 	// the person it came from and the listing does not carry that.
 	buyers map[string]string
+	// pending holds jobs posted without an account, until their card is
+	// authorised. Never on the board; dropped after PendingTTL.
+	pending map[string]*pendingJob
 	// started is when this process came up, for the status page.
 	started time.Time
 
@@ -266,10 +274,12 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 			return srv.payOut(ctx, person, amountMinor, currency)
 		}
 		base := strings.TrimSuffix(baseURL, "/")
+		srv.Authorize = rail.AuthorizeCheckout
+		srv.Authorized = rail.CheckoutAuthorization
 		srv.Deposit = func(ctx context.Context, person string, amountMinor int64, currency string) (string, string, error) {
 			return rail.Checkout(ctx, person, amountMinor, currency,
-				base+"/console?topup=done&session={CHECKOUT_SESSION_ID}",
-				base+"/console?topup=cancelled")
+				base+"/console/funds?topup=done&session={CHECKOUT_SESSION_ID}",
+				base+"/console/funds?topup=cancelled")
 		}
 		log.Printf("payments   stripe (%s)", modeOf(rail))
 	} else {
@@ -455,6 +465,8 @@ func (s *Server) Handler() *http.ServeMux {
 		s.registerReferences(mux)
 		// The front door: MCP over HTTP, no binary to build.
 		s.registerMCP(mux)
+		// The gateless way in: pages a poster with no account lands on.
+		s.registerGuest(mux)
 		// Agentic checkout, when it is configured.
 		if s.ACP != nil {
 			s.registerACP(mux)
@@ -674,6 +686,15 @@ func (s *Server) ownedBy(w http.ResponseWriter, job, person string) (*api.Listin
 
 func (s *Server) handleJobStatus(w http.ResponseWriter, r *http.Request, key *account.Key, person string, _ []byte) {
 	job := r.PathValue("job")
+	if p, ok := s.pendingFor(job); ok && person == guestOwner(job) {
+		writeJSONResponse(w, map[string]any{
+			"job": job, "kind": p.L.Kind, "predicate": p.L.Title,
+			"status": "awaiting_payment", "pay_at": p.PayAt,
+			"amount_minor": p.Amount, "currency": p.L.Currency,
+			"expires_at": p.Created.Add(PendingTTL).Format(time.RFC3339),
+		})
+		return
+	}
 	l, ok := s.ownedBy(w, job, person)
 	if !ok {
 		return
@@ -749,13 +770,21 @@ func (s *Server) postJobAsAnyone(node *api.Server) http.HandlerFunc {
 			return
 		}
 		bearer := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !bearer && r.Header.Get("X-Lamdis-Principal") == "" {
-			signed(w, r)
-			return
-		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "could not read the request")
+			return
+		}
+		if !bearer && r.Header.Get("X-Lamdis-Principal") == "" {
+			if r.Header.Get("X-Lamdis-Signature") == "" {
+				// Nobody at all. The gateless path: the job is created, a
+				// pay link comes back, and the card stands behind it. What
+				// may be posted does not change; only who may post it.
+				s.handleCreateTask(w, r, guestSentinel, body)
+				return
+			}
+			r.Body = io.NopCloser(strings.NewReader(string(body)))
+			signed(w, r)
 			return
 		}
 		worker, err := s.Workers.Authenticate(r, body, s.now())
@@ -1391,6 +1420,23 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 	}
 	job := fmt.Sprintf("%s-%d", kind, s.now().UnixNano())
 	ttl := time.Duration(in.TTLSeconds) * time.Second
+	// A poster with no account: the job belongs to a principal only its
+	// token can act as, and its escrow arrives by card rather than balance.
+	guest := principal == guestSentinel
+	if guest {
+		principal = guestOwner(job)
+		postedByAgent = r.Header.Get("X-Lamdis-Posted-By") == "agent"
+		if in.Pricing == api.PriceBids {
+			writeError(w, http.StatusBadRequest,
+				"open bidding needs an account for now: there is no price to authorise a card for until somebody bids")
+			return
+		}
+		if in.ProjectID != "" || in.DirectTo != "" || in.SiteID != "" {
+			writeError(w, http.StatusBadRequest,
+				"projects, named suppliers and saved sites belong to an account; post a plain job or sign in")
+			return
+		}
+	}
 
 	listing := &api.Listing{
 		Job: job, Kind: kind,
@@ -1559,6 +1605,34 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 		}
 	}
 
+	// A tier that asks for a location check needs somewhere to check against.
+	//
+	// V2 is defined as tying evidence to a place. A V2 job with an address and
+	// no coordinates asks for a standard it has given us no way to apply, and
+	// the submission would pass on a photograph taken anywhere on earth.
+	// Checked before any money moves and before the listing exists: it used to
+	// run after both, so a refused job left an escrow and a listing behind.
+	if listing.Where != "" && listing.RadiusM <= 0 &&
+		(listing.Tier == "V2" || listing.Tier == "V3") {
+		writeError(w, http.StatusBadRequest,
+			"a "+listing.Tier+" job with an address needs lat, lon and radius_m, "+
+				"or there is nothing to check the photographs against")
+		return
+	}
+	if guest {
+		out, err := s.stagePending(r.Context(), listing)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		if api.AddressInTitle(listing.Title, listing.Where) {
+			out["warning"] = "the predicate repeats the street address, and the " +
+				"predicate is shown on the open board; put the address in `where`"
+		}
+		writeJSONResponse(w, out)
+		return
+	}
+
 	// Hold the money first. If this fails the listing never exists, which is
 	// the right order: a worker who completes unfunded work has been defrauded
 	// by the exchange, not by a counterparty.
@@ -1615,18 +1689,6 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 	// address is a public fact and belongs in the title. The caller knows
 	// which case this is and we do not.
 
-	// A tier that asks for a location check needs somewhere to check against.
-	//
-	// V2 is defined as tying evidence to a place. A V2 job with an address and
-	// no coordinates asks for a standard it has given us no way to apply, and
-	// the submission would pass on a photograph taken anywhere on earth.
-	if listing.Where != "" && listing.RadiusM <= 0 &&
-		(listing.Tier == "V2" || listing.Tier == "V3") {
-		writeError(w, http.StatusBadRequest,
-			"a "+listing.Tier+" job with an address needs lat, lon and radius_m, "+
-				"or there is nothing to check the photographs against")
-		return
-	}
 	if api.AddressInTitle(listing.Title, listing.Where) {
 		out["warning"] = "the predicate repeats the street address, and the " +
 			"predicate is shown on the open board. If this address is not " +

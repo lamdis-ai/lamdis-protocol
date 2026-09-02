@@ -23,10 +23,12 @@ import (
 //	claude mcp add --transport http lamdis https://exchange.lamdis.ai/mcp \
 //	  --header "Authorization: Bearer lam_..."
 //
-// One line, no build, no binary. What remains is the key, which cannot go —
-// the tools spend real money out of a real balance, and an endpoint anybody
-// could call anonymously would be an endpoint anybody could spend somebody
-// else's money through.
+// One line, no build, no binary. The key went too, for a first job: with no
+// credential the caller gets the guest tools, and a job they post comes back
+// with a pay link and a token instead of drawing on a balance (guest.go). The
+// tools that spend a balance still need the key that owns it, because an
+// endpoint anybody could call anonymously would otherwise be an endpoint
+// anybody could spend somebody else's money through.
 //
 // The security property that makes this safe is worth stating plainly, because
 // getting it wrong would be catastrophic and the wrong version looks almost
@@ -63,6 +65,12 @@ func (s *Server) mcpServerFor(r *http.Request) *sdk.Server {
 		Name: "lamdis-exchange", Version: "1",
 	}, nil)
 	key := agentKeyFrom(r)
+	if key == "" {
+		// Nobody at all. The gateless surface: reads, the feasibility check,
+		// and posting a job that comes back with a pay link and a token.
+		nodemcp.RegisterGuest(srv, nodemcp.NewExchange(s.BaseURL, ""))
+		return srv
+	}
 
 	buyer := false
 	if s.agents != nil {
@@ -105,19 +113,9 @@ func (s *Server) requireAgentKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := agentKeyFrom(r)
 		if key == "" {
-			w.Header().Set("Content-Type", "application/json")
-			// WWW-Authenticate so a client that knows how to prompt for a
-			// credential does, instead of showing a raw failure.
-			w.Header().Set("WWW-Authenticate", `Bearer realm="lamdis-exchange"`)
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]any{
-				"error": "this endpoint needs an agent key, because its tools " +
-					"spend real money out of a real balance",
-				"how": "Sign in at " + s.BaseURL + "/console, issue an agent key " +
-					"under Integration, and pass it as a bearer token.",
-				"example": `claude mcp add --transport http lamdis ` +
-					s.BaseURL + mcpPath + ` --header "Authorization: Bearer lam_..."`,
-			})
+			// No credential is not an error any more: the caller gets the
+			// guest tools, and a job they post comes back with a pay link.
+			next.ServeHTTP(w, r)
 			return
 		}
 		// Checked here so a bad credential fails once, plainly, rather than as

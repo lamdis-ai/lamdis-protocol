@@ -477,6 +477,8 @@ body::before {
 // highlighted without every template hand-writing the same nav and getting the
 // aria-current wrong.
 func shellTop(current, status string) string {
+	railCurrent = current
+	defer func() { railCurrent = "" }()
 	nav := func(href, label, id string) string {
 		cur := ""
 		if id == current {
@@ -498,6 +500,7 @@ func shellTop(current, status string) string {
 		`<span class="sep">&middot;</span><b id="live-sum">&ndash;</b>&nbsp;on the board</span>
   <div class="right">
     <span class="health">` + beacon + `<span id="h-text">` + status + `</span></span>
+    <a class="auth" href="/post" title="No account needed">Post a job</a>
     <a class="auth" id="h-auth" href="/signin">Sign in</a>
   </div>
 </header>
@@ -505,17 +508,51 @@ func shellTop(current, status string) string {
   <nav class="rail">
     <span class="label grp">Work</span>
     ` + nav("/board", `Queue <span class="n hot" id="n-queue"></span>`, "queue") + `
-    ` + nav("/board#holding", `In flight <span class="n" id="n-flight"></span>`, "flight") + `
-    <span class="label grp">Operation</span>
-    ` + nav("/console", "Earnings", "earnings") + `
-    ` + nav("/console#capacity", "Capacity", "capacity") + `
-    ` + nav("/console#sec-buyer", "Buyer", "buyer") + `
+    ` + consoleRail() + `
     <span class="label grp">About</span>
     ` + nav("/how-it-works", "How this works", "trust") + `
     ` + nav("/docs", "API", "docs") + `
   </nav>
   <main class="main">`
 }
+
+// consoleRail lists every console page as a real link, grouped by the side
+// of the exchange it belongs to. Built from consolePageSpecs so the rail and
+// the routes cannot drift: a page exists exactly when it is linked here.
+func consoleRail() string {
+	cur := func(p consolePageSpec) string {
+		if p.railID() == railCurrent {
+			return ` aria-current="page"`
+		}
+		return ""
+	}
+	out := ""
+	for _, side := range []string{"operator", "buyer"} {
+		label := "Operator"
+		if side == "buyer" {
+			label = "Buyer"
+		}
+		out += `<span class="label grp" id="rail-` + side + `">` + label + `</span>` + "\n    "
+		for _, p := range consolePageSpecs {
+			if p.Side != side {
+				continue
+			}
+			count := ""
+			if p.ID == "work" {
+				// Filled by the board, which knows what is held.
+				count = ` <span class="n" id="n-flight"></span>`
+			}
+			out += `<a href="` + p.path() + `"` + cur(p) + `>` + p.Nav + count + `</a>` + "\n    "
+		}
+	}
+	return out
+}
+
+// railCurrent is the page being rendered while shellTop runs. shellTop is
+// called at package init from constants, one page at a time, so a package
+// variable set for the duration of the call is the simplest way to hand the
+// current id down to consoleRail without changing every caller.
+var railCurrent string
 
 const shellBottom = `  </main>
 </div>`

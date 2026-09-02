@@ -67,6 +67,13 @@ func (s *Server) withBuyer(
 			next(w, r, key, person.ID, body)
 			return
 		}
+		// A job token: the poster of a job that has no account behind it.
+		// It authenticates as the owner of the job in the path and nothing
+		// else, which is all a token for one job should be able to do.
+		if person, ok := s.guestFromToken(r, r.PathValue("job")); ok {
+			next(w, r, nil, person, body)
+			return
+		}
 		if worker, err := s.Workers.Authenticate(r, body, s.now()); err == nil && worker.Verified {
 			next(w, r, nil, worker.ID, body)
 			return

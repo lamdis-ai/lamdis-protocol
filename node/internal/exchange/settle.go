@@ -229,15 +229,26 @@ func (s *Server) releaseIfDone(ctx context.Context, l *api.Listing) error {
 		return nil
 	}
 	held, err := s.Ledger.Held(ctx, l.Job, l.Currency)
-	if err != nil || held <= 0 {
+	if err != nil {
 		return err
+	}
+	if held <= 0 {
+		// Everything escrowed was paid out. A card behind it is charged in
+		// full now; a balance behind it has nothing to return.
+		s.settleCard(ctx, l, 0)
+		return nil
 	}
 	buyer, ok := s.buyerOf(l.Job)
 	if !ok {
 		return fmt.Errorf("settle: no buyer recorded for %s", l.Job)
 	}
-	_, err = s.Ledger.Release(ctx, "release:"+l.Job, l.Job, buyer, held, l.Currency)
-	return err
+	if _, err = s.Ledger.Release(ctx, "release:"+l.Job, l.Job, buyer, held, l.Currency); err != nil {
+		return err
+	}
+	// A card-funded job: the released remainder is not real money, and the
+	// card is charged now for what the job actually paid out.
+	s.settleCard(ctx, l, held)
+	return nil
 }
 
 // buyerOf recalls who funded a job, which is who a refund belongs to.
@@ -253,6 +264,8 @@ func (s *Server) buyerOf(job string) (string, bool) {
 // Without it an expired job holds its buyer's money forever: nothing else in
 // the system ever looks at a listing again once it stops being claimable.
 func (s *Server) Sweep(ctx context.Context) (released int, err error) {
+	// Jobs posted without an account whose card never came.
+	s.sweepPending()
 	for _, l := range s.Board.All() {
 		if !l.Finished(s.now()) {
 			continue

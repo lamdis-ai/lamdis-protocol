@@ -115,6 +115,23 @@ func (h *StripeWebhook) handle(w http.ResponseWriter, r *http.Request) {
 func (h *StripeWebhook) apply(r *http.Request, eventID, kind string, obj json.RawMessage) error {
 	switch kind {
 	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
+		// A session opened for a job rather than a balance carries the job
+		// in its metadata: that is an authorisation to list, not a deposit.
+		var card struct {
+			ID            string `json:"id"`
+			PaymentIntent string `json:"payment_intent"`
+			AmountTotal   int64  `json:"amount_total"`
+			Metadata      struct {
+				Job string `json:"lamdis_job"`
+			} `json:"metadata"`
+			CustomerDetails struct {
+				Email string `json:"email"`
+			} `json:"customer_details"`
+		}
+		if err := json.Unmarshal(obj, &card); err == nil && card.Metadata.Job != "" {
+			return h.Server.FundFromCard(r.Context(), card.Metadata.Job, card.ID,
+				card.PaymentIntent, card.AmountTotal, card.CustomerDetails.Email)
+		}
 		return h.creditCheckout(r, eventID, obj)
 	case "checkout.session.async_payment_failed":
 		// Nothing to undo: nothing was credited until it succeeded. Logged so

@@ -51,7 +51,16 @@ func (x *Exchange) call(ctx context.Context, method, path string, in any) (map[s
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Lamdis-Key", x.Key)
+	if x.Key != "" {
+		req.Header.Set("X-Lamdis-Key", x.Key)
+	}
+	// Software wrote this, whoever it acts for. Workers are told.
+	req.Header.Set("X-Lamdis-Posted-By", "agent")
+	// A job token stands in for a key on that one job, for an agent that
+	// connected without one.
+	if tok, _ := ctx.Value(tokenKey{}).(string); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
 	resp, err := x.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -89,7 +98,11 @@ func RegisterExchange(s *sdk.Server, x *Exchange) {
 			"world, rather than what a website says about it. Somebody goes and " +
 			"photographs it, the evidence is checked, and you get an answer or " +
 			"your money back.\n\n" +
-			"Money leaves your person's balance when you post this. Call " +
+			"Money leaves your person's balance when you post this. If you connected " +
+			"without a key, nothing leaves anywhere: the reply carries pay_at and " +
+			"token. Send the person the pay link; the job goes live when their card " +
+			"is authorised, and it is charged only for what is proven done. Keep " +
+			"the token — it is how you follow the job. Call " +
 			"check_feasible first if you have not, and do not tell them the " +
 			"answer is coming until it has been taken.\n\n" +
 			"Whoever goes is paid for honest evidence whichever way it turns " +
@@ -160,7 +173,11 @@ func RegisterExchange(s *sdk.Server, x *Exchange) {
 			"parcel collected and delivered, a filter swapped, a slab poured — by " +
 			"whoever can do it: a person, a crew, a contractor, a drone, a " +
 			"machine. Comes back with proof it happened.\n\n" +
-			"Money leaves your person's balance when you post this. Do not post " +
+			"Money leaves your person's balance when you post this. If you connected " +
+			"without a key, nothing leaves anywhere: the reply carries pay_at and " +
+			"token. Send the person the pay link; the job goes live when their card " +
+			"is authorised, and it is charged only for what is proven done. Keep " +
+			"the token — it is how you follow the job. Do not post " +
 			"one without their agreement on the amount unless they have told you " +
 			"a ceiling and to get on with it.\n\n" +
 			"Call check_feasible first if you have not already. Do not describe " +
@@ -191,12 +208,14 @@ func RegisterExchange(s *sdk.Server, x *Exchange) {
 		})
 
 	type jobArgs struct {
-		Job string `json:"job" jsonschema:"the job id returned when it was posted"`
+		Job   string `json:"job" jsonschema:"the job id returned when it was posted"`
+		Token string `json:"token,omitempty" jsonschema:"the token returned when the job was posted without an account; not needed when connected with a key"`
 	}
 	sdk.AddTool(s, &sdk.Tool{Name: "job_status",
 		Description: "Where a job has got to: whether anybody has taken it, what they " +
 			"submitted, whether it passed checking, and what was paid."},
 		func(ctx context.Context, req *sdk.CallToolRequest, a jobArgs) (*sdk.CallToolResult, any, error) {
+			ctx = withToken(ctx, a.Token)
 			out, err := x.call(ctx, "GET", "/v1/jobs/"+a.Job, nil)
 			return jobResult(out, err)
 		})
@@ -206,6 +225,7 @@ func RegisterExchange(s *sdk.Server, x *Exchange) {
 			"what evidence arrived, what was concluded and what moved, and can be verified " +
 			"by anyone without trusting the exchange."},
 		func(ctx context.Context, req *sdk.CallToolRequest, a jobArgs) (*sdk.CallToolResult, any, error) {
+			ctx = withToken(ctx, a.Token)
 			out, err := x.call(ctx, "GET", "/v1/jobs/"+a.Job+"/receipt", nil)
 			return jobResult(out, err)
 		})
@@ -217,6 +237,7 @@ func RegisterExchange(s *sdk.Server, x *Exchange) {
 			"enough and you want to look at what was bought, or show it to the person " +
 			"you are acting for. Each file comes with a url you can fetch."},
 		func(ctx context.Context, req *sdk.CallToolRequest, a jobArgs) (*sdk.CallToolResult, any, error) {
+			ctx = withToken(ctx, a.Token)
 			out, err := x.call(ctx, "GET", "/v1/jobs/"+a.Job+"/evidence", nil)
 			return jobResult(out, err)
 		})
@@ -403,6 +424,7 @@ func RegisterExchange(s *sdk.Server, x *Exchange) {
 			"could do it, and what they said about how. Show these to your human rather " +
 			"than picking on price alone."},
 		func(ctx context.Context, req *sdk.CallToolRequest, a jobArgs) (*sdk.CallToolResult, any, error) {
+			ctx = withToken(ctx, a.Token)
 			out, err := x.call(ctx, "GET", "/v1/jobs/"+a.Job+"/bids", nil)
 			return jobResult(out, err)
 		})
@@ -534,4 +556,51 @@ func jobResult(out map[string]any, err error) (*sdk.CallToolResult, any, error) 
 	return &sdk.CallToolResult{
 		Content: []sdk.Content{&sdk.TextContent{Text: string(b)}},
 	}, out, nil
+}
+
+// tokenKey carries a job token through a tool call to the request it makes.
+type tokenKey struct{}
+
+func withToken(ctx context.Context, tok string) context.Context {
+	if tok == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, tokenKey{}, tok)
+}
+
+// GuestTools is what an agent gets with no credential at all.
+//
+// Reads, the feasibility check, and the two ways of posting a job — which come
+// back with a pay link and a token instead of drawing on a balance — plus the
+// tools that follow a job by that token. Everything that presumes an account
+// (projects, vendors, sites, balances, quotes over a reservation) is left off
+// rather than left to fail.
+var GuestTools = []string{
+	"check_feasible", "observe_world", "do_in_world", "find_out",
+	"job_status", "job_receipt", "job_evidence", "list_bids",
+}
+
+// RegisterGuest registers the buyer tools an anonymous caller may use.
+func RegisterGuest(s *sdk.Server, x *Exchange) {
+	RegisterExchange(s, x)
+	keep := map[string]bool{}
+	for _, n := range GuestTools {
+		keep[n] = true
+	}
+	var drop []string
+	for _, n := range ExchangeToolNames {
+		if !keep[n] {
+			drop = append(drop, n)
+		}
+	}
+	s.RemoveTools(drop...)
+}
+
+// ExchangeToolNames lists every buyer tool RegisterExchange adds, in order.
+var ExchangeToolNames = []string{
+	"observe_world", "do_in_world", "job_status", "job_receipt", "job_evidence",
+	"check_feasible", "open_project", "project_status", "cancel_job", "sweep_sites",
+	"list_vendors", "list_sites", "request_quotes", "list_bids", "accept_bid",
+	"list_project_bids", "accept_project_bid", "read_stage_plan", "decide_stage_plan",
+	"find_out", "exchange_balance",
 }

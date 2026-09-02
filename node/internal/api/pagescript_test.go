@@ -1,11 +1,54 @@
 package api
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
 )
+
+// allPages is every page the exchange serves, including each console route:
+// the console is several pages under one shell, each with its own script.
+func allPages() map[string]string {
+	pages := map[string]string{
+		"reviewPageHTML": reviewPageHTML,
+		"boardPageHTML":  boardPageHTML,
+		"workPageHTML":   workPageHTML,
+		"signInPageHTML": signInPageHTML,
+		"jobPage":        jobPage(&Listing{Job: "j-1", Title: "a job"}),
+	}
+	for id, page := range consolePages {
+		pages["console/"+id] = page
+	}
+	return pages
+}
+
+// The call audit below is coarse by design; it cannot see a stray brace or a
+// string that never closes. node can. Every page's script is handed to
+// node --check, so a syntax error is caught here rather than by the first
+// person to open the page. Skipped where node is not installed.
+func TestPageScriptsParse(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not installed; syntax is not checked")
+	}
+	scriptRe := regexp.MustCompile(`(?s)<script>(.*?)</script>`)
+	dir := t.TempDir()
+	for name, page := range allPages() {
+		for i, m := range scriptRe.FindAllStringSubmatch(page, -1) {
+			f := filepath.Join(dir, strings.ReplaceAll(name, "/", "_")+"-"+string(rune('a'+i))+".js")
+			if err := os.WriteFile(f, []byte(m[1]), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if out, err := exec.Command(node, "--check", f).CombinedOutput(); err != nil {
+				t.Errorf("%s: script %d does not parse:\n%s", name, i, out)
+			}
+		}
+	}
+}
 
 // A page that calls a function nobody defined is a broken page, and the
 // browser only says so at the moment somebody clicks.
@@ -23,14 +66,7 @@ import (
 // and fail on the difference. It is a coarse check and it would have caught
 // both bugs on the commit that introduced them.
 func TestPagesDefineEverythingTheyCall(t *testing.T) {
-	pages := map[string]string{
-		"reviewPageHTML":  reviewPageHTML,
-		"boardPageHTML":   boardPageHTML,
-		"consolePageHTML": consolePageHTML,
-		"workPageHTML":    workPageHTML,
-		"signInPageHTML":  signInPageHTML,
-		"jobPage":         jobPage(&Listing{Job: "j-1", Title: "a job"}),
-	}
+	pages := allPages()
 	for name, page := range pages {
 		t.Run(name, func(t *testing.T) {
 			missing := undefinedCalls(page)

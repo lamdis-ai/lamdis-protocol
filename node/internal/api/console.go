@@ -97,16 +97,40 @@ func (c *Console) now() time.Time {
 	return time.Now()
 }
 
+// Register serves the console as a set of pages under one shell. Each route
+// is one thing — earnings, capacity, spending — rather than one page with
+// anchors; see console_html.go for why.
 func (c *Console) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /console", c.handlePage)
+	mux.HandleFunc("GET /console/{page...}", c.handlePage)
 	mux.HandleFunc("GET /v1/me", c.handleMe)
 }
 
 func (c *Console) handlePage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("page")
+	if id == "" {
+		// The payment provider used to send people back to the one page with a
+		// query on it. Those return URLs now name the page the return is
+		// about, but a link minted before the change still lands here.
+		q := r.URL.Query()
+		if q.Has("payout") {
+			http.Redirect(w, r, "/console/earnings?"+r.URL.RawQuery, http.StatusSeeOther)
+			return
+		}
+		if q.Has("topup") {
+			http.Redirect(w, r, "/console/funds?"+r.URL.RawQuery, http.StatusSeeOther)
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	page := consolePageHTML
-	// ?demo=1 renders the cockpit with labelled sample figures so the layout
+	page, ok := consolePages[id]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(consoleNotFoundHTML))
+		return
+	}
+	// ?demo=1 renders the page with labelled sample figures so the layout
 	// can be looked at without an account. Only on an exchange with no
 	// identity provider configured — a development box — and never where
 	// real people sign in, because a page of invented money next to a real

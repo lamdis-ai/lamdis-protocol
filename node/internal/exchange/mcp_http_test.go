@@ -39,38 +39,46 @@ func TestEachCallerGetsTheirOwnCredential(t *testing.T) {
 	}
 }
 
-// An unauthenticated caller is refused, and told what to do about it.
-func TestTheEndpointRefusesWithoutAKey(t *testing.T) {
+// An unauthenticated caller is not refused any more: they reach the guest
+// tools, which can read, check feasibility, and post a job that comes back
+// with a pay link. The gate that used to stand here lost everybody who was
+// only going to spend ten minutes finding out whether this was interesting.
+func TestTheEndpointWelcomesWithoutAKey(t *testing.T) {
 	s := &Server{BaseURL: "https://exchange.example"}
+	reached := false
 	h := s.requireAgentKey(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("an unauthenticated request reached the tools")
+		reached = true
 	}))
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("POST", "/mcp", nil))
+	if !reached || w.Code == http.StatusUnauthorized {
+		t.Fatalf("an unauthenticated request was refused (%d); it should reach the guest tools", w.Code)
+	}
 
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("status %d, want 401", w.Code)
-	}
-	if !strings.Contains(w.Header().Get("WWW-Authenticate"), "Bearer") {
-		t.Error("no WWW-Authenticate, so a client cannot prompt for a credential")
-	}
-	body := w.Body.String()
-	// A refusal with no next step wastes the one moment somebody was willing
-	// to spend finding out whether this was worth it.
-	for _, want := range []string{"agent key", "/console", "claude mcp add"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the refusal does not mention %q: %s", want, body)
-		}
+	// And what it gets is the guest surface, not the account surface: no
+	// balance, no projects, no vendors — those presume somebody to bill.
+	srv := s.mcpServerFor(httptest.NewRequest("POST", "/mcp", nil))
+	if srv == nil {
+		t.Fatal("no server for a guest")
 	}
 }
 
-// The documented one-liner has to be the one that actually works.
-func TestTheAdvertisedCommandMatchesTheRoute(t *testing.T) {
+// A bad key is still refused, plainly, with the next step.
+func TestABadKeyIsRefusedWithTheNextStep(t *testing.T) {
 	s := &Server{BaseURL: "https://exchange.lamdis.ai"}
-	h := s.requireAgentKey(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	h := s.requireAgentKey(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("a bad credential reached the tools")
+	}))
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("POST", mcpPath, nil))
-	if !strings.Contains(w.Body.String(), "https://exchange.lamdis.ai"+mcpPath) {
-		t.Errorf("the example command does not point at %s: %s", mcpPath, w.Body.String())
+	r := httptest.NewRequest("POST", mcpPath, nil)
+	r.Header.Set("Authorization", "Bearer lam_nonsense")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status %d, want 401", w.Code)
+	}
+	for _, want := range []string{"/console", "/signin"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("the refusal does not mention %q: %s", want, w.Body.String())
+		}
 	}
 }

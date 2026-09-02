@@ -407,3 +407,71 @@ func (s *Stripe) EachAccount(ctx context.Context, visit func(person, acct string
 	}
 	return nil
 }
+
+// AuthorizeCheckout opens a hosted checkout that authorises a card for a job's
+// ceiling without capturing it.
+//
+// This is the gateless way in. The buyer has no account and no balance; their
+// card stands behind the job instead, and is charged once, later, for what the
+// job actually paid out. Stripe holds an uncaptured authorisation for up to
+// seven days, which is longer than any job on the board lives.
+func (s *Stripe) AuthorizeCheckout(ctx context.Context, job string, amountMinor int64, currency, successURL, cancelURL string) (session, payAt string, err error) {
+	if amountMinor <= 0 {
+		return "", "", fmt.Errorf("payment: an authorisation must be positive")
+	}
+	f := url.Values{}
+	f.Set("mode", "payment")
+	f.Set("success_url", successURL)
+	f.Set("cancel_url", cancelURL)
+	f.Set("client_reference_id", job)
+	f.Set("payment_intent_data[capture_method]", "manual")
+	f.Set("payment_intent_data[description]", "lamdis job "+job)
+	f.Set("payment_intent_data[metadata][lamdis_job]", job)
+	f.Set("metadata[lamdis_job]", job)
+	f.Set("line_items[0][quantity]", "1")
+	f.Set("line_items[0][price_data][currency]", strings.ToLower(currency))
+	f.Set("line_items[0][price_data][unit_amount]", strconv.FormatInt(amountMinor, 10))
+	f.Set("line_items[0][price_data][product_data][name]", "Lamdis job "+job)
+	f.Set("line_items[0][price_data][product_data][description]",
+		"Authorised now. Charged only for what is proven done, and only then.")
+	// Cards only: an authorisation has to be reversible and partial-capturable,
+	// which bank debits are not.
+	f.Set("payment_method_types[0]", "card")
+
+	obj, err := s.call(ctx, http.MethodPost, "/v1/checkout/sessions", f,
+		DeriveKey("authorize", fmt.Sprintf("%s:%d:%s", job, amountMinor, currency)))
+	if err != nil {
+		return "", "", err
+	}
+	payAt, _ = obj.str("url")
+	if payAt == "" {
+		return "", "", fmt.Errorf("payment: the rail returned no checkout link")
+	}
+	return obj.ID, payAt, nil
+}
+
+// CheckoutAuthorization reports whether a checkout opened by AuthorizeCheckout
+// completed, and what it authorised.
+//
+// A manual-capture session reports payment_status "unpaid" until capture, so
+// "paid" is the wrong question here; completion of the session is the fact
+// that the card was authorised.
+func (s *Stripe) CheckoutAuthorization(ctx context.Context, session string) (ok bool, intent string, amountMinor int64, email string, err error) {
+	obj, err := s.call(ctx, http.MethodGet,
+		"/v1/checkout/sessions/"+url.PathEscape(session), nil, "")
+	if err != nil {
+		return false, "", 0, "", err
+	}
+	var m struct {
+		Status          string `json:"status"`
+		PaymentIntent   string `json:"payment_intent"`
+		AmountTotal     int64  `json:"amount_total"`
+		CustomerDetails struct {
+			Email string `json:"email"`
+		} `json:"customer_details"`
+	}
+	if len(obj.Raw) > 0 {
+		_ = json.Unmarshal(obj.Raw, &m)
+	}
+	return m.Status == "complete" && m.PaymentIntent != "", m.PaymentIntent, m.AmountTotal, m.CustomerDetails.Email, nil
+}

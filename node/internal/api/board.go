@@ -345,6 +345,11 @@ type Listing struct {
 	//
 	// Never published — Public strips it.
 	Owner string `json:"-"`
+	// Funding records where a listing's escrow came from when it was not a
+	// balance: a card authorised for the job's ceiling and captured only for
+	// what was actually paid out. Nil for jobs funded from a balance. Never
+	// published.
+	Funding *Funding `json:"-"`
 
 	// Tier is the verification standard the submission must reach.
 	Tier    string    `json:"tier,omitempty"`
@@ -1769,4 +1774,28 @@ func (l *Listing) DirectedAt(account string) bool {
 		}
 	}
 	return false
+}
+
+// Funding is a card authorisation standing behind a listing.
+//
+// The gateless path: nobody signed in, nobody topped up. The buyer's card is
+// authorised for the ceiling when the job is posted and captured, once, for
+// exactly what the job paid out — the rest is released. Money that was never
+// captured never needs refunding, which is what makes this path hold less of
+// other people's money than the balance path, not more.
+type Funding struct {
+	// Kind is "card"; a place for "invoice" and friends later.
+	Kind string
+	// Intent is the authorised, uncaptured PaymentIntent on the rail.
+	Intent string
+	// Session is the checkout session that produced the authorisation.
+	Session string
+	// AuthorizedMinor is the ceiling the card was authorised for.
+	AuthorizedMinor int64
+	// Email is the payer's address as the rail reported it — the only contact
+	// the exchange has for a buyer who never made an account.
+	Email string
+	// Settled records that the card side has been closed: captured for what
+	// was paid out, or released. Once.
+	Settled bool
 }
