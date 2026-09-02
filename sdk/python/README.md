@@ -62,7 +62,13 @@ if q["feasible"]:
 | `.cancel(reason=None)` | `POST /v1/jobs/{job}/cancel` |
 | `.release()` | `POST /v1/jobs/{job}/release` |
 | `.hold(ground, reason)` | `POST /v1/jobs/{job}/hold` |
+| `.anchor(sha256=None)` | `GET /v1/jobs/{job}/receipt/anchor` |
 | `.bids()` / `.award(bid)` | `GET`/`POST /v1/jobs/{job}/bids`, `/award` |
+
+Public routes with no SDK method (use `client.request("GET", path)`):
+`/v1/rails`, `/v1/anchors`, `/v1/findings`, `/v1/bootstrap`. Operators:
+`GET`/`PUT /v1/payout/usdc`. An anonymous post may carry `posted.pay_usdc`
+when the USDC rail is on.
 
 Keyword arguments are the wire names (`fee_minor`, `radius_m`, …). Money is
 integer minor units. Refusals raise `LamdisError` with `.status` and the

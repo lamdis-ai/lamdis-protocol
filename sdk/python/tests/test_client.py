@@ -106,7 +106,15 @@ def test_observe_anonymous_returns_pay_link_and_token(exchange):
     assert posted.token == "lbt_abc"
     assert posted.watch == AWAITING["watch"]
     assert posted.amount_minor == 800
+    assert posted.pay_usdc is None
     assert posted.raw == AWAITING
+
+
+def test_pay_usdc_is_surfaced_when_the_rail_is_on(exchange):
+    pay_usdc = {"address": "0xabc", "amount_usdc": "8.000123", "chain": "base", "chain_id": 8453, "contract": "0xusdc"}
+    exchange.routes["POST /v1/tasks"] = (200, dict(AWAITING, pay_usdc=pay_usdc))
+    posted = Lamdis(base_url=exchange.url).observe("p", 800)
+    assert posted.pay_usdc == pay_usdc
 
 
 def test_do_posts_kind_do_with_instructions(exchange):
@@ -130,6 +138,7 @@ def test_job_with_token_sends_bearer_everywhere(exchange):
             "POST /v1/jobs/observe-1/cancel": (200, {"job": "observe-1", "cancelled": True, "released_minor": 800}),
             "POST /v1/jobs/observe-1/release": (200, {"job": "observe-1", "released": 1, "status": "ok"}),
             "POST /v1/jobs/observe-1/hold": (200, {"job": "observe-1", "held": 1}),
+            "GET /v1/jobs/observe-1/receipt/anchor?sha256=" + "ab" * 32: (200, {"job": "observe-1", "status": "pending"}),
         }
     )
     job = Lamdis(base_url=exchange.url).job("observe-1", "lbt_abc")
@@ -140,7 +149,8 @@ def test_job_with_token_sends_bearer_everywhere(exchange):
     assert job.cancel("plan changed")["cancelled"] is True
     assert job.release()["released"] == 1
     assert job.hold("not_done", "the gate is still open")["held"] == 1
-    assert len(exchange.calls) == 6
+    assert job.anchor("ab" * 32)["status"] == "pending"
+    assert len(exchange.calls) == 7
     for c in exchange.calls:
         assert c["headers"]["Authorization"] == "Bearer lbt_abc"
         assert "X-Lamdis-Key" not in c["headers"]
@@ -170,7 +180,7 @@ def test_agent_key_and_funded_post(exchange):
 def test_check_feasible_and_quote_post_v1_quote(exchange):
     quote = {"reachable": "several", "feasible": True}
     exchange.routes["POST /v1/quote"] = (200, quote)
-    x = Lamdis(base_url=exchange.url, key="lam_sk_test")
+    x = Lamdis(base_url=exchange.url)
     assert x.check_feasible(kind="do", skills=["ladder"], lat=1, lon=2) == quote
     assert x.quote(predicate="gutters clear") == quote
     assert [c["path"] for c in exchange.calls] == ["/v1/quote", "/v1/quote"]

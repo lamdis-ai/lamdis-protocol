@@ -68,7 +68,13 @@ if (q.feasible) {
 | `.cancel(reason?)` | `POST /v1/jobs/{job}/cancel` |
 | `.release()` | `POST /v1/jobs/{job}/release` |
 | `.hold(ground, reason)` | `POST /v1/jobs/{job}/hold` |
+| `.anchor(sha256?)` | `GET /v1/jobs/{job}/receipt/anchor` |
 | `.bids()` / `.award(bid)` | `GET`/`POST /v1/jobs/{job}/bids`, `/award` |
+
+Public routes with no SDK method (plain `fetch`): `GET /v1/rails`,
+`GET /v1/anchors`, `GET /v1/findings`, `GET /v1/bootstrap`. Operators:
+`GET`/`PUT /v1/payout/usdc`. An anonymous post may carry `posted.payUsdc`
+when the USDC rail is on.
 
 Field names on requests are the wire names (`fee_minor`, `radius_m`, …).
 Money is integer minor units. Refusals throw `LamdisError` with `.status` and

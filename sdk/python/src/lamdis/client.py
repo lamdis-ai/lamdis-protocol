@@ -47,6 +47,8 @@ class Posted:
     expires_at: Optional[str] = None
     #: Funded only: the ceiling held from the balance.
     escrowed_minor: Optional[int] = None
+    #: Anonymous only, when the USDC rail is on: send exactly ``amount_usdc`` on ``chain`` to ``address``.
+    pay_usdc: Optional[Dict[str, Any]] = None
     #: Present when the predicate repeats the street address.
     warning: Optional[str] = None
     #: The response exactly as the exchange sent it.
@@ -73,6 +75,7 @@ class Posted:
             currency=s("currency"),
             expires_at=s("expires_at") or s("expires"),
             escrowed_minor=n("escrowed"),
+            pay_usdc=raw.get("pay_usdc") if isinstance(raw.get("pay_usdc"), dict) else None,
             warning=s("warning"),
             raw=raw,
         )
@@ -98,8 +101,7 @@ class Lamdis:
     def check_feasible(self, **req: Any) -> Dict[str, Any]:
         """Is anybody reachable, would this be refused, what has it settled at.
 
-        Holds nothing. Requires a key: the exchange answers 401 to an
-        anonymous quote.
+        Holds nothing and needs no key.
         """
         return self.quote(**req)
 
@@ -207,6 +209,11 @@ class Job:
         if ground not in HOLD_GROUNDS:
             raise ValueError(f"ground must be one of {HOLD_GROUNDS}")
         return self._call("POST", "/hold", {"ground": ground, "reason": reason})
+
+    def anchor(self, sha256: Optional[str] = None) -> Dict[str, Any]:
+        """The OpenTimestamps proof tying a receipt's hash to Bitcoin. Defaults to the latest receipt."""
+        q = "?sha256=" + urllib.request.quote(sha256, safe="") if sha256 else ""
+        return self._call("GET", "/receipt/anchor" + q)
 
     def bids(self) -> Dict[str, Any]:
         """Offers on an open (bids) job."""

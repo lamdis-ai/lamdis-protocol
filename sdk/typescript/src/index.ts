@@ -115,6 +115,8 @@ export interface Posted {
   expiresAt?: string;
   /** Funded only: the ceiling held from the balance. */
   escrowedMinor?: number;
+  /** Anonymous only, when the USDC rail is on: pay by sending exactly `amount_usdc` on `chain` to `address`. */
+  payUsdc?: { address: string; amount_usdc: string; chain: string; chain_id: number; contract: string; note?: string };
   /** Present when the predicate repeats the street address. */
   warning?: string;
   /** The response exactly as the exchange sent it. */
@@ -221,6 +223,7 @@ export interface Receipt {
     established: string[];
     limits: string[];
   };
+  anchor?: { receipt_sha256: string; status: "pending" | "anchored"; proof: string; method: string; merkle_root?: string; bitcoin_block?: number };
   signature: string;
   reference?: string;
   [extra: string]: unknown;
@@ -340,8 +343,7 @@ export class Lamdis {
 
   /**
    * Ask before committing: is anybody reachable, would this be refused, and
-   * what has work like it settled at. Holds nothing. Requires a key — the
-   * exchange answers 401 to an anonymous quote.
+   * what has work like it settled at. Holds nothing and needs no key.
    */
   checkFeasible(req: QuoteRequest): Promise<Quote> {
     return this.quote(req);
@@ -427,6 +429,7 @@ function normalisePosted(raw: Record<string, unknown>): Posted {
     currency: str("currency"),
     expiresAt: str("expires_at") ?? str("expires"),
     escrowedMinor: num("escrowed"),
+    payUsdc: raw.pay_usdc && typeof raw.pay_usdc === "object" ? (raw.pay_usdc as Posted["payUsdc"]) : undefined,
     warning: str("warning"),
     raw,
   };
@@ -468,6 +471,12 @@ export class Job {
   /** Something is wrong: name a ground and say why. A panel decides within 7 days. */
   hold(ground: HoldGround, reason: string): Promise<HoldResult> {
     return this.call<HoldResult>("POST", "/hold", { ground, reason });
+  }
+
+  /** The OpenTimestamps proof tying a receipt's hash to Bitcoin. Defaults to the latest receipt. */
+  anchor(sha256?: string): Promise<Record<string, unknown>> {
+    const q = sha256 ? `?sha256=${encodeURIComponent(sha256)}` : "";
+    return this.call<Record<string, unknown>>("GET", `/receipt/anchor${q}`);
   }
 
   /** Offers on an open (bids) job. */

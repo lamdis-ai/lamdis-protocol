@@ -70,7 +70,15 @@ describe("anonymous first job", () => {
     expect(posted.token).toBe("lbt_abc");
     expect(posted.watch).toBe(awaiting.watch);
     expect(posted.amountMinor).toBe(800);
+    expect(posted.payUsdc).toBeUndefined();
     expect(posted.raw).toEqual(awaiting);
+  });
+
+  it("surfaces pay_usdc when the rail is on", async () => {
+    const pay_usdc = { address: "0xabc", amount_usdc: "8.000123", chain: "base", chain_id: 8453, contract: "0xusdc" };
+    const { fetch } = fakeFetch({ "POST /v1/tasks": { body: { ...awaiting, pay_usdc } } });
+    const posted = await new Lamdis({ fetch }).observe({ predicate: "p", fee_minor: 800 });
+    expect(posted.payUsdc).toEqual(pay_usdc);
   });
 
   it("do() posts kind=do and carries instructions", async () => {
@@ -93,6 +101,7 @@ describe("anonymous first job", () => {
       "POST /v1/jobs/observe-1/cancel": { body: { job: "observe-1", cancelled: true, released_minor: 800 } },
       "POST /v1/jobs/observe-1/release": { body: { job: "observe-1", released: 1, status: "ok" } },
       "POST /v1/jobs/observe-1/hold": { body: { job: "observe-1", held: 1 } },
+      "GET /v1/jobs/observe-1/receipt/anchor": { body: { job: "observe-1", status: "pending", method: "opentimestamps" } },
     });
     const job = new Lamdis({ fetch }).job("observe-1", "lbt_abc");
     expect((await job.status()).status).toBe("awaiting_payment");
@@ -101,7 +110,9 @@ describe("anonymous first job", () => {
     expect((await job.cancel("plan changed")).cancelled).toBe(true);
     expect((await job.release()).released).toBe(1);
     expect((await job.hold("not_done", "the gate is still open")).held).toBe(1);
-    expect(calls).toHaveLength(6);
+    expect((await job.anchor("ab".repeat(32))).status).toBe("pending");
+    expect(calls).toHaveLength(7);
+    expect(calls[6].url).toContain("/receipt/anchor?sha256=" + "ab".repeat(32));
     for (const c of calls) {
       expect(c.headers["Authorization"]).toBe("Bearer lbt_abc");
       expect(c.headers["X-Lamdis-Key"]).toBeUndefined();
@@ -129,7 +140,7 @@ describe("with an agent key", () => {
   it("checkFeasible() and quote() both POST /v1/quote", async () => {
     const quote = { reachable: "several", feasible: true };
     const { fetch, calls } = fakeFetch({ "POST /v1/quote": { body: quote } });
-    const x = new Lamdis({ fetch, key: "lam_sk_test" });
+    const x = new Lamdis({ fetch });
     expect(await x.checkFeasible({ kind: "do", skills: ["ladder"], lat: 1, lon: 2 })).toEqual(quote);
     expect(await x.quote({ predicate: "gutters clear" })).toEqual(quote);
     expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual(["POST /v1/quote", "POST /v1/quote"]);

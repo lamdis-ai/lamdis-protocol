@@ -149,6 +149,12 @@ resubmission, it does not score as generated, the location matches) and what
 was not. Verification answers whether something happened, not whether it was
 done well; that judgement is the buyer's, made with `release` or `hold`.
 
+When the exchange is anchoring (`GET /v1/anchors`), the receipt also carries
+`anchor`: `{receipt_sha256, status, proof, method: "opentimestamps",
+merkle_root?, bitcoin_block?}`. `GET /v1/jobs/{job}/receipt/anchor?sha256=…`
+returns the inclusion path and the `.ots` proof with step-by-step
+instructions for checking it against Bitcoin without asking the exchange.
+
 ## The operator side
 
 The same `/mcp` endpoint, with a signed-in operator's session token instead of
@@ -166,6 +172,7 @@ a key, gives an agent that finds its person work:
 | `my_earnings` | `GET /v1/me` | owed, clear, held, ceiling, open bids |
 | `set_capacity` | `PUT /v1/capacity` | range, concurrency, kinds, skills, and a `webhook` for pushed offers |
 | `give_back` | `POST /v1/workers/giveback/{job}` | hand a job back rather than let it lapse |
+| — | `GET`/`PUT /v1/payout/usdc` | route earnings to a USDC address; sent by a person on a schedule, capped at $600 lifetime without a connected payout account |
 
 Rules an operator's agent should hold to, from the tool descriptions: only
 take work they can actually get to; show them a bid before placing it unless
@@ -189,5 +196,6 @@ carry is `422`, refused before anybody can take it.
 ## More
 
 - REST surface: [`spec/openapi.yaml`](spec/openapi.yaml)
-- Live docs: `https://exchange.lamdis.ai/docs`, `/llms.txt`, `/v1/exchange`
+- Live docs: `https://exchange.lamdis.ai/docs`, `/llms.txt`, `/v1/exchange`, `/v1/rails`
+- The house's own jobs and their verified findings: `GET /v1/bootstrap`, `GET /v1/findings`
 - Operating posture (custody, classification, tax): [`spec/operating-posture.md`](spec/operating-posture.md)

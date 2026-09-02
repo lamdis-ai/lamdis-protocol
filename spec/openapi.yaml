@@ -1018,6 +1018,179 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /v1/jobs/{job}/receipt/anchor:
+    get:
+      tags: [buying]
+      operationId: receiptAnchor
+      summary: The OpenTimestamps proof for a receipt
+      description: |
+        Ties one receipt's SHA-256 to a Bitcoin block via a Merkle root the
+        exchange submitted to OpenTimestamps calendars. Without `sha256` the
+        latest receipt issued for the job is used. `how_to_verify` walks
+        through checking it without asking this exchange anything.
+      security:
+        - agentKey: []
+        - jobToken: []
+        - session: []
+        - principal: []
+      parameters:
+        - $ref: "#/components/parameters/job"
+        - name: sha256
+          in: query
+          required: false
+          schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+          description: "The receipt_sha256 from the receipt anchor. Defaults to the latest."
+      responses:
+        "200":
+          description: The proof.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnchorProof"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Not your job, no receipt issued yet, no such hash, or this exchange is not anchoring.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/anchors:
+    get:
+      tags: [discovery]
+      operationId: listAnchors
+      summary: Recent receipt-anchoring batches
+      description: The last 50 Merkle roots submitted to OpenTimestamps, with their status.
+      security: []
+      responses:
+        "200":
+          description: "Batches, or enabled: false."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Anchors"
+        "404":
+          description: Not this path.
+
+  /v1/rails:
+    get:
+      tags: [discovery, money]
+      operationId: rails
+      summary: Which payment rails are on
+      description: Card authorisation, Stripe Connect payouts, and the watch-only USDC rail.
+      security: []
+      responses:
+        "200":
+          description: Rails.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rails"
+        "404":
+          description: Not this path.
+
+  /v1/payout/usdc:
+    get:
+      tags: [supplying]
+      operationId: getUSDCPayout
+      summary: This operator's USDC payout address and standing
+      security:
+        - session: []
+        - principal: []
+      responses:
+        "200":
+          description: USDC standing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/USDCStanding"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [supplying]
+      operationId: setUSDCPayout
+      summary: Set (or clear) the address earnings are routed to
+      description: |
+        Earnings routed to this address are queued and sent by a person, on a
+        schedule. Up to `usdc_cap_minor` (60000 minor, $600) lifetime can be
+        paid this way without a connected payout account; beyond that, connect
+        one. The address is checksummed before it is saved.
+      security:
+        - session: []
+        - principal: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address:
+                  type: string
+                  description: A `0x…` address on the rail's chain, or empty to clear it.
+      responses:
+        "200":
+          description: Saved; the same shape as GET.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/USDCStanding"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: This exchange does not pay out in USDC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/findings:
+    get:
+      tags: [discovery]
+      operationId: findings
+      summary: Verified observations the exchange itself commissioned
+      description: |
+        The public record of the exchange's own bootstrap jobs: storefront
+        observations posted by the house and answered by operators. The last
+        1000. Coordinates are rounded to about a kilometre.
+      security: []
+      responses:
+        "200":
+          description: Findings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+                  findings:
+                    type: array
+                    items: { $ref: "#/components/schemas/Finding" }
+                  note: { type: string }
+        "404":
+          description: Not mounted when the bootstrap loop is off.
+
+  /v1/bootstrap:
+    get:
+      tags: [discovery]
+      operationId: bootstrapStatus
+      summary: The house's own posting loop
+      description: Budget, spend, and counts for the jobs the exchange posts to seed supply.
+      security: []
+      responses:
+        "200":
+          description: Status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapStatus"
+        "404":
+          description: Not mounted when the bootstrap loop is off.
+
   /acp/offers:
     get:
       tags: [acp]
@@ -1509,6 +1682,8 @@ components:
           format: uri
           description: A page for a person to follow the job, with the token in the query.
         note: { type: string }
+        pay_usdc:
+          $ref: "#/components/schemas/PayUSDC"
         warning: { type: string, description: Present when the predicate repeats the street address. }
 
     PostedFunded:
@@ -1626,6 +1801,8 @@ components:
         site: { type: string }
         directed: { type: boolean }
         escrow_remaining_minor: { type: integer, format: int64 }
+        anchor:
+          $ref: "#/components/schemas/AnchorSummary"
         signature:
           type: string
           description: Hex Ed25519 over the JSON of every other field.
@@ -1894,3 +2071,171 @@ components:
               status: { type: string }
               reason: { type: string }
               clears: { type: string, format: date-time }
+
+    PayUSDC:
+      type: object
+      description: |
+        Present on an anonymous post when the USDC rail is on. Send exactly
+        `amount_usdc` on `chain` to `address`; the last digits are this job's
+        own, so a different amount cannot be matched. The job lists after 12
+        confirmations. Whatever the job does not pay out is returned to the
+        sending address by a person, on a schedule.
+      required: [address, amount_usdc, chain, chain_id, contract]
+      properties:
+        address: { type: string, description: The exchange's watch-only receiving address. }
+        amount_usdc: { type: string, description: "Decimal string, exact." }
+        chain: { type: string, enum: [base, base-sepolia] }
+        chain_id: { type: integer, enum: [8453, 84532] }
+        contract: { type: string, description: The USDC token contract on that chain. }
+        note: { type: string }
+
+    AnchorSummary:
+      type: object
+      description: Present on a receipt when the exchange is anchoring.
+      required: [receipt_sha256, status, proof, method]
+      properties:
+        receipt_sha256:
+          type: string
+          description: SHA-256 of the receipt with `signature` and `anchor` removed, keys sorted, compact.
+        status: { type: string, enum: [pending, anchored] }
+        proof: { type: string, description: "`/v1/jobs/{job}/receipt/anchor?sha256=…`" }
+        method: { type: string, const: opentimestamps }
+        merkle_root: { type: string }
+        bitcoin_block: { type: integer }
+
+    AnchorProof:
+      type: object
+      required: [job, receipt_sha256, recorded_at, status, method, calendars, how_to_verify]
+      properties:
+        job: { type: string }
+        receipt_sha256: { type: string }
+        recorded_at: { type: string }
+        status: { type: string, enum: [pending, anchored] }
+        method: { type: string, const: opentimestamps }
+        calendars:
+          type: array
+          items: { type: string, format: uri }
+        how_to_verify:
+          type: array
+          items: { type: string }
+        merkle_root: { type: string }
+        inclusion_path:
+          type: array
+          items:
+            type: object
+            required: [sibling, side]
+            properties:
+              sibling: { type: string }
+              side: { type: string, enum: [left, right] }
+        ots_proof: { type: string, format: byte, description: "The detached .ots file, base64." }
+        accepted_by:
+          type: array
+          items: { type: string }
+        submitted_at: { type: string, format: date-time }
+        anchored_at: { type: string, format: date-time }
+        bitcoin_block: { type: integer }
+        note: { type: string }
+
+    Anchors:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        note: { type: string, description: Only when disabled. }
+        method: { type: string, const: opentimestamps }
+        calendars:
+          type: array
+          items: { type: string, format: uri }
+        every: { type: string, description: "The batching interval, as a Go duration." }
+        unbatched: { type: integer, description: Receipt hashes recorded and not yet in a batch. }
+        batches:
+          type: array
+          items:
+            type: object
+            properties:
+              seq: { type: integer }
+              merkle_root: { type: string }
+              status: { type: string, enum: [pending, anchored] }
+              created_at: { type: string, format: date-time }
+              submitted_at: { type: string, format: date-time }
+              calendars:
+                type: array
+                items: { type: string }
+              ots_proof: { type: string, format: byte }
+              anchored_at: { type: string, format: date-time }
+              bitcoin_block: { type: integer }
+        how_to_verify:
+          type: array
+          items: { type: string }
+
+    Rails:
+      type: object
+      properties:
+        card:
+          type: object
+          properties:
+            "on": { type: boolean }
+        stripe_connect:
+          type: object
+          properties:
+            "on": { type: boolean }
+        usdc:
+          type: object
+          properties:
+            "on": { type: boolean }
+            chain: { type: string, enum: [base, base-sepolia] }
+            chain_id: { type: integer }
+            contract: { type: string }
+            address: { type: string }
+            confirmations: { type: integer, const: 12 }
+            last_scanned_block: { type: integer }
+            queue_length: { type: integer, description: Payouts and refunds a person has not sent yet. }
+            unmatched: { type: integer, description: Transfers that arrived for no job. }
+            cap_minor: { type: integer, format: int64, description: Lifetime USDC payout cap without a connected payout account (60000). }
+            note: { type: string }
+
+    USDCStanding:
+      type: object
+      required: [usdc_on, usdc_cap_minor, usdc_paid_minor]
+      properties:
+        usdc_on: { type: boolean }
+        usdc_cap_minor: { type: integer, format: int64 }
+        usdc_paid_minor: { type: integer, format: int64, description: Earnings already paid this way. }
+        usdc_address: { type: string }
+        usdc_cap_lifted: { type: boolean, description: True when a ready payout account removes the cap. }
+        chain: { type: string }
+        contract: { type: string }
+        note: { type: string }
+
+    Finding:
+      type: object
+      required: [place, job, question, verdict, at, lat, lon]
+      properties:
+        place: { type: string }
+        job: { type: string }
+        shape: { type: string, enum: [open-signage, hours, vacant, corner] }
+        question: { type: string }
+        verdict: { type: string }
+        photo_sha: { type: string }
+        at: { type: string, format: date-time }
+        area: { type: string }
+        lat: { type: number, description: Rounded to about a kilometre. }
+        lon: { type: number }
+
+    BootstrapStatus:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        budget_minor: { type: integer, format: int64 }
+        topped_up_minor: { type: integer, format: int64 }
+        spent_minor: { type: integer, format: int64 }
+        balance_minor: { type: integer, format: int64 }
+        currency: { type: string }
+        jobs_posted: { type: integer }
+        jobs_filled: { type: integer }
+        jobs_settled: { type: integer }
+        findings: { type: integer }
+        last_run: { type: string, format: date-time }
+        clusters_seen: { type: integer }
+        every_s: { type: integer }
+        last_error: { type: string }
