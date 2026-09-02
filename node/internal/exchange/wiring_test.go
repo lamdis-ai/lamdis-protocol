@@ -98,3 +98,11 @@ func TestExchangeRootGoesToTheBoard(t *testing.T) {
 		t.Fatalf("the root sends people to %q", loc)
 	}
 }
+
+// One fee, not two. Order.Defaults used to fill in 500 basis points while
+// settlement charged FeeBP, so every quote stated a cut nobody was taking.
+func TestOrderDefaultsQuoteTheFeeSettlementCharges(t *testing.T) {
+	if got := (Order{}).Defaults().FeeBP; got != FeeBP {
+		t.Fatalf("default order fee is %d bp, settlement charges %d bp", got, FeeBP)
+	}
+}

@@ -60,7 +60,10 @@ func (o Order) Defaults() Order {
 		o.SuccessBonusMinor = 1800
 	}
 	if o.FeeBP == 0 {
-		o.FeeBP = 500
+		// The fee the terms quote is the fee settlement charges. Two numbers
+		// named FeeBP — this one defaulting to 500 while settle.go charged 0 —
+		// meant every quote overstated the cut by five percent.
+		o.FeeBP = FeeBP
 	}
 	if o.EvidenceDeadline == 0 {
 		o.EvidenceDeadline = 4 * time.Hour

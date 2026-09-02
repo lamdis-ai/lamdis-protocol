@@ -22,6 +22,8 @@ func (s *WorkerServer) registerScope(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/scope/{project}/bid", s.handleScopeBid)
 	mux.HandleFunc("POST /v1/workers/plan/{job}", s.handlePlan)
 	mux.HandleFunc("GET /v1/board/{job}", s.handleReadJob)
+	// The same job as a page, for a link to land on. See job_html.go.
+	mux.HandleFunc("GET /j/{job}", s.handleJobPage)
 }
 
 // handleScope returns a project as a supplier may see it.
@@ -135,12 +137,14 @@ func (s *WorkerServer) handlePlan(w http.ResponseWriter, r *http.Request) {
 // a job id. Without it a pushed offer was a dead end: the agent knew the id and
 // had no way to look it up, so the only route to detail was scanning the whole
 // board and hoping it was still on it.
+//
+// Public, like the board it reads from. It used to require a sign-in, which
+// made no sense next to GET /v1/board handing the same listing to anybody: a
+// dispatch email or a shared link landed on a 401 for the one person it was
+// written for. Public() is the redaction that keeps the open board safe, and
+// it is the same redaction here. Signing in adds one thing — how far away the
+// job is — because that is a fact about the reader, not the listing.
 func (s *WorkerServer) handleReadJob(w http.ResponseWriter, r *http.Request) {
-	body, _ := readBody(r)
-	if _, err := s.Workers.Authenticate(r, body, s.now()); err != nil {
-		refuse(w)
-		return
-	}
 	l, ok := s.Board.Get(r.PathValue("job"))
 	if !ok || l.Directed() {
 		// Directed work belongs to the vendor it was sent to and is not on the
@@ -152,6 +156,14 @@ func (s *WorkerServer) handleReadJob(w http.ResponseWriter, r *http.Request) {
 	pub.BlockedBy = s.Board.Blocked(l.Job)
 	if l.ProjectID != "" {
 		pub.Project = s.Board.BriefFor(l.Job)
+	}
+	if s.Workers != nil && s.Board.Capacities != nil && HasPosition(l.LatE7, l.LonE7) {
+		body, _ := readBody(r)
+		if worker, err := s.Workers.Authenticate(r, body, s.now()); err == nil {
+			if cap := s.Board.Capacities.Get(worker.ID); cap.Positioned() {
+				pub.DistanceMiles = round1(MilesBetween(l.LatE7, l.LonE7, cap.LatE7, cap.LonE7))
+			}
+		}
 	}
 	writeWork(w, http.StatusOK, pub)
 }

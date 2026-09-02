@@ -93,6 +93,7 @@ func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request, key *acco
 		return
 	}
 	n := s.Holdbacks.Release(job, s.now())
+	s.notifyReleased(job)
 	writeJSONResponse(w, map[string]any{
 		"job": job, "released": n,
 		"status": "the work is accepted and payment is clear to send",
@@ -137,7 +138,9 @@ func (s *Server) handleHold(w http.ResponseWriter, r *http.Request, key *account
 		return
 	}
 	until := s.now().Add(DisputeWindow)
-	n := s.Holdbacks.Hold(job, GroundLabel(in.Ground)+": "+in.Reason, until)
+	reason := GroundLabel(in.Ground) + ": " + in.Reason
+	n := s.Holdbacks.Hold(job, reason, until)
+	s.notifyHeld(job, reason, until)
 	if n == 0 {
 		// Either nothing settled yet, or it has already been paid. Those are
 		// different situations and telling them apart matters.

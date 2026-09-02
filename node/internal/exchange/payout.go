@@ -302,6 +302,7 @@ func (s *Server) payOut(ctx context.Context, person string, amountMinor int64, c
 	if err != nil {
 		return "", err
 	}
+	s.notifyPaid(person, amountMinor, currency, acct, res.Ref)
 	if s.Ledger != nil {
 		if _, err := s.Ledger.Payout(ctx, string(key), person, amountMinor, currency, res.Ref); err != nil {
 			// The money left. Failing to record it would let it leave again.
@@ -608,6 +609,7 @@ func (s *Server) StartPayoutSweeper(ctx context.Context, every time.Duration) {
 					if freed := s.Holdbacks.ExpireHolds(s.now()); len(freed) > 0 {
 						log.Printf("disputes   %d objection(s) lapsed undecided; "+
 							"earnings released to the worker: %v", len(freed), freed)
+						s.notifyHoldsLapsed(freed)
 					}
 				}
 				if n, total := s.SweepPayouts(ctx); n > 0 {

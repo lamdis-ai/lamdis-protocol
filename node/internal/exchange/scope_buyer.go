@@ -89,6 +89,7 @@ func (s *Server) handleAwardScope(w http.ResponseWriter, r *http.Request, key *a
 	for _, ln := range won.Lines {
 		s.Reservations.Release(ln.Job)
 	}
+	s.notifyScopeAwarded(project, won)
 	writeJSONResponse(w, map[string]any{
 		"project": project, "awarded_to": won.Worker,
 		"total_minor": won.TotalMinor, "currency": won.Currency,

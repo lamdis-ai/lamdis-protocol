@@ -108,6 +108,9 @@ func (s *Server) settle(ctx context.Context, job string, sub api.Submission, wor
 		if s.Holdbacks != nil {
 			s.Holdbacks.Add(job, worker, gross-fee, l.Currency, s.now(), s.disputeWindow())
 		}
+		s.notifySettled(l, sub, worker, gross-fee)
+	} else {
+		s.notifyRejected(sub, sub.Why, false)
 	}
 
 	// Whatever this submission did not earn goes back, but only once the job
@@ -262,6 +265,7 @@ func (s *Server) Sweep(ctx context.Context) (released int, err error) {
 			err = rerr
 			continue
 		}
+		s.notifyExpired(l, held)
 		released++
 	}
 	return released, err

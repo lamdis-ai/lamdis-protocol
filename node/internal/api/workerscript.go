@@ -166,3 +166,162 @@ function handleAuthFailure(status) {
   return false;
 }
 `
+
+// boardJS is the part of the queue that a single-job page needs too: how a
+// figure is shown, how a job is taken, how a bid is placed. Shared so /j/{job}
+// and /board cannot drift apart on what "take" or "$45.00" means.
+//
+// post() refreshes through load(), which each page defines for itself.
+const boardJS = `
+// TERMS is what the exchange keeps and when it pays out, from /v1/board.
+var TERMS = null;
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function money(m, cur) {
+  var sign = m < 0 ? "-" : "", v = Math.abs(m || 0);
+  var sym = (cur || "USD") === "USD" ? "$" : cur + " ";
+  return sign + sym + Math.floor(v / 100) + "." + String(v % 100).padStart(2, "0");
+}
+function toMinor(t) {
+  var c = String(t || "").replace(/[^0-9.]/g, "");
+  if (!c) { return 0; }
+  var n = Math.round(parseFloat(c) * 100);
+  return isFinite(n) ? n : 0;
+}
+function left(iso) {
+  var ms = new Date(iso) - new Date();
+  if (isNaN(ms) || ms <= 0) { return "closed"; }
+  var m = Math.round(ms / 60000);
+  if (m < 60) { return m + "m"; }
+  var h = Math.round(m / 60);
+  return h < 48 ? h + "h" : Math.round(h / 24) + "d";
+}
+function kindLabel(k) {
+  return k === "do" ? "Act" : (k === "review" ? "Verify" : "Check");
+}
+
+// What a listed figure actually becomes in your account.
+//
+// The board advertised a number and settlement paid a smaller one, with the
+// difference explained nowhere. Showing the take-home next to the headline is
+// the least a marketplace can do before somebody spends an afternoon earning
+// it.
+function takeHome(minor) {
+  if (!TERMS || !TERMS.fee_bp || !minor) { return null; }
+  return minor - Math.floor(minor * TERMS.fee_bp / 10000);
+}
+
+function post(button, errEl, path, body) {
+  if (!signedIn()) { goSignIn(); return; }
+  button.disabled = true;
+  var was = button.textContent;
+  button.textContent = "Working…";
+  if (errEl) { errEl.textContent = ""; errEl.className = "err"; }
+
+  workerHeaders("POST", path).then(function (h) {
+    if (body) { h["Content-Type"] = "application/json"; }
+    return fetch(path, {method: "POST", headers: h, body: body ? JSON.stringify(body) : undefined});
+  }).then(function (r) {
+    return r.json().then(function (j) { return {ok: r.ok, status: r.status, body: j}; });
+  }).then(function (res) {
+    if (handleAuthFailure(res.status)) { return; }
+    if (!res.ok) { throw new Error(res.body && res.body.error || "that did not work"); }
+    if (res.body.url) { window.location.href = res.body.url; return; }
+    button.textContent = "Done";
+    load();
+  }).catch(function (e) {
+    if (errEl) { errEl.textContent = e.message; }
+    button.disabled = false;
+    button.textContent = was;
+  });
+}
+
+function takeJob(button, job) {
+  post(button, document.getElementById("e-" + job), "/v1/workers/claim/" + encodeURIComponent(job));
+}
+
+// askUnknowns renders a field per thing the buyer said they do not know.
+//
+// A price on a job whose dimensions nobody has established is a guess, and the
+// argument about it happens on site. Asking here costs one line each and makes
+// the offer mean something.
+// siteShots shows what the buyer supplied so this can be priced.
+//
+// The complaint that produced this: a job could describe four stages of paving
+// and give nothing to price them against — no photograph of the ground, no
+// access, no way to tell on arrival that you are at the right property. The
+// shot marked as the identifier is called out, because that is the one
+// somebody opens standing at the kerb.
+function siteShots(w) {
+  var refs = w.references || [];
+  if (!refs.length) { return ""; }
+  return '<div class="shots">' + refs.map(function (r) {
+    var src = "/v1/jobs/" + encodeURIComponent(w.job) +
+      "/references/" + encodeURIComponent(r.sha256);
+    return '<figure class="ref' + (r.identifies ? " id" : "") + '">' +
+      '<a href="' + src + '" target="_blank" rel="noopener">' +
+        '<img src="' + src + '" alt="' + esc(r.caption || "the site") + '" loading="lazy">' +
+      '</a>' +
+      '<figcaption>' + esc(r.caption || "") +
+        (r.identifies ? '<b>check you are here</b>' : "") + '</figcaption>' +
+    '</figure>';
+  }).join("") + '</div>';
+}
+
+function askUnknowns(w) {
+  var us = w.unknowns || [];
+  if (!us.length) { return ""; }
+  return '<div class="unk">' +
+    '<p class="unk-h">The buyer does not know these. Say what you priced on.</p>' +
+    us.map(function (u, i) {
+      return '<label class="unk-r">' +
+        '<span>' + esc(u.name) + (u.unit ? ' <i>(' + esc(u.unit) + ')</i>' : "") + '</span>' +
+        (u.note ? '<span class="unk-n">' + esc(u.note) + '</span>' : "") +
+        '<input type="text" maxlength="60" placeholder="what you assumed" ' +
+          'data-unk="' + esc(w.job) + '" data-unk-i="' + i + '" ' +
+          'data-unk-name="' + esc(u.name) + '">' +
+        '<label class="unk-f"><input type="checkbox" data-unkfirm="' + esc(w.job) +
+          '" data-unk-i="' + i + '" checked> price holds at this figure</label>' +
+      '</label>';
+    }).join("") +
+    '</div>';
+}
+
+function readAssumptions(job) {
+  var out = [];
+  document.querySelectorAll('[data-unk="' + job + '"]').forEach(function (el) {
+    var i = el.getAttribute("data-unk-i");
+    var firm = document.querySelector(
+      '[data-unkfirm="' + job + '"][data-unk-i="' + i + '"]');
+    out.push({
+      name: el.getAttribute("data-unk-name"),
+      value: el.value.trim(),
+      firm: !!(firm && firm.checked)
+    });
+  });
+  return out;
+}
+
+function placeBid(button, job) {
+  var amount = toMinor(document.querySelector('[data-bid="' + job + '"]').value);
+  var note = (document.querySelector('[data-note="' + job + '"]') || {}).value || "";
+  var err = document.getElementById("e-" + job);
+  if (amount <= 0) { err.textContent = "Enter what you would charge."; return; }
+  var assumptions = readAssumptions(job);
+  // Caught here as well as on the server, because being told what is missing
+  // while the form is still in front of you is the difference between a fix
+  // and a re-entry.
+  var blank = assumptions.filter(function (a) { return !a.value; });
+  if (blank.length) {
+    err.textContent = "Say what you priced on for: " +
+      blank.map(function (a) { return a.name; }).join(", ") + ".";
+    return;
+  }
+  post(button, err, "/v1/workers/bid/" + encodeURIComponent(job),
+       {amount_minor: amount, note: note, assumptions: assumptions});
+}
+`

@@ -185,7 +185,10 @@ func seedBoard(srv *exchange.Server) error {
 	//
 	// Coordinates are Detroit, because a marketplace is a place before it is a
 	// product: ten jobs in one city is liquidity and ten across ten states is
-	// nothing.
+	// nothing. They are on the listings so the board's range filter treats a
+	// practice run like real work: somebody in Detroit sees it, somebody who
+	// set a fifty-mile range in Phoenix does not. They used to be computed and
+	// thrown away, and every practice job showed to everybody everywhere.
 	const (
 		detroitLatE7 = 423314000 // Campus Martius, downtown
 		detroitLonE7 = -830458000
@@ -200,9 +203,10 @@ func seedBoard(srv *exchange.Server) error {
 				"photograph it next to anything at all, and submit. You are " +
 				"learning where the buttons are.",
 			Deliverable: "One photo with the code legible.",
-			Area:        "Anywhere",
-			Tier:        "V1",
-			PayMinor:    0, Currency: "USD",
+			Area:        "Detroit, MI",
+			LatE7:       detroitLatE7, LonE7: detroitLonE7,
+			Tier:     "V1",
+			PayMinor: 0, Currency: "USD",
 			Slots: 50, Expires: now.Add(365 * 24 * time.Hour), Posted: now,
 		},
 		{
@@ -214,9 +218,10 @@ func seedBoard(srv *exchange.Server) error {
 				"its new place with the code in frame. This is the difference " +
 				"between proving you turned up and proving you did something.",
 			Deliverable: "One photo of the object in its new place, code legible.",
-			Area:        "Anywhere",
-			Tier:        "V1",
-			PayMinor:    0, Currency: "USD",
+			Area:        "Detroit, MI",
+			LatE7:       detroitLatE7, LonE7: detroitLonE7,
+			Tier:     "V1",
+			PayMinor: 0, Currency: "USD",
 			Slots: 50, Expires: now.Add(365 * 24 * time.Hour), Posted: now,
 		},
 	}
@@ -224,15 +229,11 @@ func seedBoard(srv *exchange.Server) error {
 	// Practice work is unpaid, so there is nothing to escrow and nothing to
 	// fund. The board refuses unfunded paid work, which is the check doing its
 	// job — these are exempt because they cost nothing.
-	ctx := context.Background()
 	for _, l := range samples {
 		if err := srv.Board.Post(l); err != nil {
 			return err
 		}
 	}
-	_ = ctx
-	_ = detroitLatE7
-	_ = detroitLonE7
 	return nil
 }
 

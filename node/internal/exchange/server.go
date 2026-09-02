@@ -84,6 +84,8 @@ type Server struct {
 	// staleTold remembers which unfilled jobs their buyer has been warned
 	// about, so a slow week does not become a daily email.
 	staleTold map[string]bool
+	// notify remembers which lifecycle events have been sent. See notify.go.
+	notify notifier
 	// Dispatch offers new work to operators who published an endpoint. This is
 	// what makes an API operator a real participant rather than someone
 	// refreshing a web page.
@@ -435,11 +437,17 @@ func (s *Server) Handler() *http.ServeMux {
 	if s.Accounts != nil {
 		s.agents = &api.AgentKeys{Accounts: s.Accounts, Workers: s.Workers}
 		s.agents.Register(mux)
-		mux.HandleFunc("GET /v1/jobs/{job}", s.withAgent(s.handleJobStatus))
+		// The buyer's own view of a job, its bids, its evidence and its
+		// receipt take any credential that spends this account's money —
+		// the person's session included. They were agent-key only, which
+		// meant the console linked a signed-in buyer to a page that answered
+		// 401 and bounced them to sign in again. None of these handlers
+		// reads the key; handleAgentBalance does, and stays agent-only.
+		mux.HandleFunc("GET /v1/jobs/{job}", s.withBuyer(s.handleJobStatus))
 		mux.HandleFunc("GET /v1/agent/balance", s.withAgent(s.handleAgentBalance))
-		mux.HandleFunc("GET /v1/jobs/{job}/bids", s.withAgent(s.handleListBids))
-		mux.HandleFunc("POST /v1/jobs/{job}/award", s.withAgent(s.handleAwardBid))
-		mux.HandleFunc("GET /v1/jobs/{job}/receipt", s.withAgent(s.handleJobReceipt))
+		mux.HandleFunc("GET /v1/jobs/{job}/bids", s.withBuyer(s.handleListBids))
+		mux.HandleFunc("POST /v1/jobs/{job}/award", s.withBuyer(s.handleAwardBid))
+		mux.HandleFunc("GET /v1/jobs/{job}/receipt", s.withBuyer(s.handleJobReceipt))
 		s.registerReview(mux)
 		s.registerQuote(mux)
 		s.registerProjects(mux)
@@ -452,8 +460,8 @@ func (s *Server) Handler() *http.ServeMux {
 			s.registerACP(mux)
 		}
 		s.registerBook(mux)
-		mux.HandleFunc("GET /v1/jobs/{job}/evidence", s.withAgent(s.handleJobEvidence))
-		mux.HandleFunc("GET /v1/jobs/{job}/evidence/{sha}", s.withAgent(s.handleEvidenceFile))
+		mux.HandleFunc("GET /v1/jobs/{job}/evidence", s.withBuyer(s.handleJobEvidence))
+		mux.HandleFunc("GET /v1/jobs/{job}/evidence/{sha}", s.withBuyer(s.handleEvidenceFile))
 		// Funding and withdrawal are things a person does from the console with
 		// their session, as well as things an agent does with its key. The
 		// console has always sent the session token here; withAgent only ever
@@ -489,7 +497,7 @@ func (s *Server) Handler() *http.ServeMux {
 	// One route, two credentials. A person's own key signs; their agent
 	// presents a key that person issued. Registering it twice — once per
 	// scheme — panics the mux at boot, which is how this was found.
-	mux.HandleFunc("POST /v1/tasks", s.postJob(node))
+	mux.HandleFunc("POST /v1/tasks", s.postJobAsAnyone(node))
 
 	mux.HandleFunc("GET /", s.handleIndex)
 	return mux
@@ -541,6 +549,7 @@ func (s *Server) acceptEvidence(sub api.Submission) (api.Submission, error) {
 	}
 	verified, err := s.Verify(sub, s.blobFor)
 	if err != nil {
+		s.notifyRejected(sub, err.Error(), true)
 		return sub, err
 	}
 	s.mu.Lock()
@@ -720,6 +729,61 @@ func (s *Server) postJob(node *api.Server) http.HandlerFunc {
 	}
 }
 
+// postJobAsAnyone adds the third credential: a signed-in person.
+//
+// A buyer could sign in, add funds and issue keys from the console, and then
+// could not post a job from it — the route took an agent key or a signed
+// principal, and a browser session is neither. The person's account is the
+// buyer; there is no key, so no key limits apply, and the funding check in
+// handleCreateTask still does.
+//
+// Order matters. An agent key first, because it carries limits the person
+// chose. Then the session, which must be Verified: an enrolled device key is
+// not an identity. Anything else falls through to the signed-principal path
+// exactly as before, with the body handed back untouched.
+func (s *Server) postJobAsAnyone(node *api.Server) http.HandlerFunc {
+	signed := s.postJob(node)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Lamdis-Key") != "" || s.Workers == nil {
+			signed(w, r)
+			return
+		}
+		bearer := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !bearer && r.Header.Get("X-Lamdis-Principal") == "" {
+			signed(w, r)
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "could not read the request")
+			return
+		}
+		worker, err := s.Workers.Authenticate(r, body, s.now())
+		if err == nil && worker.Verified {
+			s.handleCreateTask(w, r, worker.ID, body)
+			return
+		}
+		if bearer {
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]any{
+					"error": "sign in to post a job", "signin": "/signin",
+				})
+				return
+			}
+			writeError(w, http.StatusForbidden,
+				"verify your account before posting work; an unverified account "+
+					"cannot be charged for it")
+			return
+		}
+		// A signed principal that is not a verified person: the integration
+		// path, unchanged.
+		r.Body = io.NopCloser(strings.NewReader(string(body)))
+		signed(w, r)
+	}
+}
+
 // handleJobReceipt returns the signed record of a finished job.
 //
 // This is the artefact the whole system exists to produce: what was asked, what
@@ -860,6 +924,7 @@ func (s *Server) handleAwardBid(w http.ResponseWriter, r *http.Request, key *acc
 	// The request is settled either way, so it stops counting against what
 	// this buyer may ask for elsewhere.
 	s.Reservations.Release(job)
+	s.notifyAwarded(l, won.Worker, won.AmountMinor, won.Currency)
 
 	writeJSONResponse(w, map[string]any{
 		"job": job, "awarded_to": won.Worker,

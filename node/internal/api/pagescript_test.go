@@ -29,6 +29,7 @@ func TestPagesDefineEverythingTheyCall(t *testing.T) {
 		"consolePageHTML": consolePageHTML,
 		"workPageHTML":    workPageHTML,
 		"signInPageHTML":  signInPageHTML,
+		"jobPage":         jobPage(&Listing{Job: "j-1", Title: "a job"}),
 	}
 	for name, page := range pages {
 		t.Run(name, func(t *testing.T) {

@@ -1,8 +1,15 @@
 package api
 
-// consolePageHTML is where an operator finds out where they stand: what they
-// have earned, what is holding it up, what they have agreed to take, and the
-// credentials a fleet or business uses to take work over the API.
+// consolePageHTML is where a person finds out where they stand with the
+// exchange — on whichever side of it they are.
+//
+// Two audiences read this page. An operator wants to know what they have
+// earned, what is holding it up, what they have agreed to take, and how a
+// fleet or business takes work over the API. A buyer wants to know what their
+// money is doing, what their agents bought, what came back, and — now — how to
+// post a job themselves without an agent in between. One rail serving both
+// meant a buyer navigated by anchors about capacity and payouts that had
+// nothing to do with them, so the page has a mode switch and a rail per side.
 //
 // Everything here is wired to a real endpoint. A settings page whose controls
 // do not reach the dispatcher is worse than no settings page, because the
@@ -85,6 +92,94 @@ textarea:focus-visible, .amt-in:focus-visible { outline: 2px solid var(--gold);
 .reveal .k { display: block; margin: .35rem 0; font: 600 .9rem/1.4 var(--mono);
   color: var(--gold); word-break: break-all; }
 .reveal p { margin: 0; font-size: .78rem; color: var(--ink-3); }
+
+/* The mode switch. Two audiences, one page: the switch decides which rail and
+   which sections are on screen, and remembers the answer. */
+.modes { display: inline-flex; gap: .2rem; margin: 0 0 1.1rem; padding: .2rem;
+  border: 1px solid var(--rule-2); border-radius: 3px; background: var(--panel); }
+.mode { appearance: none; border: 0; background: none; color: var(--ink-3);
+  font: 600 .84rem/1 var(--sans); padding: .5rem .95rem; border-radius: 2px; cursor: pointer; }
+.mode[aria-selected="true"] { background: var(--panel-2); color: var(--ink); }
+.mode:hover { color: var(--ink); }
+.mode:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.mode-grp { display: contents; }
+
+/* Forms. The post-a-job form is the first real form on the console, so the
+   field styles live here rather than in the theme. */
+.field { margin: 0 0 .85rem; }
+.field label { display: block; font: 600 .8rem/1.3 var(--sans); margin-bottom: .3rem; }
+.field .hint { font-size: .76rem; color: var(--ink-3); margin-top: .25rem; }
+.field input[type=text], .field input[type=number], .field input[type=date],
+.field input[type=month], .field select, .field textarea {
+  width: 100%; padding: .55rem .65rem; border: 1px solid var(--rule-2); border-radius: 3px;
+  background: var(--panel); color: var(--ink); font-size: .9rem; }
+.field select { appearance: auto; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--gold); }
+.two { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr; }
+.three { display: grid; gap: .8rem; grid-template-columns: 1fr 1fr 1fr; }
+.seg { display: inline-flex; gap: .35rem; flex-wrap: wrap; }
+.seg .kind { font-size: .84rem; padding: .4rem .75rem; }
+.fund { margin: .6rem 0 .9rem; padding: .65rem .8rem; border: 1px solid var(--rule);
+  border-left: 2px solid var(--green); background: var(--panel); font-size: .84rem;
+  color: var(--ink-2); border-radius: 0 3px 3px 0; }
+.fund.short { border-left-color: var(--warn); }
+.fund b { color: var(--ink); }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; }
+table.stmt { width: 100%; border-collapse: collapse; font-size: .84rem; }
+table.stmt th, table.stmt td { padding: .5rem .6rem; border-bottom: 1px solid var(--rule);
+  text-align: left; white-space: nowrap; }
+table.stmt th { font: 600 .62rem/1 var(--mono); letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3); }
+table.stmt td.n, table.stmt th.n { text-align: right; font-family: var(--mono);
+  font-variant-numeric: tabular-nums; }
+table.stmt tr.tot td { border-top: 1px solid var(--rule-2); font-weight: 600; }
+table.stmt tr:last-child td { border-bottom: 0; }
+
+/* The receipt and the evidence behind it, read in the page rather than as
+   JSON in a tab that a browser session could not even open. */
+.jx { margin-top: .5rem; }
+.receipt { border: 1px solid var(--rule); border-radius: 3px; padding: .9rem 1rem;
+  margin-top: .6rem; background: var(--panel); font-size: .86rem; }
+.receipt h4 { margin: .9rem 0 .35rem; font: 600 .64rem/1 var(--sans);
+  text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); }
+.receipt h4:first-child { margin-top: 0; }
+.receipt ul { margin: 0; padding-left: 1.1rem; color: var(--ink-2); }
+.receipt li { margin-bottom: .25rem; }
+.receipt .ceil { font: 600 1.5rem/1 var(--mono); color: var(--gold); }
+.receipt .fn { margin-top: .3rem; }
+.receipt details { margin-top: .8rem; }
+.receipt summary { cursor: pointer; font-size: .8rem; color: var(--ink-3); }
+.receipt pre { margin: .5rem 0 0; padding: .6rem .7rem; background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 3px; overflow-x: auto;
+  font: 500 .72rem/1.5 var(--mono); color: var(--ink-2); white-space: pre-wrap;
+  word-break: break-all; }
+.ev { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
+.ev figure { margin: 0; width: 13rem; }
+.ev img, .ev video { display: block; width: 100%; border: 1px solid var(--rule-2);
+  border-radius: 3px; background: var(--panel); }
+.ev figcaption { font: 500 .68rem/1.4 var(--mono); color: var(--ink-3);
+  margin-top: .25rem; word-break: break-all; }
+.ev figcaption b { color: var(--ink-2); font-weight: 500; }
+.ev .flag { color: var(--warn); }
+.bid { display: flex; gap: .8rem; align-items: flex-start; padding: .6rem 0;
+  border-top: 1px solid var(--rule); font-size: .85rem; }
+.bid .amt { margin-left: auto; font: 600 .95rem/1 var(--mono); color: var(--gold); white-space: nowrap; }
+.acts { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+/* Supplier profile: licences are rows, because a business has several. */
+.lic { display: grid; grid-template-columns: 1.3fr 1fr .6fr 1fr auto; gap: .4rem;
+  margin-bottom: .4rem; align-items: center; }
+.lic input, .lic select { width: 100%; padding: .45rem .5rem; border: 1px solid var(--rule-2);
+  border-radius: 3px; background: var(--panel); color: var(--ink); font-size: .84rem; }
+.lic .chip { margin: 0; }
+.member { display: flex; align-items: center; gap: .6rem; padding: .45rem 0;
+  border-top: 1px solid var(--rule); font: 500 .82rem/1 var(--mono); }
+.member span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.refs { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+.refs img { width: 4.5rem; height: 3.4rem; object-fit: cover; border: 1px solid var(--rule-2);
+  border-radius: 3px; }
+.attn { margin: .5rem 0 0; padding-left: 1.1rem; font-size: .82rem; color: var(--warn); }
 </style>
 
 <header class="top">
@@ -95,18 +190,40 @@ textarea:focus-visible, .amt-in:focus-visible { outline: 2px solid var(--gold);
 </header>
 <div class="shell">
   <nav class="rail">
-    <span class="label grp">Work</span>
-    <a href="/board">Queue</a>
-    <a href="/board#holding">In flight</a>
-    <span class="label grp">Operation</span>
-    <a href="/console" aria-current="page">Earnings</a>
-    <a href="#capacity">Capacity</a>
-    <a href="#larger">Larger jobs</a>
-    <a href="#integration">Integration</a>
+    <div class="mode-grp" id="rail-operator">
+      <span class="label grp">Work</span>
+      <a href="/board">Queue</a>
+      <a href="/board#holding">In flight</a>
+      <span class="label grp">Operation</span>
+      <a href="#earnings">Earnings</a>
+      <a href="#payout">Payouts</a>
+      <a href="#capacity">Capacity</a>
+      <a href="#supplier">Business</a>
+      <a href="#statement">Statement</a>
+      <a href="#alerts">Alerts</a>
+      <a href="#larger">Larger jobs</a>
+      <a href="#integration">Dispatch</a>
+    </div>
+    <div class="mode-grp" id="rail-buyer">
+      <span class="label grp">Buying</span>
+      <a href="#spending">Spending</a>
+      <a href="#post">Post a job</a>
+      <a href="#keys">Agent keys</a>
+      <a href="#alerts-buyer">Alerts</a>
+    </div>
+    <div class="mode-grp">
+      <span class="label grp">About</span>
+      <a href="/how-it-works">How this works</a>
+      <a href="/docs">API</a>
+    </div>
   </nav>
   <main class="main">
+    <div class="modes" role="tablist" aria-label="Which side of the exchange">
+      <button class="mode" role="tab" id="mode-operator" aria-selected="false">Operator</button>
+      <button class="mode" role="tab" id="mode-buyer" aria-selected="false">Buyer</button>
+    </div>
     <h1>Your account</h1>
-    <p class="lead">What you have earned, what you will take, and how your agents
+    <p class="lead" id="lead">What you have earned, what you will take, and how your agents
       connect.</p>
     <div id="body"><div class="empty">Loading&hellip;</div></div>
   </main>
@@ -130,12 +247,114 @@ function when(iso) {
   var d = new Date(iso);
   return isNaN(d) ? "" : d.toLocaleDateString(undefined, {month: "short", day: "numeric"});
 }
+// Dollars typed into a field, as minor units. Anything unreadable is zero.
+function minorOf(id) {
+  var el = document.getElementById(id);
+  var v = el ? parseFloat(el.value) : 0;
+  return v > 0 ? Math.round(v * 100) : 0;
+}
+// A date input's value from a server timestamp. Go serialises an unset time as
+// the year one, which is not a date anybody set.
+function dateOf(iso) {
+  if (!iso || iso.indexOf("0001-") === 0) { return ""; }
+  return String(iso).slice(0, 10);
+}
+function val(id) {
+  var el = document.getElementById(id);
+  return el ? el.value.trim() : "";
+}
 
-var ME = null, CAP = null, KEYS = [];
+// api sends one authenticated request and hands back what came back, parsed
+// when it is JSON. A 401 is a session that has ended, not an error to print.
+function api(method, path, body, rawType) {
+  return workerHeaders(method, path).then(function (h) {
+    var opts = {method: method, headers: h};
+    if (body != null) {
+      if (rawType) { h["Content-Type"] = rawType; opts.body = body; }
+      else { h["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+    }
+    return fetch(path, opts);
+  }).then(function (r) {
+    if (handleAuthFailure(r.status)) { throw new Error("signed out"); }
+    return r.text().then(function (t) {
+      var j = null;
+      try { j = t ? JSON.parse(t) : null; } catch (e) {}
+      return {ok: r.ok, status: r.status, body: j, text: t};
+    });
+  });
+}
+function errorOf(res, fallback) {
+  return (res.body && res.body.error) || fallback;
+}
+
+var ME = null, CAP = null, KEYS = [], NEW_KEY = "";
+var SUP = null, STMT = null, ALERTS = null, PAYOUT = null;
+var MODE = "both";
 
 function metric(label, value, cls, trend) {
   return '<div class="metric ' + (cls || "") + '"><dt>' + label + '</dt><dd>' + value + '</dd>' +
     (trend ? '<div class="trend">' + trend + '</div>' : '') + '</div>';
+}
+
+// --- mode --------------------------------------------------------------------
+//
+// Remembered once chosen. Before that, the account's own activity decides:
+// somebody whose money has bought things is a buyer; somebody who has earned
+// or bid is an operator; a fresh account sees both sides and a sentence
+// explaining the difference.
+
+function loadMode() {
+  try {
+    var m = localStorage.getItem("lamdis.console.mode");
+    if (m === "operator" || m === "buyer") { return m; }
+  } catch (e) {}
+  return "";
+}
+function defaultMode() {
+  var stored = loadMode();
+  if (stored) { return stored; }
+  var buying = !!(SPEND && (((SPEND.jobs || []).length > 0) || SPEND.committed_minor > 0));
+  var operating = !!(ME && (ME.earned_minor > 0 || ME.pending_minor > 0 ||
+    (ME.history || []).length > 0 || (ME.bids || []).length > 0));
+  if (operating) { return "operator"; }
+  if (buying) { return "buyer"; }
+  return "both";
+}
+function setMode(m) {
+  MODE = m;
+  try { localStorage.setItem("lamdis.console.mode", m); } catch (e) {}
+  applyMode();
+}
+function applyMode() {
+  ["operator", "buyer"].forEach(function (k) {
+    var on = MODE === k || MODE === "both";
+    var sec = document.getElementById("sec-" + k);
+    if (sec) { sec.hidden = !on; }
+    document.getElementById("rail-" + k).hidden = !on;
+    document.getElementById("mode-" + k).setAttribute("aria-selected", MODE === k ? "true" : "false");
+  });
+  var ex = document.getElementById("explain-both");
+  if (ex) { ex.hidden = MODE !== "both"; }
+  document.getElementById("lead").textContent =
+    MODE === "operator" ? "What you have earned, what you will take, and how work reaches you." :
+    MODE === "buyer"    ? "What your money is doing, what came back, and the keys that spend it." :
+    "One account, two sides. Operators take work and are paid for it; buyers post work and pay for it.";
+}
+function explainer() {
+  return '<div class="note-box" id="explain-both" hidden><b>Nothing has happened on this ' +
+    'account yet.</b> If you are here to do work and be paid, you are an operator. If you ' +
+    'are here to have something checked or done in the world, you are a buyer. Pick one ' +
+    'above &mdash; you can switch any time &mdash; or read both below.</div>';
+}
+// A link from another page can name a section in the other mode. Switch to it
+// rather than scrolling to something hidden.
+function jumpToHash() {
+  var id = location.hash ? location.hash.slice(1) : "";
+  var el = id ? document.getElementById(id) : null;
+  if (!el) { return; }
+  var sec = el.closest ? el.closest("section") : null;
+  if (sec && sec.hidden) { setMode(sec.id === "sec-buyer" ? "buyer" : "operator"); }
+  el.scrollIntoView();
 }
 
 // The most useful sentence on the page is why the money has not arrived.
@@ -143,13 +362,8 @@ function blockedStrip() {
   if (!ME.blocked) { return ""; }
   return '<div class="strip warn"><span class="d"></span><span>' +
     esc(ME.blocked) + '</span>' +
-    (ME.can_connect_payout
-      ? '<button class="btn sm" id="pay-connect" style="margin-left:auto">' +
-        (ME.payout && ME.payout.connected ? "Finish setup" : "Set up payouts") +
-        '</button>'
-      : "") +
-    '</div>' +
-    '<div class="err" id="pay-err"></div>';
+    (ME.can_connect_payout ? '<a href="#payout" style="margin-left:auto">Payouts &rarr;</a>' : "") +
+    '</div>';
 }
 
 // Opening the rail's hosted onboarding.
@@ -160,7 +374,7 @@ function blockedStrip() {
 function connectPayout(btn) {
   var host = document.getElementById("pay-err");
   btn.disabled = true;
-  btn.textContent = "Setting up\u2026";
+  btn.textContent = "Setting up…";
 
   // A staged panel rather than a spinner.
   //
@@ -190,7 +404,7 @@ function connectPayout(btn) {
     // Only claims that stay true however long it takes.
     if (s >= 20) {
       step.textContent = "Still waiting on Stripe";
-      note.textContent = "Longer than usual. Nothing is lost \u2014 leaving this " +
+      note.textContent = "Longer than usual. Nothing is lost — leaving this " +
         "page and trying again later is safe.";
     } else if (s >= 8) {
       step.textContent = "Preparing your verification link";
@@ -209,7 +423,7 @@ function connectPayout(btn) {
     }
     stop();
     var step = document.getElementById("pay-step");
-    if (step) { step.textContent = "Taking you to Stripe\u2026"; }
+    if (step) { step.textContent = "Taking you to Stripe…"; }
     location.href = res.body.url;
   }).catch(function (e) {
     stop();
@@ -277,7 +491,7 @@ function earnings() {
       '</span></div>';
   }
 
-  return blockedStrip() + taxNote +
+  return '<h2 id="earnings">Earnings</h2>' + blockedStrip() + taxNote +
     '<dl class="metrics">' +
       metric("Waiting to be paid", money(ME.pending_minor, cur), "money") +
       metric("Paid out", money(ME.paid_minor, cur)) +
@@ -288,15 +502,69 @@ function earnings() {
       ? '<div class="ctl" style="margin:0 0 1rem">' +
           '<button class="btn" id="cash-now">Send what I am owed now</button>' +
           '<span class="why" style="margin:0">Below the threshold the ' +
-            'provider\u2019s transfer fee comes out of it \u2014 your call, not ours.' +
+            'provider’s transfer fee comes out of it — your call, not ours.' +
           '</span></div><div class="err" id="cash-err"></div>'
       : "") +
-    '<dl class="metrics" hidden>' +
-    '</dl>' +
     (bids ? '<h2>Offers you have out</h2><div class="rows">' + bids + '</div>' : "") +
     '<h2>What you have done</h2>' +
     (rows ? '<div class="rows">' + rows + '</div>'
           : '<div class="empty">Nothing yet. <a href="/board">Find work</a>.</div>');
+}
+
+// Where the money goes, and whether it can yet. Read from /v1/payout rather
+// than inferred from the earnings figures, because "connected" and "able to
+// receive money" differ for days while the provider runs its checks.
+function payoutPanel() {
+  var p = PAYOUT || {};
+  var st = p.payout || ME.payout || {};
+  var cur = p.currency || ME.currency || "USD";
+  var threshold = p.threshold_minor || ME.payout_threshold || 2000;
+  var owed = p.owed_minor || ME.pending_minor || 0;
+  var clear = p.clear_minor != null ? p.clear_minor : ME.clear_minor;
+  var state, chip;
+  if (st.unavailable) {
+    state = "Payouts are not switched on for this exchange yet. Earnings are recorded " +
+      "and will be sent once they are."; chip = "";
+  } else if (!st.connected) {
+    state = "No payout account yet. Setting one up takes about two minutes on the " +
+      "payment provider’s own pages; we never see your bank details."; chip = "warn";
+  } else if (!st.ready) {
+    state = "Account created. The provider is still checking it" +
+      ((st.needs || []).length ? " and needs " + esc(st.needs.join(", ")) : "") + "."; chip = "warn";
+  } else {
+    state = "Connected and able to receive money."; chip = "ok";
+  }
+  var next;
+  if (st.unavailable || !st.ready) { next = "once the account above can receive money"; }
+  else if ((clear || 0) >= threshold) { next = "on the next automatic run"; }
+  else { next = "when what is clear to send reaches " + money(threshold, cur); }
+
+  var waiting = (p.waiting || []).map(function (h) {
+    return '<div class="r"><div class="grow"><div class="t">' + esc(h.job) + '</div>' +
+      '<div class="m">' + esc(h.status) +
+      (h.clears ? ' &middot; clears ' + esc(when(h.clears)) : '') +
+      (h.reason ? ' &middot; ' + esc(h.reason) : '') + '</div></div>' +
+      '<span class="amt">' + money(h.amount_minor, cur) + '</span></div>';
+  }).join("");
+
+  return '<h2 id="payout">Payouts</h2>' +
+    '<div class="strip' + (chip === "warn" ? " warn" : "") + '"><span class="d"></span>' +
+      '<span><span class="chip ' + chip + '">' +
+        (st.unavailable ? "off" : st.ready ? "connected" : st.connected ? "checking" : "not set up") +
+      '</span>' + state + '</span>' +
+      (ME.can_connect_payout
+        ? '<button class="btn sm" id="pay-connect" style="margin-left:auto">' +
+          (st.connected ? "Finish setup" : "Set up payouts") + '</button>'
+        : "") +
+    '</div><div class="err" id="pay-err"></div>' +
+    '<dl class="metrics">' +
+      metric("Owed to you", money(owed, cur), "money") +
+      metric("Clear to send", money(clear || 0, cur), "money", "past the buyer’s review window") +
+      metric("Threshold", money(threshold, cur), "", "sent once reached") +
+      metric("Next payout", "&mdash;", "", next) +
+    '</dl>' +
+    (waiting ? '<h3 style="margin:0 0 .5rem;font-size:.92rem">Still waiting</h3>' +
+      '<div class="rows">' + waiting + '</div>' : "");
 }
 
 var KINDS = [["observe", "Checks"], ["do", "Errands & jobs"], ["review", "Verification"]];
@@ -449,7 +717,7 @@ function capacity() {
             'your licences and cover.'
           : 'Your ceiling is ' + (CAP.ceiling || 1) + ' for now. It rises as you ' +
             'finish work, and rises a lot once a reviewer has checked a ' +
-            '<a href="/console#supplier">supplier profile</a> \u2014 a business ' +
+            '<a href="#supplier">business profile</a> — a business ' +
             'with crews should not be throttled like a stranger.') +
       '</p>' +
     '</div>' +
@@ -471,7 +739,7 @@ function capacity() {
         (c.lat_e7 ? "Update" : "Set") + '</button></div>' +
       '<div class="toggle"><div>' +
         '<div class="tx">Auto-accept</div>' +
-        '<div class="sx">Take matching work without asking. Needs an endpoint below.</div>' +
+        '<div class="sx">Take matching work without asking. Needs a <a href="#integration">dispatch endpoint</a>.</div>' +
       '</div><button class="sw" id="c-auto" aria-pressed="' + !!c.auto_accept + '" aria-label="Auto-accept"></button></div>' +
     '</div>' +
 
@@ -505,7 +773,348 @@ function capacity() {
   '<div class="err" id="cap-err"></div>';
 }
 
-function integration() {
+// --- supplier ----------------------------------------------------------------
+//
+// A business describing itself: what it is called, what it is licensed to do,
+// what cover it carries, and who works for it. Claims, until a person at the
+// exchange checks them — which is deliberately not a button on this page.
+
+function licenceRow(l) {
+  l = l || {};
+  var opts = SKILLS.slice().sort(function (a, b) {
+    return (b.licensed ? 1 : 0) - (a.licensed ? 1 : 0);
+  }).map(function (k) {
+    return '<option value="' + esc(k.skill) + '"' + (k.skill === l.skill ? " selected" : "") + '>' +
+      esc(k.label) + (k.licensed ? "" : " (no licence)") + '</option>';
+  }).join("");
+  return '<div class="lic">' +
+    (opts ? '<select class="l-skill" aria-label="Trade">' + opts + '</select>'
+          : '<input type="text" class="l-skill" placeholder="trade" value="' + esc(l.skill || "") + '">') +
+    '<input type="text" class="l-num" placeholder="Licence number" value="' + esc(l.number || "") + '">' +
+    '<input type="text" class="l-state" placeholder="State" maxlength="2" value="' + esc(l.state || "") + '">' +
+    '<input type="date" class="l-exp" aria-label="Expires" value="' + esc(dateOf(l.expires)) + '">' +
+    '<span>' + (l.verified ? '<span class="chip ok">checked</span>' : '') +
+      '<button class="btn sm l-del" type="button" aria-label="Remove licence">&times;</button></span>' +
+  '</div>';
+}
+
+function supplier() {
+  var d = SUP || {}, sup = d.supplier || null, ins = (sup && sup.insurance) || {};
+  var lics = (sup && sup.licences || []).map(licenceRow).join("");
+  var members = (sup && sup.members || []).map(function (m) {
+    return '<div class="member"><span>' + esc(m) + '</span>' +
+      '<button class="btn sm" data-member-del="' + esc(m) + '">Remove</button></div>';
+  }).join("");
+  var attention = (d.attention || []).map(function (a) { return '<li>' + esc(a) + '</li>'; }).join("");
+  var mail = "mailto:support@lamdis.ai?subject=" +
+    encodeURIComponent("Vetting request: " + ((sup && (sup.legal_name || sup.trading_name)) || ME.worker));
+
+  return '<h2 id="supplier">Business</h2>' +
+  '<p class="lead">If you work as a company, say so here. Buyers see the name, the checked ' +
+    'licences and the cover; your crews claim against the company’s ceiling rather ' +
+    'than each starting as a stranger.</p>' +
+  (sup && sup.vetted
+    ? '<div class="strip"><span class="d"></span><span><span class="chip ok">vetted</span>' +
+      'A reviewer has checked this business' + (sup.vetted_at ? ' (' + esc(when(sup.vetted_at)) + ')' : '') +
+      '. You can hold up to <b>' + esc(d.ceiling) + '</b> jobs at once.</span></div>'
+    : '<div class="note-box"><b>Vetting is done by a person, not a button.</b> Fill this in, ' +
+      'then <a href="' + mail + '">write to support@lamdis.ai</a> with the job id of ' +
+      'something you have finished here. A reviewer checks the licence numbers against ' +
+      'the issuing register and the cover with the carrier, and raises your ceiling from ' +
+      esc(d.ceiling || 1) + ' toward ' + esc(d.vetted_ceiling || "the vetted maximum") +
+      '. Changing a licence or policy afterwards clears its check.</div>') +
+  (attention ? '<ul class="attn">' + attention + '</ul>' : '') +
+  '<div class="panes" style="margin-top:1rem">' +
+    '<div class="pane">' +
+      '<h3>Who you are</h3>' +
+      '<div class="field"><label for="s-kind">Working as</label>' +
+        '<select id="s-kind">' +
+          '<option value="individual"' + (!sup || sup.kind !== "company" ? " selected" : "") + '>An individual</option>' +
+          '<option value="company"' + (sup && sup.kind === "company" ? " selected" : "") + '>A company</option>' +
+        '</select></div>' +
+      '<div class="field"><label for="s-legal">Registered name</label>' +
+        '<input type="text" id="s-legal" maxlength="120" value="' + esc(sup && sup.legal_name) + '">' +
+        '<div class="hint">Required for a company. Passed to the payment provider as-is.</div></div>' +
+      '<div class="field"><label for="s-trading">Trading as</label>' +
+        '<input type="text" id="s-trading" maxlength="120" value="' + esc(sup && sup.trading_name) + '">' +
+        '<div class="hint">Only if it differs. This is what buyers see.</div></div>' +
+      '<h3 style="margin-top:.6rem">Insurance</h3>' +
+      '<div class="two">' +
+        '<div class="field"><label for="s-carrier">Carrier</label>' +
+          '<input type="text" id="s-carrier" value="' + esc(ins.carrier) + '"></div>' +
+        '<div class="field"><label for="s-policy">Policy number</label>' +
+          '<input type="text" id="s-policy" value="' + esc(ins.policy_number) + '"></div>' +
+        '<div class="field"><label for="s-cover">Cover, $</label>' +
+          '<input type="number" id="s-cover" min="0" step="1000" value="' +
+            (ins.coverage_minor ? Math.round(ins.coverage_minor / 100) : "") + '"></div>' +
+        '<div class="field"><label for="s-ins-exp">Expires</label>' +
+          '<input type="date" id="s-ins-exp" value="' + esc(dateOf(ins.expires)) + '"></div>' +
+      '</div>' +
+      (ins.carrier ? '<p class="why">' + (ins.verified ? '<span class="chip ok">checked</span>' :
+        '<span class="chip">not checked yet</span>') + '</p>' : '') +
+    '</div>' +
+    '<div class="pane">' +
+      '<h3>Licences</h3>' +
+      '<p class="why">One row per credential, with the number a reviewer can look up.</p>' +
+      '<div id="lic-list">' + lics + '</div>' +
+      '<button class="btn sm" id="lic-add" type="button">Add a licence</button>' +
+      '<div style="margin-top:1rem"><button class="btn go" id="s-save">Save profile</button></div>' +
+      '<div class="err" id="s-err"></div>' +
+    '</div>' +
+    '<div class="pane">' +
+      '<h3>Crew</h3>' +
+      '<p class="why">People who take work on the company’s behalf. Their claims count ' +
+        'against the company’s ceiling and their earnings are attributed to it.</p>' +
+      (members || '<div class="why" style="color:var(--ink-3)">Nobody yet.</div>') +
+      '<div class="ctl" style="margin-top:.8rem;gap:.5rem">' +
+        '<input type="text" id="m-add" placeholder="Their account id, e.g. cognito:&hellip;" style="flex:1">' +
+        '<button class="btn sm" id="m-add-btn">Add</button></div>' +
+      '<div class="hint" style="font-size:.76rem;color:var(--ink-3)">They can read their ' +
+        'account id at the top of their own console.</div>' +
+      '<div class="err" id="m-err"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+function saveSupplier() {
+  var btn = document.getElementById("s-save"), err = document.getElementById("s-err");
+  var lics = [];
+  document.querySelectorAll("#lic-list .lic").forEach(function (row) {
+    var skill = row.querySelector(".l-skill").value.trim();
+    var num = row.querySelector(".l-num").value.trim();
+    if (!skill && !num) { return; }
+    var l = {skill: skill, number: num, state: row.querySelector(".l-state").value.trim()};
+    var exp = row.querySelector(".l-exp").value;
+    if (exp) { l.expires = exp + "T00:00:00Z"; }
+    lics.push(l);
+  });
+  var body = {
+    kind: val("s-kind") || "individual",
+    legal_name: val("s-legal"), trading_name: val("s-trading"),
+    licences: lics
+  };
+  if (val("s-carrier") || val("s-policy")) {
+    body.insurance = {
+      carrier: val("s-carrier"), policy_number: val("s-policy"),
+      coverage_minor: minorOf("s-cover"), currency: "USD"
+    };
+    if (val("s-ins-exp")) { body.insurance.expires = val("s-ins-exp") + "T00:00:00Z"; }
+  }
+  btn.disabled = true; err.className = "err"; err.textContent = "";
+  api("PUT", "/v1/supplier", body).then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not save that")); }
+    err.className = "err ok";
+    err.textContent = res.body.note || "Saved.";
+    return refreshSupplier();
+  }).catch(function (e) { err.textContent = e.message; })
+    .then(function () { btn.disabled = false; });
+}
+
+function refreshSupplier() {
+  return api("GET", "/v1/supplier").then(function (res) {
+    if (res.ok) { SUP = res.body; }
+    var host = document.getElementById("supplier-wrap");
+    if (host) { host.innerHTML = supplier(); wireSupplier(); }
+  }).catch(function () {});
+}
+
+function wireSupplier() {
+  var add = document.getElementById("lic-add");
+  if (add) {
+    add.addEventListener("click", function () {
+      document.getElementById("lic-list").insertAdjacentHTML("beforeend", licenceRow(null));
+      wireLicenceRows();
+    });
+  }
+  wireLicenceRows();
+  var save = document.getElementById("s-save");
+  if (save) { save.addEventListener("click", saveSupplier); }
+  var madd = document.getElementById("m-add-btn");
+  if (madd) {
+    madd.addEventListener("click", function () {
+      var who = val("m-add"), err = document.getElementById("m-err");
+      if (!who) { document.getElementById("m-add").focus(); return; }
+      api("POST", "/v1/supplier/members", {person: who}).then(function (res) {
+        if (!res.ok) { throw new Error(errorOf(res, "could not add them")); }
+        return refreshSupplier();
+      }).catch(function (e) { err.textContent = e.message; });
+    });
+  }
+  document.querySelectorAll("[data-member-del]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var err = document.getElementById("m-err");
+      b.disabled = true;
+      api("DELETE", "/v1/supplier/members/" + encodeURIComponent(b.dataset.memberDel))
+        .then(function (res) {
+          if (!res.ok) { throw new Error(errorOf(res, "could not remove them")); }
+          return refreshSupplier();
+        }).catch(function (e) { err.textContent = e.message; b.disabled = false; });
+    });
+  });
+}
+function wireLicenceRows() {
+  document.querySelectorAll("#lic-list .l-del").forEach(function (b) {
+    if (b.dataset.wired) { return; }
+    b.dataset.wired = "1";
+    b.addEventListener("click", function () { b.closest(".lic").remove(); });
+  });
+}
+
+// --- statement ---------------------------------------------------------------
+//
+// The record a business gives its bookkeeper. Fetched with the session, so it
+// is rendered here rather than linked: a bare link to /v1/statement carries no
+// credential and answers 401.
+
+function monthOf(iso) { return String(iso || "").slice(0, 7); }
+
+function statement() {
+  var st = STMT || {}, lines = st.lines || [], t = st.totals || {};
+  var cur = t.currency || "USD";
+  var month = monthOf(st.from) || new Date().toISOString().slice(0, 7);
+  var rows = lines.map(function (l) {
+    return '<tr><td>' + esc(when(l.done)) + '</td>' +
+      '<td>' + esc(l.title) + '<div class="m" style="font:.7rem var(--mono);color:var(--ink-3)">' +
+        esc(l.job) + (l.reference ? ' &middot; ' + esc(l.reference) : '') +
+        (l.site ? ' &middot; ' + esc(l.site) : '') + '</div></td>' +
+      '<td>' + esc(l.by || "") + '</td>' +
+      '<td class="n">' + money(l.gross_minor, cur) + '</td>' +
+      '<td class="n">' + money(-l.fee_minor, cur) + '</td>' +
+      '<td class="n">' + (l.expense_minor ? money(l.expense_minor, cur) : '&mdash;') + '</td>' +
+      '<td class="n">' + money(l.net_minor, cur) + '</td></tr>';
+  }).join("");
+  var q = "?from=" + esc(st.from || "") + "&to=" + esc(st.to || "");
+  return '<h2 id="statement">Statement</h2>' +
+  '<p class="lead">What you earned, job by job, in a form a bookkeeper can reconcile ' +
+    'against the bank. The totals are checked against the ledger and it says if they disagree.</p>' +
+  '<div class="ctl" style="gap:.6rem;flex-wrap:wrap">' +
+    '<input type="month" id="stmt-month" value="' + esc(month) + '" aria-label="Month" class="amt-in" style="width:auto">' +
+    '<button class="btn sm" id="stmt-csv">Download CSV</button>' +
+    '<button class="btn sm" id="stmt-json">Show JSON</button>' +
+    '<span class="why" style="margin:0;font-size:.76rem;color:var(--ink-3)">' +
+      '<code>GET /v1/statement' + q + '</code> &middot; <code>GET /v1/statement.csv' + q + '</code>, signed with your session</span>' +
+  '</div>' +
+  (st.reconciles === false
+    ? '<div class="strip warn"><span class="d"></span><span>' + esc(st.reconciliation_note) + '</span></div>'
+    : '') +
+  (lines.length
+    ? '<div class="tablewrap"><table class="stmt"><thead><tr>' +
+        '<th>Date</th><th>Job</th><th>By</th><th class="n">Gross</th><th class="n">Fee</th>' +
+        '<th class="n">Expenses</th><th class="n">Net</th></tr></thead><tbody>' + rows +
+        '<tr class="tot"><td colspan="3">' + esc(t.jobs) + ' job' + (t.jobs === 1 ? '' : 's') + '</td>' +
+        '<td class="n">' + money(t.gross_minor, cur) + '</td>' +
+        '<td class="n">' + money(-(t.fee_minor || 0), cur) + '</td>' +
+        '<td class="n">' + money(t.expense_minor || 0, cur) + '</td>' +
+        '<td class="n">' + money(t.net_minor, cur) + '</td></tr>' +
+      '</tbody></table></div>'
+    : '<div class="empty">Nothing earned in ' + esc(month) + '.</div>') +
+  '<div class="err" id="stmt-err"></div>' +
+  '<pre class="api" id="stmt-raw" hidden>' + esc(JSON.stringify(st, null, 2)) + '</pre>';
+}
+
+function loadStatement(month) {
+  var y = parseInt(month.slice(0, 4), 10), m = parseInt(month.slice(5, 7), 10);
+  if (!(y > 0 && m > 0)) { return; }
+  var last = new Date(y, m, 0).getDate();
+  var path = "/v1/statement?from=" + month + "-01&to=" + month + "-" + String(last).padStart(2, "0");
+  api("GET", path).then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not load the statement")); }
+    STMT = res.body;
+    var host = document.getElementById("statement-wrap");
+    if (host) { host.innerHTML = statement(); wireStatement(); }
+  }).catch(function (e) {
+    var err = document.getElementById("stmt-err");
+    if (err) { err.textContent = e.message; }
+  });
+}
+
+// The browser cannot follow a link with a bearer token on it, so the file is
+// fetched with the session and handed to the download manager from here.
+function downloadCSV() {
+  var path = (STMT && STMT.csv) || "/v1/statement.csv";
+  var err = document.getElementById("stmt-err");
+  workerHeaders("GET", path).then(function (h) {
+    return fetch(path, {headers: h});
+  }).then(function (r) {
+    if (handleAuthFailure(r.status)) { return null; }
+    if (!r.ok) { throw new Error("could not fetch the CSV"); }
+    return r.blob();
+  }).then(function (b) {
+    if (!b) { return; }
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = "lamdis-" + (monthOf(STMT && STMT.from) || "statement") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }).catch(function (e) { err.textContent = e.message; });
+}
+
+function wireStatement() {
+  var m = document.getElementById("stmt-month");
+  if (m) { m.addEventListener("change", function () { loadStatement(this.value); }); }
+  var csv = document.getElementById("stmt-csv");
+  if (csv) { csv.addEventListener("click", downloadCSV); }
+  var raw = document.getElementById("stmt-json");
+  if (raw) {
+    raw.addEventListener("click", function () {
+      var pre = document.getElementById("stmt-raw");
+      pre.hidden = !pre.hidden;
+      raw.textContent = pre.hidden ? "Show JSON" : "Hide JSON";
+    });
+  }
+}
+
+// --- alerts ------------------------------------------------------------------
+
+function alertsOperator() {
+  var a = ALERTS || {};
+  return '<h2 id="alerts">Alerts</h2>' +
+  '<div class="panes"><div class="pane">' +
+    '<div class="toggle" style="border-top:0;padding-top:0"><div>' +
+      '<div class="tx">Email me when work appears that I could take</div>' +
+      '<div class="sx">' + esc(a.note || "At most once every few hours, and only for jobs inside your capacity settings.") + '</div>' +
+    '</div><button class="sw" id="al-work" aria-pressed="' + !!a.alerts_on + '" aria-label="Email me about new work"></button></div>' +
+    (a.available === false
+      ? '<p class="why" style="margin:.5rem 0 0">This exchange has no email configured yet, so nothing ' +
+        'is sent. Your choice is kept and takes effect once it does.</p>'
+      : '') +
+    (!ME.verified ? '<p class="why" style="margin:.5rem 0 0">Alerts need a verified account with an email address.</p>' : '') +
+    '<div class="err" id="al-err"></div>' +
+  '</div></div>';
+}
+
+function alertsBuyer() {
+  var a = ALERTS || {};
+  return '<h2 id="alerts-buyer">Alerts</h2>' +
+  '<div class="panes"><div class="pane">' +
+    '<div class="toggle" style="border-top:0;padding-top:0"><div>' +
+      '<div class="tx">Email me when a job of mine is not being taken</div>' +
+      '<div class="sx">Sent once, when a job has sat unfilled for a third of its life, with the ' +
+        'reason and what you could change. Goes to the address on your account; ' +
+        'it is always on and cannot be switched off here yet.</div>' +
+    '</div><span class="chip ' + (a.available === false ? '' : 'ok') + '">' +
+      (a.available === false ? 'email not configured' : 'on') + '</span></div>' +
+  '</div></div>';
+}
+
+function setAlerts(on) {
+  var err = document.getElementById("al-err");
+  api("PUT", "/v1/alerts?on=" + (on ? "true" : "false")).then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not save that")); }
+    ALERTS = ALERTS || {};
+    ALERTS.alerts_on = !!res.body.alerts_on;
+    err.className = "err ok"; err.textContent = on ? "You will be told." : "Off.";
+  }).catch(function (e) {
+    err.className = "err"; err.textContent = e.message;
+    var sw = document.getElementById("al-work");
+    if (sw) { sw.setAttribute("aria-pressed", String(!on)); }
+  });
+}
+
+// --- integration -------------------------------------------------------------
+
+function keysPane() {
   var rows = KEYS.length ? KEYS.map(function (k) {
     return '<div class="r"><div class="grow">' +
       '<div class="t"><span class="chip ' + (k.revoked ? "bad" : "ok") + '">' +
@@ -515,13 +1124,13 @@ function integration() {
       '</div>' +
       (k.revoked ? '' : '<button class="btn sm" data-revoke="' + esc(k.id) + '">Revoke</button>') +
     '</div>';
-  }).join("") : '<div class="empty">No keys yet. Issue one so an agent can dispatch on your behalf.</div>';
+  }).join("") : '<div class="empty">No keys yet. Issue one so an agent can buy on your behalf.</div>';
 
-  return '<h2 id="integration">Integration</h2>' +
-  '<p class="lead">Give an agent a key and it can post jobs, or take dispatch, on your ' +
-    'behalf &mdash; inside limits you set here, enforced by us.</p>' +
+  return '<h2 id="keys">Agent keys</h2>' +
+  '<p class="lead">Give an agent a key and it can post jobs from your balance &mdash; inside ' +
+    'limits you set here, enforced by us. Your account id is <code>' + esc(ME.worker) + '</code>.</p>' +
   '<div class="rows">' + rows + '</div>' +
-  '<div id="new-key"></div>' +
+  '<div id="new-key">' + NEW_KEY + '</div>' +
   '<div class="panes" style="margin-top:1.2rem">' +
     '<div class="pane">' +
       '<h3>Issue a key</h3>' +
@@ -536,90 +1145,129 @@ function integration() {
       '<div class="err" id="k-err"></div>' +
     '</div>' +
     '<div class="pane">' +
-      '<h3>Dispatch endpoint</h3>' +
-      '<p class="why">For fleets and businesses that take work over the API. We post ' +
-        'offers here; reply 202 to accept.</p>' +
-      '<input type="text" id="c-hook" placeholder="https://your.host/lamdis/dispatch" ' +
-        'value="' + esc((CAP.capacity && CAP.capacity.webhook) || "") + '">' +
-      '<p class="why" style="margin:.6rem 0 0">HTTPS only. Auto-accept stays off until ' +
-        'this is set.</p>' +
-      ((CAP.capacity && CAP.capacity.webhook_secret)
-        ? '<h3 style="margin-top:1rem">Signing secret</h3>' +
-          '<p class="why">Every offer carries <code>X-Lamdis-Signature</code>, an ' +
-            'HMAC-SHA256 over the timestamp, a newline, and the body. Check it before ' +
-            'acting on an offer &mdash; anyone can POST to your endpoint.</p>' +
-          '<code class="secret">' + esc(CAP.capacity.webhook_secret) + '</code>'
-        : "") +
+      '<h3>What a key can do</h3>' +
+      '<p class="why">Post jobs, read their status, evidence and receipts, and accept ' +
+        'offers &mdash; all against your balance, never above the per-job cap. It cannot ' +
+        'add funds, issue other keys, or take work. Full reference in ' +
+        '<a href="/docs">the docs</a>.</p>' +
     '</div>' +
   '</div>';
 }
 
+function dispatchPane() {
+  return '<h2 id="integration">Dispatch</h2>' +
+  '<p class="lead">For fleets and businesses that take work over the API rather than from ' +
+    'the board.</p>' +
+  '<div class="panes">' +
+    '<div class="pane">' +
+      '<h3>Dispatch endpoint</h3>' +
+      '<p class="why">We post offers here; reply 202 to accept.</p>' +
+      '<input type="text" id="c-hook" placeholder="https://your.host/lamdis/dispatch" ' +
+        'value="' + esc((CAP.capacity && CAP.capacity.webhook) || "") + '">' +
+      '<p class="why" style="margin:.6rem 0 0">HTTPS only. Auto-accept stays off until ' +
+        'this is set.</p>' +
+    '</div>' +
+    '<div class="pane">' +
+      ((CAP.capacity && CAP.capacity.webhook_secret)
+        ? '<h3>Signing secret</h3>' +
+          '<p class="why">Every offer carries <code>X-Lamdis-Signature</code>, an ' +
+            'HMAC-SHA256 over the timestamp, a newline, and the body. Check it before ' +
+            'acting on an offer &mdash; anyone can POST to your endpoint.</p>' +
+          '<code class="secret">' + esc(CAP.capacity.webhook_secret) + '</code>'
+        : '<h3>Signing secret</h3><p class="why">Issued once an endpoint is set.</p>') +
+    '</div>' +
+  '</div>';
+}
+
+// --- spending ----------------------------------------------------------------
+
+function spendRow(j, cur) {
+  var review = j.review || {};
+  var waiting = review.awaiting_release_minor;
+  var chip = waiting ? "hot"
+           : (j.status === "done" ? "ok"
+           : (j.status.indexOf("refunding") > -1 ? "bad" : ""));
+  var bidding = j.status === "collecting offers";
+  return '<div class="r" style="align-items:flex-start"><div class="grow">' +
+    '<div class="t"><span class="chip ' + chip + '">' +
+      (waiting ? "needs you" : esc(j.status)) + '</span>' +
+      esc(j.title) + '</div>' +
+    '<div class="m">' + esc(when(j.posted)) +
+      (j.where ? ' &middot; ' + esc(j.where) : '') +
+      (j.worker ? ' &middot; taken by ' + esc(j.worker) +
+        (j.worker_completed ? ' (' + j.worker_completed + ' done here)' : ' (first job here)') : '') +
+      (j.supplier && (j.supplier.trading_name || j.supplier.legal_name)
+        ? ' of ' + esc(j.supplier.trading_name || j.supplier.legal_name) : '') +
+      (j.stages_total
+        ? ' &middot; ' + j.stages_done + '/' + j.stages_total + ' stages'
+        : (j.submissions ? ' &middot; ' + j.submissions + ' submitted' : '')) +
+      (j.agent ? ' &middot; via key ' + esc(j.agent) : '') +
+      ' &middot; <a href="/j/' + encodeURIComponent(j.job) + '">public page</a>' +
+    '</div>' +
+    '<div class="acts" style="margin-top:.45rem">' +
+      (j.evidence ? '<button class="btn sm" data-evidence="' + esc(j.job) + '">See what came back</button>' : '') +
+      (j.receipt ? '<button class="btn sm" data-receipt="' + esc(j.job) + '">Receipt</button>' : '') +
+      (bidding ? '<button class="btn sm" data-bids="' + esc(j.job) + '">See offers</button>' : '') +
+      '<button class="btn sm" data-status="' + esc(j.job) + '">Status</button>' +
+    '</div>' +
+    (waiting
+      ? '<div class="m" style="margin-top:.45rem">' +
+          money(waiting, cur) + ' goes to them ' +
+          (review.hours_left > 1
+            ? 'in about ' + Math.round(review.hours_left) + ' hours'
+            : 'shortly') +
+          ' unless you say otherwise.' +
+        '</div>' +
+        '<div class="acts" style="margin-top:.45rem">' +
+          '<button class="btn sm" data-release="' + esc(j.job) + '">Looks good, pay now</button>' +
+          '<button class="btn sm" data-hold="' + esc(j.job) + '">Something is wrong</button>' +
+        '</div><div class="err" id="rv-' + esc(j.job) + '"></div>'
+      : (review.held_minor
+          ? '<div class="m" style="margin-top:.35rem">' +
+              money(review.held_minor, cur) + ' is on hold while this is looked at.</div>'
+          : "")) +
+    '<div class="jx" id="jx-' + esc(j.job) + '"></div>' +
+    '</div>' +
+    '<span class="amt">' + money(j.committed_minor, cur) + '</span></div>';
+}
+
 function spending() {
-  if (!SPEND) { return ""; }
-  var cur = SPEND.currency || "USD";
-  var jobs = SPEND.jobs || [];
-
-  var rows = jobs.map(function (j) {
-    var review = j.review || {};
-    var waiting = review.awaiting_release_minor;
-    var chip = waiting ? "hot"
-             : (j.status === "done" ? "ok"
-             : (j.status.indexOf("refunding") > -1 ? "bad" : ""));
-    return '<div class="r"><div class="grow">' +
-      '<div class="t"><span class="chip ' + chip + '">' +
-        (waiting ? "needs you" : esc(j.status)) + '</span>' +
-        esc(j.title) + '</div>' +
-      '<div class="m">' + esc(when(j.posted)) +
-        (j.where ? ' &middot; ' + esc(j.where) : '') +
-        (j.worker ? ' &middot; taken by ' + esc(j.worker) +
-          (j.worker_completed ? ' (' + j.worker_completed + ' done here)' : ' (first job here)') : '') +
-        (j.stages_total
-          ? ' &middot; ' + j.stages_done + '/' + j.stages_total + ' stages'
-          : (j.submissions ? ' &middot; ' + j.submissions + ' submitted' : '')) +
-        (j.evidence ? ' &middot; <a href="' + esc(j.evidence) + '">see what came back</a>' : '') +
-      '</div>' +
-      (waiting
-        ? '<div class="m" style="margin-top:.35rem">' +
-            money(waiting, cur) + ' goes to them ' +
-            (review.hours_left > 1
-              ? 'in about ' + Math.round(review.hours_left) + ' hours'
-              : 'shortly') +
-            ' unless you say otherwise.' +
-          '</div>' +
-          '<div class="acts" style="margin-top:.45rem">' +
-            '<button class="btn sm" data-release="' + esc(j.job) + '">Looks good, pay now</button>' +
-            '<button class="btn sm" data-hold="' + esc(j.job) + '">Something is wrong</button>' +
-          '</div><div class="err" id="rv-' + esc(j.job) + '"></div>'
-        : (review.held_minor
-            ? '<div class="m" style="margin-top:.35rem">' +
-                money(review.held_minor, cur) + ' is on hold while this is looked at.</div>'
-            : "")) +
-      '</div>' +
-      '<span class="amt">' + money(j.committed_minor, cur) + '</span></div>';
-  }).join("");
-
-  var need = SPEND.awaiting_review || 0;
+  var sp = SPEND || {jobs: []};
+  var cur = sp.currency || "USD";
+  var jobs = sp.jobs || [];
+  var rows = jobs.map(function (j) { return spendRow(j, cur); }).join("");
+  var need = sp.awaiting_review || 0;
   return '<h2 id="spending">Spending</h2>' +
     (need
       ? '<div class="strip warn"><span class="d"></span><span>' + need +
         (need === 1 ? ' job is' : ' jobs are') + ' finished and waiting on you. ' +
         'Payment goes out when the review window closes.</span></div>'
       : "") +
-    '<p class="lead">What your agents bought with your balance. Every job here was ' +
-      'posted by a key you issued.</p>' +
+    '<p class="lead">What has been bought with your balance, by you from ' +
+      '<a href="#post">the form below</a> or by an agent holding one of your keys.</p>' +
     '<dl class="metrics">' +
-      metric("Balance", money(SPEND.balance_minor || 0, cur), "money") +
-      metric("Held for open jobs", money(SPEND.held_minor || 0, cur), "money",
+      metric("Balance", money(sp.balance_minor || 0, cur), "money") +
+      metric("Held for open jobs", money(sp.held_minor || 0, cur), "money",
              "returned if nobody takes them") +
-      metric("Committed all time", money(SPEND.committed_minor || 0, cur), "money") +
+      metric("Committed all time", money(sp.committed_minor || 0, cur), "money") +
     '</dl>' +
-    '<div class="ctl" style="margin:.2rem 0 1rem;gap:.5rem">' +
+    '<div class="ctl" style="margin:.2rem 0 .3rem;gap:.5rem">' +
       '<span class="cur">$</span>' +
       '<input type="number" id="topup-amt" value="50" min="1" step="1" ' +
         'aria-label="Amount to add" class="amt-in">' +
       '<button class="btn go" id="s-topup">Add funds</button></div>' +
+    '<div class="err" id="topup-err"></div>' +
     (rows ? '<div class="rows">' + rows + '</div>'
-          : '<div class="empty">Your agents have not bought anything yet.</div>');
+          : '<div class="empty">Nothing bought yet. <a href="#post">Post a job</a>.</div>');
+}
+
+function refreshSpending() {
+  return api("GET", "/v1/spend").then(function (res) {
+    if (res.ok) { SPEND = res.body; }
+    var host = document.getElementById("spending-wrap");
+    if (host) { host.innerHTML = spending(); wireSpending(); }
+    fundingNote();
+  }).catch(function () {});
 }
 
 // Adding funds happens on the provider's hosted page: the exchange never sees
@@ -630,9 +1278,9 @@ function addFunds(btn) {
   var minor = Math.round(parseFloat(field.value) * 100);
   if (!(minor > 0)) { field.focus(); return; }
   btn.disabled = true;
-  btn.textContent = "Opening\u2026";
+  btn.textContent = "Opening…";
   var slow = setTimeout(function () {
-    btn.textContent = "Reaching Stripe\u2026";
+    btn.textContent = "Reaching Stripe…";
   }, 1200);
   workerHeaders("POST", "/v1/balance/topup").then(function (h) {
     h["Content-Type"] = "application/json";
@@ -652,8 +1300,8 @@ function addFunds(btn) {
     btn.textContent = "Add funds";
     // Shown in the page rather than an alert: a modal steals focus and says
     // nothing about where the failure was.
-    var host = document.getElementById("pay-err");
-    if (host) { host.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+    var host = document.getElementById("topup-err");
+    if (host) { host.textContent = e.message; }
   });
 }
 
@@ -671,14 +1319,583 @@ function reviewAction(job, action, reason) {
     return r.json().then(function (j) { return {ok: r.ok, body: j}; });
   }).then(function (res) {
     if (!res.ok) { throw new Error(res.body && res.body.error || "could not do that"); }
-    load();
+    refreshSpending();
   }).catch(function (e) { err.textContent = e.message; });
 }
 
+// What the receipt says, rendered rather than dumped: what was established,
+// what was not, how sure anybody may be and why that number.
+function showReceipt(job) {
+  var host = document.getElementById("jx-" + job);
+  host.innerHTML = '<div class="empty" style="padding:1rem">Fetching the receipt…</div>';
+  api("GET", "/v1/jobs/" + encodeURIComponent(job) + "/receipt").then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "no receipt yet")); }
+    var r = res.body, v = r.verification || {};
+    var li = function (s) { return '<li>' + esc(s) + '</li>'; };
+    var ev = (r.evidence || []).map(function (e) {
+      var files = (e.files || []).map(function (f) {
+        return '<li>' + esc(f.kind || "file") + ' <span style="font-family:var(--mono)">' +
+          esc(String(f.sha256 || "").slice(0, 12)) + '</span>' +
+          (f.challenge_found_in ? ' &middot; code seen in ' + esc(f.challenge_found_in) : '') +
+          (f.lat != null ? ' &middot; ' + esc(f.lat.toFixed(5)) + ', ' + esc(f.lon.toFixed(5)) : '') +
+          (f.transcript ? '<div class="fn">“' + esc(f.transcript) + '”</div>' : '') + '</li>';
+      }).join("");
+      return '<li><span class="chip ' + (e.accepted ? "ok" : "bad") + '">' +
+        (e.accepted ? "accepted" : "not accepted") + '</span>' + esc(when(e.at)) +
+        (e.attested_by ? ' &middot; attested by ' + esc(e.attested_by) : '') +
+        (e.why ? '<div class="fn">' + esc(e.why) + '</div>' : '') +
+        (files ? '<ul style="margin-top:.3rem">' + files + '</ul>' : '') + '</li>';
+    }).join("");
+    host.innerHTML = '<div class="receipt">' +
+      '<div><span class="chip ' + (r.accepted ? "ok" : "warn") + '">' +
+        (r.accepted ? "accepted" : "not accepted") + '</span><b>' + esc(r.predicate) + '</b>' +
+        ' <span style="color:var(--ink-3)">&middot; ' + esc(r.kind) +
+        (r.reference ? ' &middot; ref ' + esc(r.reference) : '') +
+        (r.site ? ' &middot; site ' + esc(r.site) : '') + '</span></div>' +
+      '<h4>How sure anyone can be</h4>' +
+      '<div class="ceil">' + esc(v.confidence_ceiling != null ? v.confidence_ceiling : "—") + '</div>' +
+      '<div class="fn">' + esc(v.ceiling_because || "") +
+        (v.tier_requested ? ' &middot; you asked for ' + esc(v.tier_requested) : '') + '</div>' +
+      '<h4>What was established</h4>' +
+      ((v.established || []).length ? '<ul>' + v.established.map(li).join("") + '</ul>'
+        : '<div class="fn">Nothing yet.</div>') +
+      '<h4>What was not</h4>' +
+      ((v.limits || []).length ? '<ul>' + v.limits.map(li).join("") + '</ul>' : '<div class="fn">&mdash;</div>') +
+      (v.site_mark
+        ? '<div class="fn">Property mark “' + esc(v.site_mark.text) + '” ' +
+          (v.site_mark.seen ? 'was legible in the evidence' : 'was not legible in the evidence') +
+          (v.site_mark.inferred ? ' (inferred from the address)' : '') + '.</div>'
+        : '') +
+      '<h4>Evidence</h4>' + (ev ? '<ul>' + ev + '</ul>' : '<div class="fn">Nothing submitted.</div>') +
+      (r.escrow_remaining_minor != null
+        ? '<h4>Money</h4><div class="fn">' + money(r.escrow_remaining_minor, "USD") + ' still in escrow for this job.</div>'
+        : '') +
+      '<h4>Signed</h4><div class="fn">by ' + esc(r.issued_by) + ' at ' + esc(r.issued_at) +
+        '<br>signature ' + esc(String(r.signature || "").slice(0, 24)) + '…</div>' +
+      '<details><summary>Raw receipt, as signed</summary><pre>' +
+        esc(JSON.stringify(r, null, 2)) + '</pre></details>' +
+      '<div style="margin-top:.7rem"><button class="btn sm" data-close="' + esc(job) + '">Close</button></div>' +
+    '</div>';
+    wireClose(host);
+  }).catch(function (e) { host.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+}
+
+// The files themselves. Images and video are fetched with the session and
+// shown inline; a bare <img src> cannot carry a bearer token.
+function showEvidence(job) {
+  var host = document.getElementById("jx-" + job);
+  host.innerHTML = '<div class="empty" style="padding:1rem">Fetching what came back…</div>';
+  api("GET", "/v1/jobs/" + encodeURIComponent(job) + "/evidence").then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not load the evidence")); }
+    var files = res.body.files || [];
+    if (!files.length) {
+      host.innerHTML = '<div class="fn">Nothing has come back yet.</div>';
+      return;
+    }
+    host.innerHTML = '<div class="ev">' + files.map(function (f, i) {
+      var flags = [];
+      if (f.looks_generated) { flags.push("scores as generated"); }
+      if (f.looks_like_a_screen_or_print) { flags.push("looks like a screen or print"); }
+      if (f.text_aimed_at_the_checker) { flags.push("contains text aimed at the checker"); }
+      return '<figure id="ev-' + i + '"><div class="slot"></div><figcaption>' +
+        '<b>' + esc(f.kind || f.mime) + '</b> &middot; <span class="chip ' + (f.verified ? "ok" : "") + '">' +
+          (f.verified ? "accepted" : "submitted") + '</span><br>' +
+        esc(when(f.captured_at || f.at)) +
+        (f.lat != null ? ' &middot; ' + esc(f.lat.toFixed(4)) + ', ' + esc(f.lon.toFixed(4)) : '') +
+        (f.challenge_seen ? '<br>code seen in ' + esc(f.challenge_seen) : '') +
+        (flags.length ? '<br><span class="flag">' + esc(flags.join("; ")) + '</span>' : '') +
+        (f.transcript ? '<br>“' + esc(f.transcript) + '”' : '') +
+        '<br>' + esc(String(f.sha256 || "").slice(0, 16)) + '</figcaption></figure>';
+    }).join("") + '</div>' +
+    '<div style="margin-top:.6rem"><button class="btn sm" data-close="' + esc(job) + '">Close</button></div>';
+    wireClose(host);
+    files.forEach(function (f, i) {
+      var slot = host.querySelector("#ev-" + i + " .slot");
+      var mime = f.mime || "";
+      if (mime.indexOf("image/") !== 0 && mime.indexOf("video/") !== 0) {
+        slot.innerHTML = '<div class="fn">' + esc(mime || "file") + ', ' + esc(f.bytes) + ' bytes</div>';
+        return;
+      }
+      var path = "/v1/jobs/" + encodeURIComponent(job) + "/evidence/" + encodeURIComponent(f.sha256);
+      workerHeaders("GET", path).then(function (h) {
+        return fetch(path, {headers: h});
+      }).then(function (r) {
+        if (!r.ok) { throw new Error(r.status === 410 ? "no longer stored; the hash and verdict remain" : "unavailable"); }
+        return r.blob();
+      }).then(function (b) {
+        var url = URL.createObjectURL(b);
+        slot.innerHTML = mime.indexOf("video/") === 0
+          ? '<video controls playsinline></video>'
+          : '<img alt="">';
+        slot.firstChild.src = url;
+      }).catch(function (e) {
+        slot.innerHTML = '<div class="fn">' + esc(e.message) + '</div>';
+      });
+    });
+  }).catch(function (e) { host.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+}
+
+function showStatus(job) {
+  var host = document.getElementById("jx-" + job);
+  host.innerHTML = '<div class="empty" style="padding:1rem">Fetching…</div>';
+  api("GET", "/v1/jobs/" + encodeURIComponent(job)).then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not read the job")); }
+    var s = res.body;
+    var results = (s.results || []).map(function (r) {
+      return '<li><span class="chip ' + (r.verified ? "ok" : "") + '">' + (r.verified ? "accepted" : "checked") +
+        '</span>' + esc(when(r.at)) + ' &middot; ' + esc(r.files) + ' file' + (r.files === 1 ? '' : 's') +
+        (r.why ? ' &middot; ' + esc(r.why) : '') + '</li>';
+    }).join("");
+    host.innerHTML = '<div class="receipt">' +
+      '<div><b>' + esc(s.predicate) + '</b> <span style="color:var(--ink-3)">&middot; ' + esc(s.kind) + '</span></div>' +
+      '<div class="fn">' + esc(s.taken || 0) + ' of ' + esc(s.slots || 1) + ' seat' + (s.slots === 1 ? '' : 's') + ' taken &middot; ' +
+        esc(s.submissions || 0) + ' submitted &middot; expires ' + esc(when(s.expires)) +
+        (s.escrow_minor != null ? ' &middot; ' + money(s.escrow_minor, "USD") + ' in escrow' : '') + '</div>' +
+      (results ? '<h4>Results</h4><ul>' + results + '</ul>' : '') +
+      '<div class="fn"><code>GET /v1/jobs/' + esc(job) + '</code> &middot; <a href="/j/' + encodeURIComponent(job) + '">public page</a></div>' +
+      '<div style="margin-top:.7rem"><button class="btn sm" data-close="' + esc(job) + '">Close</button></div>' +
+    '</div>';
+    wireClose(host);
+  }).catch(function (e) { host.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+}
+
+// The sealed offers on an open job, and the button that accepts one. Escrow
+// happens at that moment, so the funding note applies here as much as at
+// posting.
+function showBids(job) {
+  var host = document.getElementById("jx-" + job);
+  host.innerHTML = '<div class="empty" style="padding:1rem">Fetching offers…</div>';
+  api("GET", "/v1/jobs/" + encodeURIComponent(job) + "/bids").then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not read the offers")); }
+    var b = res.body, bids = b.bids || [];
+    host.innerHTML = '<div class="receipt">' +
+      '<div class="fn">Ceiling ' + money(b.ceiling_minor, "USD") + ' &middot; offers close ' + esc(when(b.closes)) +
+        (b.awarded ? ' &middot; awarded' : '') + '</div>' +
+      (bids.length ? bids.map(function (x) {
+        var asm = (x.assumptions || []).map(function (a) {
+          return '<div class="fn">' + esc(a.question || a.about || "") + ': ' + esc(a.answer || a.assumes || "") + '</div>';
+        }).join("");
+        return '<div class="bid"><div><b>' + esc(String(x.worker || "").slice(0, 8)) + '</b>' +
+          (x.note ? '<div class="fn">' + esc(x.note) + '</div>' : '') + asm +
+          (x.available_from && dateOf(x.available_from) ? '<div class="fn">from ' + esc(when(x.available_from)) + '</div>' : '') +
+          '</div><span class="amt">' + money(x.amount_minor, x.currency) + '</span>' +
+          (b.awarded ? '' : '<button class="btn sm go" data-award="' + esc(x.id) + '">Accept</button>') + '</div>';
+      }).join("") : '<div class="fn" style="margin-top:.5rem">No offers yet.</div>') +
+      '<div class="err" id="bid-err-' + esc(job) + '"></div>' +
+      '<div style="margin-top:.7rem"><button class="btn sm" data-close="' + esc(job) + '">Close</button></div>' +
+    '</div>';
+    wireClose(host);
+    host.querySelectorAll("[data-award]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        btn.disabled = true;
+        api("POST", "/v1/jobs/" + encodeURIComponent(job) + "/award", {bid: btn.dataset.award}).then(function (r2) {
+          if (!r2.ok) { throw new Error(errorOf(r2, "could not accept that")); }
+          refreshSpending();
+        }).catch(function (e) {
+          document.getElementById("bid-err-" + job).textContent = e.message;
+          btn.disabled = false;
+        });
+      });
+    });
+  }).catch(function (e) { host.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+}
+
+function wireClose(host) {
+  host.querySelectorAll("[data-close]").forEach(function (b) {
+    b.addEventListener("click", function () { host.innerHTML = ""; });
+  });
+}
+
+function wireSpending() {
+  document.querySelectorAll("[data-release]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      reviewAction(this.dataset.release, "release", null);
+    });
+  });
+  document.querySelectorAll("[data-hold]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var job = this.dataset.hold;
+      var host = document.getElementById("rv-" + job);
+      host.innerHTML =
+        '<label class="ask" for="hw-' + job + '">What is wrong? A person reads this.</label>' +
+        '<textarea id="hw-' + job + '" rows="2" placeholder="The gutter is still full at the north end."></textarea>' +
+        '<div class="ask-acts">' +
+          '<button class="btn go" id="hs-' + job + '">Hold payment</button>' +
+          '<button class="btn" id="hc-' + job + '">Cancel</button>' +
+        '</div>';
+      document.getElementById("hw-" + job).focus();
+      document.getElementById("hc-" + job).onclick = function () { host.innerHTML = ""; };
+      document.getElementById("hs-" + job).onclick = function () {
+        var why = document.getElementById("hw-" + job).value.trim();
+        if (!why) { document.getElementById("hw-" + job).focus(); return; }
+        reviewAction(job, "hold", why);
+      };
+    });
+  });
+  document.querySelectorAll("[data-evidence]").forEach(function (b) {
+    b.addEventListener("click", function () { showEvidence(b.dataset.evidence); });
+  });
+  document.querySelectorAll("[data-receipt]").forEach(function (b) {
+    b.addEventListener("click", function () { showReceipt(b.dataset.receipt); });
+  });
+  document.querySelectorAll("[data-bids]").forEach(function (b) {
+    b.addEventListener("click", function () { showBids(b.dataset.bids); });
+  });
+  document.querySelectorAll("[data-status]").forEach(function (b) {
+    b.addEventListener("click", function () { showStatus(b.dataset.status); });
+  });
+  var st = document.getElementById("s-topup");
+  if (st) { st.addEventListener("click", function () { addFunds(this); }); }
+}
+
+// --- post a job --------------------------------------------------------------
+//
+// The buyer's own hand on the board. Until this existed a person could sign
+// in, add funds and issue keys, and then had to hand the actual buying to an
+// agent or to curl. The form speaks the board's language: what should be true,
+// what to do about it, what proof looks like, where, and what it pays.
+
+var PKIND = "do", PPRICING = "fixed";
+
+function postForm() {
+  return '<h2 id="post">Post a job</h2>' +
+  '<p class="lead">Ask somebody to find out whether something is true, or to make it true. ' +
+    'The money is held when you post and paid when the proof is accepted; if nobody takes ' +
+    'it, it comes back.</p>' +
+  (!ME.verified
+    ? '<div class="strip warn"><span class="d"></span><span>Posting needs a verified account. ' +
+      '<a href="/signin">Sign in with your email</a> to verify.</span></div>'
+    : '') +
+  '<div class="panes">' +
+    '<div class="pane">' +
+      '<h3>What</h3>' +
+      '<div class="field"><label>Kind</label><div class="seg">' +
+        '<button class="kind" data-pkind="observe" aria-pressed="' + (PKIND === "observe") + '">Find out</button>' +
+        '<button class="kind" data-pkind="do" aria-pressed="' + (PKIND === "do") + '">Make it true</button>' +
+      '</div><div class="hint" id="p-kind-hint"></div></div>' +
+      '<div class="field"><label for="p-pred">What should be true</label>' +
+        '<textarea id="p-pred" rows="2" placeholder="The gutters on the north side are clear."></textarea>' +
+        '<div class="hint">Shown on the open board. Keep the street address out of it.</div></div>' +
+      '<div class="field" id="p-instr-f"><label for="p-instr">What to do</label>' +
+        '<textarea id="p-instr" rows="3" placeholder="Ladder is in the garage; side gate code 4471. Clear both runs and the downpipe."></textarea>' +
+        '<div class="hint">Only the person who takes the job sees this.</div></div>' +
+      '<div class="field"><label for="p-deliv">What proof looks like</label>' +
+        '<input type="text" id="p-deliv" placeholder="A photo along each gutter run, from the ladder, after.">' +
+        '<div class="hint">This is what the evidence is checked against, and what a hold has to be about.</div></div>' +
+      '<div class="field"><label for="p-refs">Reference photos</label>' +
+        '<input type="file" id="p-refs" accept="image/*" multiple>' +
+        '<div class="hint">Up to six: the site, the access, the number on the door. Published with the job so people can price it.</div>' +
+        '<div class="refs" id="p-refs-preview"></div></div>' +
+    '</div>' +
+    '<div class="pane">' +
+      '<h3>Where</h3>' +
+      '<div class="field"><label for="p-where">Address</label>' +
+        '<input type="text" id="p-where" placeholder="812 Marlow Street, Dearborn MI">' +
+        '<div class="hint">Reaches the person who takes it, never the board. The board sees the area below.</div></div>' +
+      '<div class="field"><label for="p-area">Area shown on the board</label>' +
+        '<input type="text" id="p-area" placeholder="Dearborn, MI"></div>' +
+      '<div class="three">' +
+        '<div class="field"><label for="p-lat">Latitude</label><input type="number" id="p-lat" step="any" placeholder="42.3314"></div>' +
+        '<div class="field"><label for="p-lon">Longitude</label><input type="number" id="p-lon" step="any" placeholder="-83.0458"></div>' +
+        '<div class="field"><label for="p-radius">Radius, m</label><input type="number" id="p-radius" min="10" step="10" value="150"></div>' +
+      '</div>' +
+      '<div class="ctl" style="gap:.5rem"><button class="btn sm" id="p-locate">Use my location</button>' +
+        '<span class="why" style="margin:0;font-size:.76rem;color:var(--ink-3)" id="p-loc-note">Photos are checked against this spot.</span></div>' +
+      '<h3 style="margin-top:.8rem">When</h3>' +
+      '<div class="field"><label for="p-ttl">Open for, hours</label>' +
+        '<input type="number" id="p-ttl" min="1" max="720" value="24">' +
+        '<div class="hint">After this the job expires and the money comes back.</div></div>' +
+    '</div>' +
+    '<div class="pane">' +
+      '<h3>Pay</h3>' +
+      '<div class="field"><label>Pricing</label><div class="seg">' +
+        '<button class="kind" data-ppricing="fixed" aria-pressed="' + (PPRICING === "fixed") + '">Fixed price</button>' +
+        '<button class="kind" data-ppricing="bids" aria-pressed="' + (PPRICING === "bids") + '">Take bids</button>' +
+      '</div></div>' +
+      '<div class="two">' +
+        '<div class="field" id="p-fee-f"><label for="p-fee">Pay on completion, $</label>' +
+          '<input type="number" id="p-fee" min="1" step="1" placeholder="60"></div>' +
+        '<div class="field" id="p-max-f" hidden><label for="p-max">Most you will pay, $</label>' +
+          '<input type="number" id="p-max" min="1" step="1" placeholder="400">' +
+          '<div class="hint">Nothing is held until you accept an offer, but you must have this available.</div></div>' +
+        '<div class="field" id="p-close-f" hidden><label for="p-close">Offers close in, hours</label>' +
+          '<input type="number" id="p-close" min="1" max="168" value="24"></div>' +
+        '<div class="field" id="p-attempt-f"><label for="p-attempt">Wasted trip, $</label>' +
+          '<input type="number" id="p-attempt" min="0" step="1" placeholder="0">' +
+          '<div class="hint">Paid for a documented failed attempt: locked gate, nobody home.</div></div>' +
+        '<div class="field"><label for="p-expense">Expense cap, $</label>' +
+          '<input type="number" id="p-expense" min="0" step="1" placeholder="0">' +
+          '<div class="hint">Most they may lay out and reclaim against a receipt.</div></div>' +
+      '</div>' +
+      '<div class="fund" id="p-fund"></div>' +
+      '<div class="acts">' +
+        '<button class="btn" id="p-quote">Check feasibility</button>' +
+        '<button class="btn go" id="p-post"' + (ME.verified ? '' : ' disabled') + '>Post this job</button>' +
+      '</div>' +
+      '<div id="p-quote-out"></div>' +
+      '<div class="err" id="p-err"></div>' +
+      '<div id="p-out"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+// What posting will hold, against what the balance can cover. Recomputed on
+// every keystroke so the shortfall is known before the button is pressed
+// rather than as a 402 after it.
+function fundingNote() {
+  var out = document.getElementById("p-fund");
+  if (!out) { return; }
+  var sp = SPEND || {};
+  var balance = sp.balance_minor || 0, held = sp.held_minor || 0;
+  var avail = balance - held;
+  var need, sentence;
+  if (PPRICING === "bids") {
+    need = minorOf("p-max");
+    sentence = "Asking for bids up to <b>" + money(need) + "</b> holds nothing yet, but you need " +
+      "that much available to ask.";
+  } else {
+    var per = minorOf("p-fee"), attempt = minorOf("p-attempt");
+    if (attempt > per) { per = attempt; }
+    need = per + minorOf("p-expense");
+    sentence = "Posting holds <b>" + money(need) + "</b> in escrow until the proof is accepted or the job expires.";
+  }
+  var short = need > avail;
+  out.className = "fund" + (short ? " short" : "");
+  out.innerHTML = sentence + " Available: <b>" + money(avail) + "</b>" +
+    (held ? " (" + money(balance) + " less " + money(held) + " held for open jobs)" : "") + "." +
+    (short ? " Short by <b>" + money(need - avail) + "</b> — <a href=\"#spending\">add funds</a> first." : "");
+}
+
+function setPKind(k) {
+  PKIND = k;
+  document.querySelectorAll("[data-pkind]").forEach(function (b) {
+    b.setAttribute("aria-pressed", String(b.dataset.pkind === k));
+  });
+  document.getElementById("p-instr-f").hidden = k !== "do";
+  document.getElementById("p-attempt-f").hidden = k !== "do";
+  document.getElementById("p-kind-hint").textContent = k === "do"
+    ? "Somebody goes and does it. Paid on completion, or the wasted-trip amount if they could not."
+    : "Somebody goes and looks. Paid for admissible evidence whichever way the answer turns out.";
+  fundingNote();
+}
+function setPPricing(p) {
+  PPRICING = p;
+  document.querySelectorAll("[data-ppricing]").forEach(function (b) {
+    b.setAttribute("aria-pressed", String(b.dataset.ppricing === p));
+  });
+  document.getElementById("p-fee-f").hidden = p !== "fixed";
+  document.getElementById("p-max-f").hidden = p !== "bids";
+  document.getElementById("p-close-f").hidden = p !== "bids";
+  fundingNote();
+}
+
+function jobBody() {
+  var body = {
+    kind: PKIND, predicate: val("p-pred"), deliverable: val("p-deliv"),
+    where: val("p-where"), area: val("p-area"), currency: "USD",
+    ttl_seconds: Math.max(1, parseInt(val("p-ttl") || "24", 10)) * 3600
+  };
+  if (PKIND === "do") {
+    body.instructions = val("p-instr");
+    body.attempt_minor = minorOf("p-attempt");
+  }
+  var lat = parseFloat(val("p-lat")), lon = parseFloat(val("p-lon"));
+  if (!isNaN(lat) && !isNaN(lon)) {
+    body.lat = lat; body.lon = lon;
+    body.radius_m = Math.max(0, parseInt(val("p-radius") || "0", 10));
+  }
+  body.expense_cap_minor = minorOf("p-expense");
+  if (PPRICING === "bids") {
+    body.pricing = "bids";
+    body.max_bid_minor = minorOf("p-max");
+    // The route insists a job pays something; for an open job the ceiling is
+    // that something until an offer is accepted.
+    body.fee_minor = body.max_bid_minor;
+    body.bids_close_in_hours = Math.max(1, parseInt(val("p-close") || "24", 10));
+  } else {
+    body.fee_minor = minorOf("p-fee");
+  }
+  return body;
+}
+
+// The same checks the route makes, made here first so the message arrives
+// next to the field rather than as a status code.
+function validateJob(b) {
+  if (!b.predicate) { return "Say what should be true."; }
+  if (b.kind === "do" && !b.instructions) { return "A job that asks somebody to do something must say what to do."; }
+  if (!(b.fee_minor > 0)) { return PPRICING === "bids" ? "Say the most you will pay." : "Say what it pays."; }
+  if (b.where && !(b.radius_m > 0)) {
+    return "An address needs a latitude, longitude and radius, or there is nothing to check the photographs against. Use your location, or clear the address.";
+  }
+  return "";
+}
+
+function checkFeasibility() {
+  var b = jobBody(), out = document.getElementById("p-quote-out"), btn = document.getElementById("p-quote");
+  if (!b.predicate) { document.getElementById("p-err").textContent = "Say what should be true first."; return; }
+  document.getElementById("p-err").textContent = "";
+  btn.disabled = true;
+  api("POST", "/v1/quote", {
+    kind: b.kind, predicate: b.predicate, instructions: b.instructions || "",
+    detail: b.deliverable || "", lat: b.lat || 0, lon: b.lon || 0, slots: 1, tier: "V2"
+  }).then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not check that")); }
+    var q = res.body, s = q.settled_here;
+    out.innerHTML = '<div class="receipt" style="margin-top:.6rem">' +
+      '<div><span class="chip ' + (q.refused ? "bad" : q.feasible ? "ok" : "warn") + '">' +
+        (q.refused ? "would be refused" : q.feasible ? "somebody could take this" : "nobody in range") + '</span>' +
+        esc(q.reachable ? q.reachable + " operators reachable" : "") + '</div>' +
+      (q.why ? '<div class="fn">' + esc(q.why) + '</div>' : '') +
+      (q.refused_why ? '<div class="fn">' + esc(q.refused_why) + '</div>' : '') +
+      (s ? '<h4>What work like this has settled at here</h4><div class="fn">' +
+        money(s.low_minor, s.currency) + ' &ndash; ' + money(s.high_minor, s.currency) +
+        ', median ' + money(s.median_minor, s.currency) + ', from ' + esc(s.based_on) + ' jobs</div>' : '') +
+      ((q.advice || []).length ? '<h4>Advice</h4><ul>' + q.advice.map(function (a) {
+        return '<li>' + esc(a) + '</li>'; }).join("") + '</ul>' : '') +
+    '</div>';
+  }).catch(function (e) { out.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; })
+    .then(function () { btn.disabled = false; });
+}
+
+// A phone photograph is several megabytes; the reference route reads one.
+// Scaled in the browser, which also strips whatever the camera wrote into it.
+function shrinkImage(file) {
+  return new Promise(function (resolve) {
+    if (!file.type || file.type.indexOf("image/") !== 0 || file.size < 900000) { resolve(file); return; }
+    var url = URL.createObjectURL(file), img = document.createElement("img");
+    img.onload = function () {
+      var max = 1600, w = img.naturalWidth, h = img.naturalHeight;
+      var k = Math.min(1, max / Math.max(w, h, 1));
+      var c = document.createElement("canvas");
+      c.width = Math.round(w * k); c.height = Math.round(h * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (b) { resolve(b || file); }, "image/jpeg", 0.85);
+    };
+    img.onerror = function () { resolve(file); };
+    img.src = url;
+  });
+}
+
+function uploadReferences(job, files, progress) {
+  var chain = Promise.resolve(0), n = 0;
+  var say = progress;
+  files.slice(0, 6).forEach(function (file, i) {
+    chain = chain.then(function () {
+      say("Attaching photo " + (i + 1) + " of " + Math.min(files.length, 6) + "…");
+      return shrinkImage(file);
+    }).then(function (blob) {
+      var path = "/v1/jobs/" + encodeURIComponent(job) + "/references" +
+        (i === 0 ? "?identifies=true" : "");
+      return api("POST", path, blob, blob.type || "image/jpeg");
+    }).then(function (res) {
+      if (res.ok) { n++; }
+      return n;
+    });
+  });
+  return chain;
+}
+
+function submitJob() {
+  var btn = document.getElementById("p-post"), err = document.getElementById("p-err");
+  var out = document.getElementById("p-out");
+  var b = jobBody();
+  var problem = validateJob(b);
+  err.textContent = problem;
+  if (problem) { return; }
+  var files = Array.prototype.slice.call((document.getElementById("p-refs") || {}).files || []);
+  btn.disabled = true; btn.textContent = "Posting…"; out.innerHTML = "";
+  var posted = null;
+  api("POST", "/v1/tasks", b).then(function (res) {
+    if (!res.ok) { throw new Error(errorOf(res, "could not post that")); }
+    posted = res.body;
+    return uploadReferences(posted.job, files, function (msg) { btn.textContent = msg; });
+  }).then(function (attached) {
+    var job = posted.job;
+    out.innerHTML = '<div class="receipt">' +
+      '<div><span class="chip ok">posted</span><b>' + esc(job) + '</b></div>' +
+      '<div class="fn">' + money(posted.escrowed || 0) + ' held &middot; expires ' + esc(when(posted.expires)) +
+        (attached ? ' &middot; ' + attached + ' photo' + (attached === 1 ? '' : 's') + ' attached' : '') + '</div>' +
+      (posted.warning ? '<div class="fn" style="color:var(--warn)">' + esc(posted.warning) + '</div>' : '') +
+      '<div class="acts" style="margin-top:.7rem">' +
+        '<a class="btn sm" href="/j/' + encodeURIComponent(job) + '">Public page</a>' +
+        '<a class="btn sm" href="#spending">Status, under Spending</a>' +
+        '<a class="btn sm" href="/board">See it on the board</a>' +
+      '</div>' +
+      '<div class="fn"><code>GET /v1/jobs/' + esc(job) + '</code> is the status your agent would read.</div>' +
+    '</div>';
+    document.getElementById("p-pred").value = "";
+    document.getElementById("p-instr").value = "";
+    return refreshSpending();
+  }).catch(function (e) { err.textContent = e.message; })
+    .then(function () { btn.disabled = false; btn.textContent = "Post this job"; });
+}
+
+function wirePost() {
+  document.querySelectorAll("[data-pkind]").forEach(function (b) {
+    b.addEventListener("click", function () { setPKind(b.dataset.pkind); });
+  });
+  document.querySelectorAll("[data-ppricing]").forEach(function (b) {
+    b.addEventListener("click", function () { setPPricing(b.dataset.ppricing); });
+  });
+  ["p-fee", "p-max", "p-attempt", "p-expense"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.addEventListener("input", fundingNote); }
+  });
+  var locate = document.getElementById("p-locate");
+  if (locate) {
+    locate.addEventListener("click", function () {
+      var note = document.getElementById("p-loc-note");
+      if (!navigator.geolocation) { note.textContent = "This browser will not share a location."; return; }
+      note.textContent = "Asking…";
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        document.getElementById("p-lat").value = pos.coords.latitude.toFixed(6);
+        document.getElementById("p-lon").value = pos.coords.longitude.toFixed(6);
+        note.textContent = "Set from this device. Adjust if the job is somewhere else.";
+      }, function () {
+        note.textContent = "Location refused. Type the coordinates instead.";
+      });
+    });
+  }
+  var refs = document.getElementById("p-refs");
+  if (refs) {
+    refs.addEventListener("change", function () {
+      var host = document.getElementById("p-refs-preview");
+      var files = Array.prototype.slice.call(refs.files || []);
+      host.innerHTML = files.slice(0, 6).map(function (f) {
+        return '<img alt="" src="' + URL.createObjectURL(f) + '">';
+      }).join("") + (files.length > 6 ? '<div class="hint">Only the first six are attached.</div>' : '');
+    });
+  }
+  var quote = document.getElementById("p-quote");
+  if (quote) { quote.addEventListener("click", checkFeasibility); }
+  var post = document.getElementById("p-post");
+  if (post) { post.addEventListener("click", submitJob); }
+  if (document.getElementById("p-instr-f")) {
+    setPKind(PKIND);
+    setPPricing(PPRICING);
+  }
+}
+
+// --- assembly ----------------------------------------------------------------
+
 function render() {
   document.getElementById("body").innerHTML =
-    earnings() + spending() + capacity() + largerJobs() + integration();
+    explainer() +
+    '<section id="sec-operator">' +
+      earnings() + payoutPanel() + capacity() +
+      '<div id="supplier-wrap">' + supplier() + '</div>' +
+      '<div id="statement-wrap">' + statement() + '</div>' +
+      alertsOperator() + largerJobs() + dispatchPane() +
+    '</section>' +
+    '<section id="sec-buyer">' +
+      '<div id="spending-wrap">' + spending() + '</div>' +
+      postForm() +
+      '<div id="keys-wrap">' + keysPane() + '</div>' +
+      alertsBuyer() +
+    '</section>';
   wire();
+  applyMode();
 }
 
 function saveCapacity() {
@@ -729,36 +1946,16 @@ function wire() {
       saveCapacity();
     });
   });
-  document.querySelectorAll("[data-release]").forEach(function (b) {
-    b.addEventListener("click", function () {
-      reviewAction(this.dataset.release, "release", null);
-    });
-  });
-  document.querySelectorAll("[data-hold]").forEach(function (b) {
-    b.addEventListener("click", function () {
-      var job = this.dataset.hold;
-      var host = document.getElementById("rv-" + job);
-      host.innerHTML =
-        '<label class="ask" for="hw-' + job + '">What is wrong? A person reads this.</label>' +
-        '<textarea id="hw-' + job + '" rows="2" placeholder="The gutter is still full at the north end."></textarea>' +
-        '<div class="ask-acts">' +
-          '<button class="btn go" id="hs-' + job + '">Hold payment</button>' +
-          '<button class="btn" id="hc-' + job + '">Cancel</button>' +
-        '</div>';
-      document.getElementById("hw-" + job).focus();
-      document.getElementById("hc-" + job).onclick = function () { host.innerHTML = ""; };
-      document.getElementById("hs-" + job).onclick = function () {
-        var why = document.getElementById("hw-" + job).value.trim();
-        if (!why) { document.getElementById("hw-" + job).focus(); return; }
-        reviewAction(job, "hold", why);
-      };
-    });
-  });
+  wireSpending();
+  wireSupplier();
+  wireStatement();
+  wirePost();
+  wireKeys();
   var cash = document.getElementById("cash-now");
   if (cash) {
     cash.addEventListener("click", function () {
       var btn = this, err = document.getElementById("cash-err");
-      btn.disabled = true; btn.textContent = "Sending\u2026"; err.textContent = "";
+      btn.disabled = true; btn.textContent = "Sending…"; err.textContent = "";
       workerHeaders("POST", "/v1/payout/now").then(function (h) {
         return fetch("/v1/payout/now", {method: "POST", headers: h});
       }).then(function (r) {
@@ -776,10 +1973,16 @@ function wire() {
       });
     });
   }
-  var st = document.getElementById("s-topup");
-  if (st) { st.addEventListener("click", function () { addFunds(this); }); }
   var pc = document.getElementById("pay-connect");
   if (pc) { pc.addEventListener("click", function () { connectPayout(this); }); }
+  var al = document.getElementById("al-work");
+  if (al) {
+    al.addEventListener("click", function () {
+      var on = al.getAttribute("aria-pressed") !== "true";
+      al.setAttribute("aria-pressed", String(on));
+      setAlerts(on);
+    });
+  }
   var locate = document.getElementById("c-locate");
   if (locate) {
     locate.addEventListener("click", function () {
@@ -788,14 +1991,13 @@ function wire() {
         out.textContent = "This browser will not share a location.";
         return;
       }
-      out.textContent = "Asking\u2026";
+      out.textContent = "Asking…";
       navigator.geolocation.getCurrentPosition(function (pos) {
         CAP.capacity = CAP.capacity || {};
         CAP.capacity.lat_e7 = Math.round(pos.coords.latitude * 1e7);
         CAP.capacity.lon_e7 = Math.round(pos.coords.longitude * 1e7);
-        out.textContent = "Set \u2014 jobs are sorted by distance from here.";
+        out.textContent = "Set — jobs are sorted by distance from here.";
         saveCapacity();
-        load();
       }, function () {
         out.textContent = "Location refused. Range stays off until you allow it.";
       });
@@ -814,7 +2016,7 @@ function wire() {
     });
     range.addEventListener("change", saveCapacity);
   }
-  document.querySelectorAll(".sw, .kind").forEach(function (el) {
+  document.querySelectorAll(".sw[id^=c-], [data-kind]").forEach(function (el) {
     el.addEventListener("click", function () {
       el.setAttribute("aria-pressed", el.getAttribute("aria-pressed") === "true" ? "false" : "true");
       saveCapacity();
@@ -822,7 +2024,9 @@ function wire() {
   });
   var hook = document.getElementById("c-hook");
   if (hook) { hook.addEventListener("change", saveCapacity); }
+}
 
+function wireKeys() {
   var cap = document.getElementById("k-cap");
   if (cap) {
     cap.addEventListener("input", function () {
@@ -831,7 +2035,6 @@ function wire() {
   }
   var make = document.getElementById("k-make");
   if (make) { make.addEventListener("click", issueKey); }
-
   document.querySelectorAll("[data-revoke]").forEach(function (b) {
     b.addEventListener("click", function () { revokeKey(b, b.dataset.revoke); });
   });
@@ -853,8 +2056,9 @@ function issueKey() {
   }).then(function (res) {
     if (handleAuthFailure(res.status)) { return; }
     if (!res.ok) { throw new Error(res.body && res.body.error || "could not issue a key"); }
-    document.getElementById("new-key").innerHTML =
-      '<div class="reveal"><span class="label">Copy this now</span>' +
+    // Kept in a variable rather than only in the DOM: the key list re-renders
+    // after issuing, and the one-time reveal must survive that.
+    NEW_KEY = '<div class="reveal"><span class="label">Copy this now</span>' +
       '<span class="k">' + esc(res.body.key) + '</span>' +
       '<p>It will not be shown again. Anything using it spends your balance, up to $' +
       (perJob / 100) + ' a job.</p></div>';
@@ -878,8 +2082,20 @@ function loadKeys() {
   workerHeaders("GET", "/v1/agent-keys")
     .then(function (h) { return fetch("/v1/agent-keys", {headers: h}); })
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (j) { KEYS = (j && j.keys) || []; render(); })
+    .then(function (j) {
+      KEYS = (j && j.keys) || [];
+      var host = document.getElementById("keys-wrap");
+      if (host) { host.innerHTML = keysPane(); wireKeys(); }
+    })
     .catch(function () { KEYS = []; });
+}
+
+// One authenticated GET that must not take the page down with it: anything
+// that fails resolves to a null body rather than rejecting.
+function softGet(path) {
+  return workerHeaders("GET", path)
+    .then(function (h) { return fetch(path, {headers: h}); })
+    .catch(function () { return {ok: false, status: 0, json: function () { return null; }}; });
 }
 
 function load() {
@@ -889,18 +2105,22 @@ function load() {
 
   Promise.all([
     workerHeaders("GET", "/v1/me").then(function (h) { return fetch("/v1/me", {headers: h}); }),
-    workerHeaders("GET", "/v1/capacity").then(function (h) { return fetch("/v1/capacity", {headers: h}); }),
-    workerHeaders("GET", "/v1/agent-keys").then(function (h) { return fetch("/v1/agent-keys", {headers: h}); }),
+    softGet("/v1/capacity"),
+    softGet("/v1/agent-keys"),
     fetch("/v1/skills"),
-    workerHeaders("GET", "/v1/spend").then(function (h) { return fetch("/v1/spend", {headers: h}); }),
+    softGet("/v1/spend"),
     // The demonstration scope. Failing to load it must not take the console
     // with it, so it resolves to a null-bodied response rather than rejecting.
-    workerHeaders("GET", "/v1/scope/" + DEMO_PROJECT)
-      .then(function (h) { return fetch("/v1/scope/" + DEMO_PROJECT, {headers: h}); })
-      .catch(function () { return {ok: false, status: 0, json: function () { return null; }}; })
+    softGet("/v1/scope/" + DEMO_PROJECT),
+    softGet("/v1/supplier"),
+    softGet("/v1/statement"),
+    softGet("/v1/alerts"),
+    softGet("/v1/payout")
   ]).then(function (rs) {
     if (handleAuthFailure(rs[0].status)) { return null; }
-    return Promise.all(rs.map(function (r) { return r.ok ? r.json() : null; }));
+    return Promise.all(rs.map(function (r) {
+      return r.ok ? r.json().catch(function () { return null; }) : null;
+    }));
   }).then(function (out) {
     if (!out) { return; }
     ME = out[0];
@@ -909,12 +2129,22 @@ function load() {
     SKILLS = (out[3] && out[3].skills) || [];
     SPEND = out[4] || null;
     SCOPE = out[5] || null;
+    SUP = out[6] || null;
+    STMT = out[7] || null;
+    ALERTS = out[8] || null;
+    PAYOUT = out[9] || null;
+    MODE = defaultMode();
     render();
+    jumpToHash();
   }).catch(function () {
     document.getElementById("body").innerHTML =
       '<div class="empty">Could not reach the exchange.</div>';
   });
 }
+
+document.getElementById("mode-operator").addEventListener("click", function () { setMode("operator"); });
+document.getElementById("mode-buyer").addEventListener("click", function () { setMode("buyer"); });
+window.addEventListener("hashchange", jumpToHash);
 
 session().then(load).then(afterPayoutReturn);
 </script>

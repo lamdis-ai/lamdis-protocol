@@ -397,7 +397,7 @@ func shellTop(current, status string) string {
     ` + nav("/board#holding", `In flight <span class="n" id="n-flight"></span>`, "flight") + `
     <span class="label grp">Operation</span>
     ` + nav("/console", "Earnings", "earnings") + `
-    ` + nav("/console#standing", "Capacity", "capacity") + `
+    ` + nav("/console#capacity", "Capacity", "capacity") + `
     <span class="label grp">About</span>
     ` + nav("/how-it-works", "How this works", "trust") + `
     ` + nav("/docs", "API", "docs") + `
