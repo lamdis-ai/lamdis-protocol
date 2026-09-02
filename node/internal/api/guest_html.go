@@ -123,7 +123,7 @@ input[type=number] { width: 100%; padding: .6rem .75rem; border: 1px solid var(-
   </div>
   <div class="two">
     <div><label for="fee">Pay ($)</label><input type="number" id="fee" min="1" step="1" value="25"></div>
-    <div><label for="attempt">Wasted-trip pay ($, optional)</label><input type="number" id="attempt" min="0" step="1" value="0"></div>
+    <div id="attempt-row" hidden><label for="attempt">Wasted-trip pay ($, optional)</label><input type="number" id="attempt" min="0" step="1" value="0"></div>
   </div>
   <div class="foot"><button class="btn go" type="submit" id="go">Get the pay link</button><span class="fine" id="msg">Ceiling is pay plus wasted-trip pay. Authorised, not charged.</span></div>
   <div class="err" id="err"></div>
@@ -133,7 +133,10 @@ input[type=number] { width: 100%; padding: .6rem .75rem; border: 1px solid var(-
 (function () {
   var kind = "observe";
   var ks = document.querySelectorAll(".kinds button");
-  ks.forEach(function (b) { b.addEventListener("click", function () { kind = b.dataset.kind; ks.forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); }); document.getElementById("instr-row").hidden = kind !== "do"; }); });
+  ks.forEach(function (b) { b.addEventListener("click", function () { kind = b.dataset.kind; ks.forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); }); document.getElementById("instr-row").hidden = kind !== "do";
+    // An observation pays in full for going, so it has no attempt fee and
+    // the exchange refuses one.
+    document.getElementById("attempt-row").hidden = kind !== "do"; }); });
   function v(id) { return document.getElementById(id).value.trim(); }
   document.getElementById("f").addEventListener("submit", function (e) {
     e.preventDefault();
@@ -141,7 +144,8 @@ input[type=number] { width: 100%; padding: .6rem .75rem; border: 1px solid var(-
     err.textContent = ""; go.disabled = true; go.textContent = "Saving…";
     var lat = parseFloat(v("lat")), lon = parseFloat(v("lon"));
     var body = { kind: kind, predicate: v("predicate"), instructions: v("instructions"), deliverable: v("deliverable"), where: v("where"), area: v("area"),
-      fee_minor: Math.round(parseFloat(v("fee") || "0") * 100), attempt_minor: Math.round(parseFloat(v("attempt") || "0") * 100) };
+      fee_minor: Math.round(parseFloat(v("fee") || "0") * 100) };
+    if (kind === "do") { body.attempt_minor = Math.round(parseFloat(v("attempt") || "0") * 100); }
     if (isFinite(lat) && isFinite(lon)) { body.lat = lat; body.lon = lon; body.radius_m = 150; }
     fetch("/v1/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })

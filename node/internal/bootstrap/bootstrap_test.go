@@ -180,7 +180,10 @@ func TestJobsFromCannedOverpass(t *testing.T) {
 		if got := x.Expires.Sub(x.Posted); got != JobTTL {
 			t.Errorf("%s: ttl %v", x.Job, got)
 		}
-		if x.PayMinor < 400 || x.PayMinor > 800 || x.AttemptMinor != AttemptMinor {
+		// No attempt fee: an observation already pays in full for turning up,
+		// and settlement never reads the field for one, so escrowing against
+		// it would promise the worker a line that cannot pay.
+		if x.PayMinor < 400 || x.PayMinor > 800 || x.AttemptMinor != 0 {
 			t.Errorf("%s: pay %d attempt %d", x.Job, x.PayMinor, x.AttemptMinor)
 		}
 		if !strings.Contains(x.Deliverable, "code") || !strings.Contains(x.Deliverable, "sign") &&

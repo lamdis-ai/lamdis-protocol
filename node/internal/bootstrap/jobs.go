@@ -40,7 +40,10 @@ const (
 	PayHoursMinor       int64 = 500
 	PayVacantMinor      int64 = 600
 	PayCornerMinor      int64 = 800
-	AttemptMinor        int64 = 200
+	// There is no attempt fee here. Every house job is an observation, and an
+	// observation pays in full for admissible evidence whichever way the
+	// answer turns out — so a wasted trip is already the paid case, and a
+	// separate attempt line would escrow money settlement never reads.
 	// JobTTL is how long a house job stays open.
 	JobTTL = 48 * time.Hour
 	// JobRadiusM is the geofence: the photograph must come from within it.
@@ -106,7 +109,7 @@ func Compose(job string, p Place, s Shape, area string, now time.Time) *api.List
 		Detail: detail,
 		Where:  where, Area: area,
 		LatE7: p.LatE7, LonE7: p.LonE7, RadiusM: JobRadiusM,
-		PayMinor: payFor(s), AttemptMinor: AttemptMinor, Currency: "USD",
+		PayMinor: payFor(s), Currency: "USD",
 		Slots: 1, Tier: JobTier,
 		PostedByAgent: true,
 		Expires:       now.Add(JobTTL), Posted: now,

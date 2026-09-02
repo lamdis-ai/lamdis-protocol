@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.lamdis/exchange",
+  "title": "Lamdis Exchange",
+  "description": "Pay people nearby for physical work: find out if something is true, or have it done.",
+  "version": "0.1.0",
+  "websiteUrl": "https://exchange.lamdis.ai/docs",
+  "repository": {
+    "url": "https://github.com/lamdis-ai/lamdis-protocol",
+    "source": "github",
+    "id": "1299467296"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://exchange.lamdis.ai/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Optional. Bearer lam_sk_... agent key for the full buyer side, or an operator session token for the supply side. Leave it off for the eight guest tools.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

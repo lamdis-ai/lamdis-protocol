@@ -21,7 +21,7 @@ func guestJobBody(t *testing.T) []byte {
 		"kind": "observe", "predicate": "the FOR LEASE sign is up",
 		"where": "742 Evergreen Rd", "area": "Detroit, MI",
 		"lat": 42.33, "lon": -83.04, "radius_m": 150,
-		"fee_minor": 2300, "attempt_minor": 500,
+		"fee_minor": 2300,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -298,5 +298,23 @@ func TestAQuoteNeedsNoCredential(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest("POST", "/v1/quote", bytes.NewReader(raw)))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "feasible") {
 		t.Fatalf("anonymous quote: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// An observation pays in full for admissible evidence whichever way the
+// answer goes, so settlement never reads an attempt fee for one. Taking the
+// field anyway escrowed money against a line that could not pay and told the
+// worker they were covered for a wasted trip.
+func TestAnObservationRefusesAnAttemptFee(t *testing.T) {
+	s := consoleServer(t)
+	h := s.Handler()
+	raw, _ := json.Marshal(map[string]any{
+		"kind": "observe", "predicate": "the sign is up", "fee_minor": 2300,
+		"attempt_minor": 500,
+	})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/v1/tasks", bytes.NewReader(raw)))
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "no attempt fee") {
+		t.Fatalf("observe with an attempt fee: %d %s", w.Code, w.Body.String())
 	}
 }

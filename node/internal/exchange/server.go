@@ -1462,6 +1462,18 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 			"a job that asks somebody to do something must say what to do")
 		return
 	}
+	// A wasted trip is a do-job idea, and settlement never reads it for an
+	// observation. Accepting it here escrowed money against a line that could
+	// not pay, and told whoever took the job they were covered for a trip
+	// that turned up nothing — when in fact an observation already pays in
+	// full for turning up, whichever way the answer goes.
+	if kind == api.KindObserve && in.AttemptMinor > 0 {
+		writeError(w, http.StatusBadRequest,
+			"an observation has no attempt fee: it pays in full for admissible "+
+				"evidence whichever way the answer turns out. Put the amount in "+
+				"fee_minor, and bonus_minor for the part that depends on the finding")
+		return
+	}
 	if in.Currency == "" {
 		in.Currency = "USD"
 	}
