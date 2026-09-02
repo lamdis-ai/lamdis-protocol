@@ -454,8 +454,13 @@ func (s *Server) Handler() *http.ServeMux {
 		s.registerBook(mux)
 		mux.HandleFunc("GET /v1/jobs/{job}/evidence", s.withAgent(s.handleJobEvidence))
 		mux.HandleFunc("GET /v1/jobs/{job}/evidence/{sha}", s.withAgent(s.handleEvidenceFile))
-		mux.HandleFunc("POST /v1/balance/topup", s.withAgent(s.handleTopupIntent))
-		mux.HandleFunc("GET /v1/balance/withdraw", s.withAgent(s.handleWithdraw))
+		// Funding and withdrawal are things a person does from the console with
+		// their session, as well as things an agent does with its key. The
+		// console has always sent the session token here; withAgent only ever
+		// read X-Lamdis-Key, so "Add funds" answered 401 to every signed-in
+		// buyer and bounced them to sign in again. Neither handler uses the key.
+		mux.HandleFunc("POST /v1/balance/topup", s.withBuyer(s.handleTopupIntent))
+		mux.HandleFunc("GET /v1/balance/withdraw", s.withBuyer(s.handleWithdraw))
 	}
 
 	// Sign-in. Everything that takes work requires an account.
