@@ -78,8 +78,9 @@ func (c Capacity) Takes(kind string) bool {
 
 // Capacities stores what each operator will accept.
 type Capacities struct {
-	mu sync.Mutex
-	by map[string]Capacity
+	mu   sync.Mutex
+	by   map[string]Capacity
+	path string
 }
 
 func NewCapacities() *Capacities { return &Capacities{by: map[string]Capacity{}} }
@@ -131,6 +132,7 @@ func (cs *Capacities) Set(worker string, c Capacity) Capacity {
 		c.WebhookSecret = newWebhookSecret()
 	}
 	cs.by[worker] = c
+	cs.saveLocked()
 	cs.mu.Unlock()
 	return c
 }

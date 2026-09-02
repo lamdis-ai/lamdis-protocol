@@ -99,17 +99,16 @@ func (s *Server) handleEvidenceFile(w http.ResponseWriter, r *http.Request, key 
 
 	data, ok := s.blobFor(sha)
 	if !ok {
-		// Bytes are held in memory, so a restart loses them while the hash and
-		// the verdict survive. Say so plainly rather than returning a 404 that
-		// reads as "this never existed".
+		// With a data directory the bytes are on the durable disk and this is
+		// rare; without one they died with the last process. Either way the
+		// hash and the verdict survive, so say that plainly rather than
+		// returning a 404 that reads as "this never existed".
 		writeError(w, http.StatusGone,
 			"the file is no longer stored; its hash and verdict remain on the receipt")
 		return
 	}
 
-	s.mu.Lock()
-	mime := s.blobMime[sha]
-	s.mu.Unlock()
+	mime := s.mimeFor(sha)
 	if mime == "" {
 		mime = "application/octet-stream"
 	}

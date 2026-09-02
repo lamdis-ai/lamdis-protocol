@@ -98,10 +98,12 @@ func (b *Board) PlaceBid(job, worker string, amountMinor int64, currency, note s
 	for i, existing := range b.bids[job] {
 		if existing.Worker == worker {
 			b.bids[job][i] = bid // a revision, not a second offer
+			b.saveLocked()
 			return bid, nil
 		}
 	}
 	b.bids[job] = append(b.bids[job], bid)
+	b.saveLocked()
 	return bid, nil
 }
 
@@ -165,5 +167,6 @@ func (b *Board) Award(job, bidID string, funded func(*Listing) error) (*Bid, err
 	// not against the blank the buyer started with.
 	l.Agreed = append([]Assumption(nil), won.Assumptions...)
 	won.Won = true
+	b.saveLocked()
 	return won, nil
 }

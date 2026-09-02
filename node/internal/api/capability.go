@@ -87,6 +87,9 @@ func (c *Capability) Attestation() string {
 type Capabilities struct {
 	mu   sync.Mutex
 	byID map[string]*Capability // keyed by sha256(secret)
+	// path is where the registry is written, so a link a worker is holding
+	// survives a deploy. Empty means memory only. See persist.go.
+	path string
 	Now  func() time.Time
 }
 
@@ -123,6 +126,7 @@ func (cs *Capabilities) Issue(job, label string, actions []string, ttl time.Dura
 	}
 	cs.mu.Lock()
 	cs.byID[holder] = c
+	cs.saveLocked()
 	cs.mu.Unlock()
 	return secret, c, nil
 }
@@ -154,6 +158,7 @@ func (cs *Capabilities) Enroll(secret, principal string) error {
 	}
 	c.EnrollmentsLeft--
 	c.DevicePrincipal = principal
+	cs.saveLocked()
 	return nil
 }
 

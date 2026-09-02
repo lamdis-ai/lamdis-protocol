@@ -61,8 +61,6 @@ func (s *Server) PostFunded(ctx context.Context, buyer string, l *api.Listing) e
 		}
 		return err
 	}
-	s.mu.Lock()
-	s.buyers[l.Job] = buyer
-	s.mu.Unlock()
+	s.setBuyer(l.Job, buyer)
 	return nil
 }

@@ -144,8 +144,15 @@ type Server struct {
 	Anchors *anchor.Anchorer
 
 	mu sync.Mutex
-	// blobs holds evidence bytes by content hash. In-memory for now; the
-	// durable version writes them to the content-addressed store.
+	// store is the durable half of everything below it: the evidence bytes as
+	// files, the rest as JSON snapshots on the data disk. Nil means memory
+	// only, which is what a test and an exchange with no -data expect. See
+	// store.go.
+	store *stateStore
+	// blobs holds evidence bytes by content hash, for an exchange with no
+	// store. With one, the bytes live under blobs/ and are read back on
+	// demand rather than held: a photograph is megabytes and there is no
+	// reason for the process to carry it.
 	blobs map[string][]byte
 	// secrets maps a job to the capability secrets issued for it.
 	secrets map[string][]string
@@ -235,6 +242,19 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 		}
 		ledgerPath = filepath.Join(opt.DataDir, "ledger.db")
 		accountsPath = filepath.Join(opt.DataDir, "accounts.db")
+
+		// The open work, the seats somebody is holding, the links they were
+		// issued, and the evidence they uploaded. All of it used to die with
+		// the process while the escrow behind it stayed in the ledger below.
+		st, err := openState(opt.DataDir)
+		if err != nil {
+			return nil, err
+		}
+		srv.store = st
+		srv.loadState()
+		board.Persist(opt.DataDir)
+		caps.Persist(opt.DataDir)
+		capacities.Persist(opt.DataDir)
 	}
 	l, err := ledger.Open(ledgerPath)
 	if err != nil {
@@ -351,16 +371,17 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 	// takes effect once Handler has been called is a check that anything
 	// running before Handler quietly escapes.
 	board.Funded = srv.checkFunded
+
+	// Said last, because it needs the ledger and the board both. It reports
+	// and never repairs: see reconcile.
+	srv.reconcile(context.Background())
 	return srv, nil
 }
 
 // storeFrame keeps a still pulled from a video so a reviewer can see what the
 // model saw.
 func (s *Server) storeFrame(job, sha string, jpeg []byte) error {
-	s.mu.Lock()
-	s.blobs[sha] = jpeg
-	s.blobMime[sha] = "image/jpeg"
-	s.mu.Unlock()
+	s.putBlob(sha, "image/jpeg", jpeg)
 	return nil
 }
 
@@ -578,10 +599,7 @@ func (s *Server) secretsFor(job string) []string {
 // The bytes are written exactly as received: a re-encoded copy would mean the
 // hash in the signed trail did not describe the file the worker actually took.
 func (s *Server) storeArtifact(job string, a api.Artifact, data []byte) error {
-	s.mu.Lock()
-	s.blobs[a.SHA256] = data
-	s.blobMime[a.SHA256] = a.Mime
-	s.mu.Unlock()
+	s.putBlob(a.SHA256, a.Mime, data)
 	return nil
 }
 
@@ -599,6 +617,9 @@ func (s *Server) acceptEvidence(sub api.Submission) (api.Submission, error) {
 	s.mu.Lock()
 	s.submissions[sub.Job] = append(s.submissions[sub.Job], sub)
 	idx := len(s.submissions[sub.Job]) - 1
+	// Written before verification, not after: evidence that arrived and was
+	// never judged is still the worker's proof that they went.
+	s.saveSubmissionsLocked()
 	s.mu.Unlock()
 
 	if s.Verify == nil {
@@ -612,6 +633,7 @@ func (s *Server) acceptEvidence(sub api.Submission) (api.Submission, error) {
 	s.mu.Lock()
 	if idx < len(s.submissions[sub.Job]) {
 		s.submissions[sub.Job][idx] = verified
+		s.saveSubmissionsLocked()
 	}
 	s.mu.Unlock()
 
@@ -640,9 +662,17 @@ func (s *Server) acceptEvidence(sub api.Submission) (api.Submission, error) {
 // blobFor lets the verifier read back the bytes it was handed hashes for.
 func (s *Server) blobFor(sha string) ([]byte, bool) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	b, ok := s.blobs[sha]
-	return b, ok
+	st := s.store
+	s.mu.Unlock()
+	if ok || st == nil {
+		return b, ok
+	}
+	data, err := st.readBlob(sha)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
 }
 
 // AddPanel registers a review panel together with the artifact reviewers must
@@ -657,10 +687,7 @@ func (s *Server) AddPanel(p *api.ReviewPanel, img []byte, mime string) error {
 		return fmt.Errorf("panel evidence: %w", err)
 	}
 	p.EvidenceSHA = []string{art.SHA256}
-	s.mu.Lock()
-	s.blobs[art.SHA256] = img
-	s.blobMime[art.SHA256] = mime
-	s.mu.Unlock()
+	s.putBlob(art.SHA256, mime, img)
 	s.Reviews.Add(p)
 	return s.Board.Post(&api.Listing{
 		Job: p.Job, Parent: p.Parent, Kind: api.KindReview,
@@ -1151,13 +1178,11 @@ func (s *Server) Submissions(job string) []api.Submission {
 // HEIC or an MP4 as image/jpeg would have the reviewer's browser refuse to
 // render evidence that is perfectly valid.
 func (s *Server) blob(sha string) ([]byte, string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b, ok := s.blobs[sha]
+	b, ok := s.blobFor(sha)
 	if !ok {
 		return nil, "", false
 	}
-	mime := s.blobMime[sha]
+	mime := s.mimeFor(sha)
 	if mime == "" {
 		mime = "image/jpeg"
 	}
@@ -1233,10 +1258,7 @@ func (s *Server) handleCreatePanel(w http.ResponseWriter, r *http.Request, princ
 	// Published panels hand out no links: reviewers take a seat themselves,
 	// and the capability is minted at that moment.
 	if in.Publish {
-		s.mu.Lock()
-		s.blobs[art.SHA256] = img
-		s.blobMime[art.SHA256] = "image/jpeg"
-		s.mu.Unlock()
+		s.putBlob(art.SHA256, "image/jpeg", img)
 		s.Reviews.Add(panel)
 		// Parent travels onto the listing so the board can refuse a seat to
 		// whoever produced the evidence being judged.
@@ -1271,11 +1293,8 @@ func (s *Server) handleCreatePanel(w http.ResponseWriter, r *http.Request, princ
 		links = append(links, fmt.Sprintf("%s/r/%s#%s", s.BaseURL, job, secret))
 	}
 
-	s.mu.Lock()
-	s.blobs[art.SHA256] = img
-	s.blobMime[art.SHA256] = "image/jpeg"
-	s.secrets[job] = secrets
-	s.mu.Unlock()
+	s.putBlob(art.SHA256, "image/jpeg", img)
+	s.setSecrets(job, secrets)
 
 	s.Reviews.Add(panel)
 
@@ -1734,9 +1753,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.mu.Lock()
-	s.buyers[job] = principal
-	s.mu.Unlock()
+	s.setBuyer(job, principal)
 	out := map[string]any{
 		"job": job, "kind": kind, "board": s.BaseURL + "/board",
 		"escrowed": MaxPayoutFor(listing),

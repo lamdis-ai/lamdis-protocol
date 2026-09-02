@@ -258,6 +258,7 @@ func (b *Board) MarkRejected(worker string) {
 		b.rejected = map[string]int{}
 	}
 	b.rejected[b.accountFor(worker)]++
+	b.saveLocked()
 }
 
 // unusedAssuranceTime keeps the time import honest if the file is trimmed.
@@ -276,6 +277,7 @@ func (b *Board) SeedStanding(worker string, settled, abandoned int) {
 	acct := b.accountFor(worker)
 	b.completed[acct] = settled
 	b.abandoned[acct] = abandoned
+	b.saveLocked()
 }
 
 // SeedVetted marks an account as a checked business, for tests and demos.

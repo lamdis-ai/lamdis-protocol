@@ -383,10 +383,12 @@ func (b *Board) PlaceProjectBid(projectID, worker string, lines []BidLine, curre
 	for i, existing := range b.projectBids[projectID] {
 		if existing.Worker == worker {
 			b.projectBids[projectID][i] = bid // a revision, not a second offer
+			b.saveLocked()
 			return bid, nil
 		}
 	}
 	b.projectBids[projectID] = append(b.projectBids[projectID], bid)
+	b.saveLocked()
 	return bid, nil
 }
 
@@ -457,6 +459,7 @@ func (b *Board) AwardProject(projectID, bidID string, funded func(*Listing) erro
 		p.l.Agreed = append([]Assumption(nil), won.Assumptions...)
 	}
 	won.Won = true
+	b.saveLocked()
 	return won, nil
 }
 
@@ -534,6 +537,7 @@ func (b *Board) ProposeStages(job, worker string, stages []Stage) error {
 	}
 	l.ProposedStages = append([]Stage(nil), stages...)
 	l.PlanState = PlanProposed
+	b.saveLocked()
 	return nil
 }
 
@@ -552,6 +556,7 @@ func (b *Board) AcceptPlan(job string) error {
 	l.Stages = append([]Stage(nil), l.ProposedStages...)
 	l.ProposedStages = nil
 	l.PlanState = PlanAccepted
+	b.saveLocked()
 	return nil
 }
 
@@ -569,5 +574,6 @@ func (b *Board) RejectPlan(job, why string) error {
 	l.ProposedStages = nil
 	l.PlanState = PlanNone
 	l.PlanNote = why
+	b.saveLocked()
 	return nil
 }

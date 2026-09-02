@@ -197,6 +197,7 @@ func (s *Server) FundFromCard(ctx context.Context, job, session, intent string, 
 	}
 	s.mu.Lock()
 	s.buyers[job] = owner
+	s.saveBuyersLocked()
 	delete(s.pending, job)
 	s.mu.Unlock()
 	s.tell("guest-live:"+job, owner, "Your job is on the board",

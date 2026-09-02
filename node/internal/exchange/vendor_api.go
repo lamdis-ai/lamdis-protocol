@@ -224,9 +224,7 @@ func (s *Server) postOne(r *http.Request, principal string, in CreateTaskRequest
 	if err := s.Board.Post(l); err != nil {
 		return "", err
 	}
-	s.mu.Lock()
-	s.buyers[job] = principal
-	s.mu.Unlock()
+	s.setBuyer(job, principal)
 	return job, nil
 }
 

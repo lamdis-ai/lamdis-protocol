@@ -115,9 +115,7 @@ func (s *Server) handleReferenceFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusGone, "that image is no longer stored")
 		return
 	}
-	s.mu.Lock()
-	mime := s.blobMime[sha]
-	s.mu.Unlock()
+	mime := s.mimeFor(sha)
 	if mime == "" {
 		mime = "application/octet-stream"
 	}
@@ -143,9 +141,6 @@ func (s *Server) AddReference(job string, data []byte, mime, caption string, ide
 	}); err != nil {
 		return err
 	}
-	s.mu.Lock()
-	s.blobs[sha] = data
-	s.blobMime[sha] = mime
-	s.mu.Unlock()
+	s.putBlob(sha, mime, data)
 	return nil
 }

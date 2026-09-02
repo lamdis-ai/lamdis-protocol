@@ -346,6 +346,7 @@ func (s *Server) FundFromChain(ctx context.Context, job, txHash string, amountMi
 	}
 	s.mu.Lock()
 	s.buyers[job] = owner
+	s.saveBuyersLocked()
 	delete(s.pending, job)
 	s.mu.Unlock()
 	return nil

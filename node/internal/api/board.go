@@ -505,7 +505,11 @@ func minor(v int64, cur string) string {
 
 // Board holds open work and hands out the capabilities that claim it.
 type Board struct {
-	mu       sync.Mutex
+	mu sync.Mutex
+	// path is the snapshot this board writes itself to. Empty means memory
+	// only, which is what a test and an exchange with no -data want. See
+	// persist.go.
+	path     string
 	listings map[string]*Listing
 	// claims counts seats a client currently holds. It is released when they
 	// submit, so it bounds concurrent work rather than work for all time.
@@ -690,6 +694,7 @@ func (b *Board) Post(l *Listing) (err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.listings[l.Job] = l
+	b.saveLocked()
 	return nil
 }
 
@@ -809,6 +814,7 @@ func (b *Board) Widen(job string, radiusM int64) bool {
 		return false
 	}
 	l.RadiusM = radiusM
+	b.saveLocked()
 	return true
 }
 
@@ -1014,6 +1020,7 @@ func (b *Board) Claim(job, client string) (secret string, l *Listing, err error)
 		b.worked[client] = map[string]bool{}
 	}
 	b.worked[client][job] = true
+	b.saveLocked()
 
 	cp := *item
 	return secret, &cp, nil
@@ -1025,6 +1032,10 @@ func (b *Board) Claim(job, client string) (secret string, l *Listing, err error)
 // claim is permanent and one free email address can take a job off the board
 // for its entire life.
 func (b *Board) expireLapsed(now time.Time) {
+	// Reached from read paths as well as writes, so it saves only when a
+	// lease genuinely lapsed. Snapshotting the board on every page view would
+	// be one file rewrite per visitor.
+	freed := 0
 	for job, holders := range b.leases {
 		for worker, until := range holders {
 			if now.Before(until) {
@@ -1045,7 +1056,11 @@ func (b *Board) expireLapsed(now time.Time) {
 			}
 			b.abandoned[acct]++
 			b.coolUntil[acct] = now.Add(b.cooldown())
+			freed++
 		}
+	}
+	if freed > 0 {
+		b.saveLocked()
 	}
 }
 
@@ -1234,6 +1249,7 @@ func (b *Board) AssignReview(worker string) (secret string, l *Listing, err erro
 		b.worked[worker] = map[string]bool{}
 	}
 	b.worked[worker][best.Job] = true
+	b.saveLocked()
 
 	cp := *best
 	return secret, &cp, nil
@@ -1272,6 +1288,7 @@ func (b *Board) Release(job, client string) {
 	if b.claims[acct] > 0 {
 		b.claims[acct]--
 	}
+	b.saveLocked()
 }
 
 // judged reports whether this client has reviewed a panel whose parent is the
@@ -1364,6 +1381,7 @@ func (b *Board) finishLocked(job, client string, counts bool) {
 	if counts {
 		b.completed[acct]++
 	}
+	b.saveLocked()
 }
 
 // AttachReference adds a buyer's reference image to a listing.
@@ -1380,6 +1398,7 @@ func (b *Board) AttachReference(job string, ref Reference) error {
 		return err
 	}
 	l.References = probe.References
+	b.saveLocked()
 	return nil
 }
 
@@ -1390,6 +1409,7 @@ func (b *Board) Accept(job string) {
 	defer b.mu.Unlock()
 	if l, ok := b.listings[job]; ok {
 		l.Accepted = true
+		b.saveLocked()
 	}
 }
 
@@ -1547,6 +1567,7 @@ func (b *Board) GiveBack(job, worker string) error {
 	if b.claims[acct] > 0 {
 		b.claims[acct]--
 	}
+	b.saveLocked()
 	return nil
 }
 
@@ -1767,6 +1788,7 @@ func (b *Board) Progress(job, worker string, stage int) error {
 			b.leases[job][worker] = now.Add(remaining)
 		}
 	}
+	b.saveLocked()
 	return nil
 }
 
@@ -1825,6 +1847,7 @@ func (b *Board) Cancel(job string) error {
 	l.Cancelled = true
 	// Expire it so nothing else on the board treats it as open.
 	l.Expires = b.now()
+	b.saveLocked()
 	return nil
 }
 
