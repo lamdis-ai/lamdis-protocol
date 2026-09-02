@@ -16,7 +16,7 @@ Both `server.json` files validate against
 
 | Target | How it accepts a listing | Remote HTTP? | Status |
 |---|---|---|---|
-| [MCP Registry](https://registry.modelcontextprotocol.io) | `mcp-publisher` CLI publishes `server.json`; namespace must be proven | yes (`remotes[].type: streamable-http`) | **needs you** — see "MCP Registry" below; nothing published yet (`?search=lamdis` returns 0) |
+| [MCP Registry](https://registry.modelcontextprotocol.io) | `mcp-publisher` CLI publishes `server.json`; namespace must be proven | yes (`remotes[].type: streamable-http`) | **published** — `ai.lamdis/exchange` 0.1.0, DNS namespace proven by a TXT record on the apex; key at `~/.lamdis/mcp-registry.key` |
 | [punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | PR editing `README.md` | yes | PR open: https://github.com/punkpeye/awesome-mcp-servers/pull/13498 |
 | [jaw9c/awesome-remote-mcp-servers](https://github.com/jaw9c/awesome-remote-mcp-servers) | PR adding a table row | remote only | PR open: https://github.com/jaw9c/awesome-remote-mcp-servers/pull/710 |
 | [docker/mcp-registry](https://github.com/docker/mcp-registry) (Docker MCP Catalog / Docker Desktop) | PR adding `servers/<name>/{server.yaml,tools.json,readme.md}` | yes (`type: remote`) | PR open: https://github.com/docker/mcp-registry/pull/4896 |
