@@ -119,7 +119,7 @@ func (s *Server) stagePending(ctx context.Context, l *api.Listing) (map[string]a
 	s.pending[l.Job] = p
 	s.mu.Unlock()
 	token := s.BuyerToken(l.Job)
-	return map[string]any{
+	out := map[string]any{
 		"job": l.Job, "kind": l.Kind, "status": "awaiting_payment",
 		"pay_at": p.PayAt, "token": token,
 		"amount_minor": amount, "currency": l.Currency,
@@ -130,7 +130,12 @@ func (s *Server) stagePending(ctx context.Context, l *api.Listing) (map[string]a
 			"ceiling, not charged; the job goes on the board the moment that " +
 			"lands, and the card is charged once, at the end, for exactly what " +
 			"was paid out on proof. Keep the token: it is how you follow this job.",
-	}, nil
+	}
+	// A wallet instead of a card: the exact USDC amount that names this job.
+	if q := s.usdcQuote(l.Job, amount); q != nil {
+		out["pay_usdc"] = q
+	}
+	return out, nil
 }
 
 // pendingFor returns a parked job.
@@ -211,6 +216,10 @@ func (s *Server) FundFromCard(ctx context.Context, job, session, intent string, 
 // captured.
 func (s *Server) settleCard(ctx context.Context, l *api.Listing, remainder int64) {
 	f := l.Funding
+	if f != nil && f.Kind == "usdc" {
+		s.settleChain(ctx, l, remainder)
+		return
+	}
 	if f == nil || f.Kind != "card" || f.Settled {
 		return
 	}
@@ -293,7 +302,20 @@ func (s *Server) handlePaidReturn(w http.ResponseWriter, r *http.Request) {
 	job := r.PathValue("job")
 	session := r.URL.Query().Get("session")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if _, live := s.Board.Get(job); !live {
+	if l, live := s.Board.Get(job); live {
+		// Already listed. The token goes only to whoever holds the checkout
+		// session that paid for it: job ids are public, and a redirect that
+		// handed the token to anybody who typed the URL would make every
+		// operator the buyer of every card-funded job.
+		if l.Funding == nil || session == "" || l.Funding.Session != session {
+			fmt.Fprint(w, api.GuestNotice("This job is already on the board",
+				"Use the link from your payment confirmation to follow it."))
+			return
+		}
+		http.Redirect(w, r, "/my/"+job+"?t="+s.BuyerToken(job), http.StatusFound)
+		return
+	}
+	{
 		if s.Authorized == nil || session == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, api.GuestNotice("Payment not confirmed", "No checkout session to check."))
@@ -329,4 +351,48 @@ const guestSentinel = "guest"
 func (s *Server) releaseIfDoneNow(ctx context.Context, l *api.Listing) error {
 	l.Expires = s.now().Add(-time.Second)
 	return s.releaseIfDone(ctx, l)
+}
+
+// Anonymous posting is free, so it is rate-limited: each job parks a listing
+// and, with a rail, opens a checkout session. Per address per hour, and a
+// ceiling on how many unpaid jobs the exchange will park at once.
+const (
+	guestPerHour   = 12
+	guestMaxParked = 500
+)
+
+// guestAllowed says whether this caller may park another unpaid job.
+func (s *Server) guestAllowed(r *http.Request) error {
+	ip := r.Header.Get("X-Forwarded-For")
+	if i := strings.IndexByte(ip, ','); i >= 0 {
+		ip = ip[:i]
+	}
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		ip = r.RemoteAddr
+		if i := strings.LastIndexByte(ip, ':'); i >= 0 {
+			ip = ip[:i]
+		}
+	}
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.pending) >= guestMaxParked {
+		return fmt.Errorf("too many unpaid jobs are waiting; try again in a while")
+	}
+	if s.guestSeen == nil {
+		s.guestSeen = map[string][]time.Time{}
+	}
+	recent := s.guestSeen[ip][:0]
+	for _, t := range s.guestSeen[ip] {
+		if now.Sub(t) < time.Hour {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= guestPerHour {
+		s.guestSeen[ip] = recent
+		return fmt.Errorf("that is enough unpaid jobs from one place for an hour; pay for one, or sign in")
+	}
+	s.guestSeen[ip] = append(recent, now)
+	return nil
 }

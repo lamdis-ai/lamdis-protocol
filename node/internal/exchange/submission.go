@@ -66,6 +66,9 @@ type SubmissionVerifier struct {
 // could have been taken anywhere, any time.
 func (sv *SubmissionVerifier) Verify(sub api.Submission, blob func(string) ([]byte, bool)) (api.Submission, error) {
 	if len(sub.Artifacts) == 0 {
+		if len(sub.Report) > 0 {
+			return sv.verifyReport(sub)
+		}
 		return sub, fmt.Errorf("nothing was uploaded")
 	}
 
@@ -145,7 +148,14 @@ func (sv *SubmissionVerifier) Verify(sub api.Submission, blob func(string) ([]by
 	// than rejected.
 	if m := sub.SiteMark; m != nil {
 		sub.MarkSeen = api.MarkSeenIn(sv.allTranscribedText(), m.Text)
-		if !sub.MarkSeen && !m.Derived {
+		// An observation pays on admissibility alone — there is no adjudicated
+		// finding standing between "the code was legible" and the fee, as
+		// there is for a do-job. So for an observation of a place, the mark
+		// is the only thing saying the photograph is of that place, and a
+		// derived one is required too. A code card photographed at home with
+		// edited coordinates was earning every observe fee on the board.
+		kind, _ := sv.kindOf(sub.Job)
+		if !sub.MarkSeen && (!m.Derived || kind == api.KindObserve) {
 			sub.Why = fmt.Sprintf(
 				"none of the photographs show %s, so there is nothing tying them "+
 					"to this property rather than a similar one. Include it in one "+
@@ -218,6 +228,22 @@ func (sv *SubmissionVerifier) Verify(sub api.Submission, blob func(string) ([]by
 			". Reshoot so the finished work is clearly in frame, or mark it as an " +
 			"attempt if it could not be done."
 	}
+	return sub, nil
+}
+
+// verifyReport accepts a written answer with no photograph behind it.
+//
+// Honestly: nothing here is verified in the sense the rest of this file means.
+// No challenge code ties it to a time, no metadata to a place, no describer
+// read anything. What is established is that the person holding this job's
+// capability wrote these answers, which is a signed claim — tier V0 — and the
+// submission says so rather than inheriting the tier the buyer asked for.
+// It is admissible because that is exactly what the buyer bought when they
+// asked for a table instead of a photograph.
+func (sv *SubmissionVerifier) verifyReport(sub api.Submission) (api.Submission, error) {
+	sub.Verified = true
+	sub.Reached = string(verify.TierV0)
+	sub.Finding = false
 	return sub, nil
 }
 

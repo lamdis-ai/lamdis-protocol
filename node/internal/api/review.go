@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -49,6 +50,11 @@ type Review struct {
 	// AttestedBy records how they authenticated.
 	AttestedBy string    `json:"attested_by"`
 	At         time.Time `json:"at"`
+	// Worker is the account the seat was assigned to, which is who the fee is
+	// credited to. Reviewer above is how the answer is deduplicated; this is
+	// how it is paid. Empty for a pre-issued link nobody claimed from the
+	// board, which has no account behind it and cannot be paid.
+	Worker string `json:"worker,omitempty"`
 }
 
 // Admissible reports whether a review counts as work done.
@@ -233,6 +239,14 @@ type ReviewServer struct {
 	// Secrets returns the candidate secrets for a job. In a real deployment
 	// this is backed by the issued-capability table.
 	Secrets func(job string) []string
+	// Board is where a seat on a panel was assigned, so a recorded review can
+	// free it. Without this every review lapsed into an abandonment: the
+	// reviewer did the work, the lease ran out, and their standing paid for it.
+	Board *Board
+	// Settled credits the reviewer for a recorded review. It returns what was
+	// credited, in minor units, so the page can say something true. Nil means
+	// nobody is paid, which the page then says instead.
+	Settled func(job, worker string, r Review) (paidMinor int64, err error)
 	Now     func() time.Time
 }
 
@@ -325,10 +339,16 @@ func (s *ReviewServer) handleReview(w http.ResponseWriter, r *http.Request, c *C
 	if reviewer == "" {
 		reviewer = "cap:" + c.Holder[:16]
 	}
-	err := s.Reviews.Submit(c.Job, Review{
+	// The account behind the seat, when the seat came from the board.
+	var worker string
+	if s.Board != nil {
+		worker, _ = s.Board.WorkerFor(c.Holder)
+	}
+	review := Review{
 		Reviewer: reviewer, Finding: in.Finding, Confident: in.Confident,
-		Reason: in.Reason, AttestedBy: c.Attestation(),
-	})
+		Reason: in.Reason, AttestedBy: c.Attestation(), Worker: worker,
+	}
+	err := s.Reviews.Submit(c.Job, review)
 	if err != nil {
 		// The reviewer is a person being asked to do something, so this is the
 		// one place a specific message is worth more than a generic refusal.
@@ -336,9 +356,38 @@ func (s *ReviewServer) handleReview(w http.ResponseWriter, r *http.Request, c *C
 		writeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
+	p, _ := s.Reviews.Panel(c.Job)
+	practice := p != nil && p.Practice
+
+	// The review is the work. Recording it and leaving the seat to lapse
+	// charged the reviewer an abandonment for finishing: forty-five minutes
+	// later they were in cooldown, and after three reviews their allowance
+	// was one forever. Free the seat the same way a submitted job does.
+	if s.Board != nil && worker != "" {
+		if practice {
+			s.Board.DoneUnscored(c.Job, worker)
+		} else {
+			s.Board.Done(c.Job, worker)
+		}
+	}
+	// And pay for it. The page promised money with the next payout; until this
+	// existed nothing credited anybody for a review.
+	var paid int64
+	if s.Settled != nil && worker != "" && !practice {
+		if n, err := s.Settled(c.Job, worker, review); err != nil {
+			log.Printf("review: %s by %s recorded but not settled: %v", c.Job, worker, err)
+		} else {
+			paid = n
+		}
+	}
 	t := s.Reviews.Tally(c.Job)
 	writeJSON(w, map[string]any{
 		"recorded": true, "received": t.Admissible, "complete": t.Complete,
+		// What actually happened to the money, so the page does not have to
+		// guess. Zero on a real panel means the fee is owed and not yet
+		// credited — the earnings page is the source of truth.
+		"paid_minor": paid, "practice": practice,
+		"payable": worker != "" && !practice,
 	})
 }
 

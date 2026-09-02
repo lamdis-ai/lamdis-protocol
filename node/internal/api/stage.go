@@ -111,6 +111,13 @@ func (l *Listing) ValidateStages() error {
 // few enough that a board entry stays readable.
 const MaxStages = 12
 
+// MaxWorkHours is the longest a buyer may let one person hold a job.
+//
+// Three days covers a real multi-visit errand. Anything longer is either
+// staged work — where each stage carries its own lease — or a job that will
+// sit dead in a griefer's hands for as long as the buyer allowed.
+const MaxWorkHours = 72
+
 // LeaseFor is how long somebody may hold this job before it is treated as
 // abandoned.
 //
@@ -121,7 +128,13 @@ const MaxStages = 12
 // so, and the lease matches the work rather than the other way round.
 func (l *Listing) LeaseFor(fallback time.Duration) time.Duration {
 	if l.WorkHours > 0 {
-		return time.Duration(l.WorkHours) * time.Hour
+		hours := l.WorkHours
+		if hours > MaxWorkHours {
+			// Post refuses a listing over the cap; this is the backstop for a
+			// listing that reached the board another way.
+			hours = MaxWorkHours
+		}
+		return time.Duration(hours) * time.Hour
 	}
 	if l.Staged() {
 		// A staged job is multi-visit by construction. Assuming otherwise

@@ -521,8 +521,12 @@ func RegisterExchange(s *sdk.Server, x *Exchange) {
 			if rows == 0 {
 				rows = 3
 			}
+			// An observation, not a do-job: the worker finds out what is
+			// already true and writes it down. Posted as "do" it could only
+			// settle on an adjudicated photograph of the work, which a table
+			// of quotes is not.
 			out, err := x.call(ctx, "POST", "/v1/tasks", map[string]any{
-				"kind": "do", "predicate": a.Question, "instructions": a.Instructions,
+				"kind": "observe", "predicate": a.Question, "instructions": a.Instructions,
 				"where": a.Where, "fee_minor": a.FeeMinor,
 				"deliverable": fmt.Sprintf("%d results", rows),
 				"report": []map[string]any{

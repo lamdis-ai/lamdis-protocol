@@ -33,8 +33,10 @@ type Refusal struct {
 	Class string
 	// Why is what the buyer's agent is told.
 	Why string
-	// Review is true when the job is held for a person to look at rather than
-	// refused outright: some of these have honest readings.
+	// Review marks a class with honest readings, so the refusal can say what
+	// would list instead. Nothing is held for a person to look at: there is
+	// no review queue, and a message promising one would be a lie. The job
+	// is refused either way.
 	Review bool
 }
 
@@ -51,9 +53,9 @@ type screenRule struct {
 //
 // Each one names a class of harm rather than a keyword, because a list of
 // banned words is a list somebody edits around. Where an honest reading exists
-// the rule holds the job for review instead of refusing it — a locksmith
-// opening a door and a burglar opening a door describe themselves the same
-// way, and the difference is a licence, not a phrase.
+// the refusal says what to change — a locksmith opening a door and a burglar
+// opening a door describe themselves the same way, and the difference is a
+// licence, not a phrase — but it is still a refusal: nobody is queued to look.
 var screenRules = []screenRule{
 	{
 		class:   "account-creation",
@@ -98,6 +100,21 @@ var screenRules = []screenRule{
 			"between people, in either direction.",
 	},
 	{
+		// A task whose subject is a person. Following somebody, waiting for
+		// them, photographing whoever comes and goes, finding out where they
+		// live, tailing a car: the honest readings are rare and the dishonest
+		// ones end with somebody being found by a person they left. The rule
+		// looks for a surveillance verb aimed at a person or a vehicle, for a
+		// question about where a named person lives or works, and for
+		// children at a school. It is refused, not held: there is no queue of
+		// people reviewing these, and saying there was would be a lie.
+		class:   "person-targeting",
+		pattern: personTargeting,
+		why: "this exchange does not carry work whose subject is a person: " +
+			"following, watching or photographing somebody, finding out where " +
+			"they live or work, or tracking a vehicle. Refused.",
+	},
+	{
 		class:   "off-platform",
 		pattern: regexp.MustCompile(`(?i)\b(whats ?app|telegram|signal me|dm me|text me at|email me at|discord|pay(?:ment)? outside|off[- ]platform)\b`),
 		why: "arrangements moved off the exchange lose the escrow, the evidence " +
@@ -106,6 +123,32 @@ var screenRules = []screenRule{
 		review: true,
 	},
 }
+
+// personTargeting is assembled from parts so each can be read on its own.
+var personTargeting = regexp.MustCompile(`(?i)` + strings.Join([]string{
+	// Follow, tail, watch or track a person or a vehicle.
+	`\b(?:follow|tail|trail|shadow|track|stalk|surveil|spy on|keep (?:an )?eye on|keep watch on|keep tabs on)\b[^.]{0,40}\b(?:` + personNoun + `|car|vehicle|truck|van|plates?)\b`,
+	// Photograph, film or wait for whoever comes and goes, or a particular
+	// person.
+	`\b(?:photograph|film|record|video|snap|take (?:a |some )?(?:photos?|pictures?|videos?) of|watch|wait for|wait outside for|look out for|see|note|log|identify)\b[^.]{0,40}\b(?:whoever|anyone who|anybody who|everyone who|everybody who|people who|who (?:comes|goes|leaves|arrives|enters|exits|visits|lives|collects|picks up|answers|drops off)|the (?:man|woman|person|guy|girl|couple|family) (?:who|that|at|in|living|staying)|(?:my|his|her|their) (?:` + personNoun + `))\b`,
+	// Where a person lives, works or sleeps.
+	`\bwhere\s+(?:\S+\s+){1,4}?(?:lives?|works?|sleeps?|is staying|stays|is living)\b`,
+	// Whether somebody's partner, ex or child is somewhere.
+	`\b(?:whether|if|when|what time)\s+(?:my|his|her|their)\s+(?:` + personNoun + `)(?:'s)?\b[^.]{0,30}\b(?:is|was|are|were|comes|goes|leaves|arrives|gets|home|there|in|out|at|parked)\b`,
+	// Anything at all about an ex.
+	`\b(?:my|his|her|their)\s+ex(?:-?(?:wife|husband|partner|boyfriend|girlfriend))?\b`,
+	// A car parked somewhere and who it belongs to.
+	`\b(?:licen[cs]e|number|reg(?:istration)?) plates?\b[^.]{0,40}\b(?:parked|who|whose|owner|visits?|visiting|comes|outside|at)\b`,
+	`\bwhose car\b|\bwho (?:is|was) (?:parked|visiting|staying|sleeping)\b`,
+	// Children at a school.
+	`\b(?:outside|near|at|by|from)\s+(?:the |a |their |his |her |my )?(?:school|playground|nursery|daycare|kindergarten|preschool)\b[^.]{0,40}\b(?:kids?|child|children|pupils?|students?|boys?|girls?|son|daughter|pick-?up|collect(?:s|ed|ing)?|who)\b`,
+}, "|"))
+
+// personNoun is who a surveillance verb might be aimed at.
+const personNoun = `person|people|man|woman|guy|girl|boy|lady|kid|kids|child|children|` +
+	`daughter|son|wife|husband|ex|boyfriend|girlfriend|partner|spouse|neighbou?r|` +
+	`tenant|landlord|employee|colleague|co-?worker|boss|friend|brother|sister|` +
+	`mother|father|mum|mom|dad|resident|occupant`
 
 // Screen inspects everything a buyer wrote for work this exchange refuses.
 //
@@ -151,7 +194,8 @@ func MassLowValue(slots int, payMinor int64) *Refusal {
 			Review: true,
 			Why: fmt.Sprintf(
 				"%d people at %d minor units each is the shape engagement "+
-					"farming takes. A person will look at this before it lists.",
+					"farming takes, and it is refused as posted. Fewer people at "+
+					"a real rate lists without trouble.",
 				slots, payMinor),
 		}
 	}

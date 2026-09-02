@@ -182,6 +182,15 @@ type Submission struct {
 	Stage int `json:"stage,omitempty"`
 	// StageName is that stage in words, for anybody reading the record later.
 	StageName string `json:"stage_name,omitempty"`
+
+	// Report is the worker's written answer to a job that asked for one, as
+	// rows of the fields the listing named. See report.go.
+	Report []ReportRow `json:"report,omitempty"`
+	// Reached is the tier the evidence actually supported, when it is lower
+	// than what the job asked for. A report with no photograph is a signed
+	// claim and nothing more, and the receipt must say V0 rather than repeat
+	// the tier the buyer requested.
+	Reached string `json:"reached,omitempty"`
 }
 
 // SHA256 is the first artifact's hash, for callers that still think in one
@@ -259,6 +268,11 @@ type workBrief struct {
 	Challenge     string `json:"challenge"`
 	Tier          string `json:"tier,omitempty"`
 	Expires       string `json:"expires"`
+	// Report is the table the job wants filled in, when the deliverable is
+	// information rather than a photograph. The page renders a form from it.
+	Report []ReportField `json:"report,omitempty"`
+	// Practice marks a rehearsal: nothing is paid and nothing is recorded.
+	Practice bool `json:"practice,omitempty"`
 }
 
 func (s *WorkServer) handleBrief(w http.ResponseWriter, r *http.Request, c *Capability, _ []byte) {
@@ -276,6 +290,7 @@ func (s *WorkServer) handleBrief(w http.ResponseWriter, r *http.Request, c *Capa
 		PayMinor: l.PayMinor, BonusMinor: l.BonusMinor, Currency: l.Currency,
 		Tier:    l.Tier,
 		Expires: l.Expires.UTC().Format(time.RFC3339),
+		Report:  l.Report, Practice: l.Practice,
 	}
 	// The code is per stage, so it has to be derived from the stage the crew
 	// is actually on.
@@ -451,14 +466,31 @@ func (s *WorkServer) handleFinalize(w http.ResponseWriter, r *http.Request, c *C
 		// and it still requires evidence of having been there.
 		Attempted bool   `json:"attempted"`
 		Why       string `json:"why"`
+		// Report is the written answer, for a job that asked for one. A
+		// photograph alongside it is welcome and optional.
+		Report []ReportRow `json:"report"`
 	}
 	if len(body) > 0 {
 		json.Unmarshal(body, &claim)
 	}
 
-	if len(arts) == 0 {
-		writeWork(w, http.StatusBadRequest, map[string]string{
-			"error": "add at least one photo or video first"})
+	// A job that asked for a table takes a table. Anything else needs a
+	// photograph, and a report job with neither is told which it is missing.
+	var report []ReportRow
+	if l != nil && len(l.Report) > 0 && len(claim.Report) > 0 {
+		rows, err := ValidateReport(l.Report, claim.Report)
+		if err != nil {
+			writeWork(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		report = rows
+	}
+	if len(arts) == 0 && len(report) == 0 {
+		msg := "add at least one photo or video first"
+		if l != nil && len(l.Report) > 0 {
+			msg = "fill in the report first; a photo is optional on this job"
+		}
+		writeWork(w, http.StatusBadRequest, map[string]string{"error": msg})
 		return
 	}
 
@@ -473,6 +505,7 @@ func (s *WorkServer) handleFinalize(w http.ResponseWriter, r *http.Request, c *C
 		ExpenseMinor: claim.ExpenseMinor, ExpenseNote: claim.ExpenseNote,
 		Attempted: claim.Attempted, Why: claim.Why,
 		Stage: stageIdx, StageName: stage.Name,
+		Report: report,
 	}
 	if l != nil {
 		sub.Tier = l.Tier
@@ -547,9 +580,27 @@ func (s *WorkServer) handleFinalize(w http.ResponseWriter, r *http.Request, c *C
 			out["status_note"] = "next: " + ns.Name
 		}
 	}
+	if stored.Reached != "" {
+		out["reached"] = stored.Reached
+	}
 	if l, ok := s.Board.Get(c.Job); ok && l != nil {
 		out["currency"] = l.Currency
 		switch {
+		case l.Practice:
+			// A rehearsal. Nothing was held, nothing is paid, and nothing is
+			// recorded against the worker's standing — said plainly, because
+			// the alternative was a page reading "payment is still settling"
+			// over an escrow of nothing.
+			out["practice"] = true
+			if stored.Verified {
+				out["status"] = "practice run recorded"
+			} else if stored.Why != "" {
+				out["status"] = "not accepted"
+			} else {
+				out["status"] = "practice run recorded"
+			}
+			out["note"] = "This was a practice run. Nothing is paid for it and " +
+				"it does not count toward your record either way."
 		case !stored.Verified && stored.Why == "":
 			// Nothing has looked at it yet. Saying "not accepted" here would
 			// tell a worker they failed when in fact nobody has judged them,

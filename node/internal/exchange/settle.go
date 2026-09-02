@@ -145,6 +145,16 @@ func expensesFor(l *api.Listing, sub api.Submission) int64 {
 }
 
 func workFor(l *api.Listing, sub api.Submission) int64 {
+	// A written answer to a job that asked for one is paid like an
+	// observation: the fee for an admissible answer, whatever it says. There
+	// is nothing to adjudicate a photograph against, and no bonus, because
+	// nothing independent of the worker established the finding.
+	if len(l.Report) > 0 && sub.ReportOnly() {
+		if !sub.Verified {
+			return 0
+		}
+		return l.PayMinor
+	}
 	switch l.Kind {
 	case api.KindDo:
 		// A staged job pays for the piece that was just evidenced, not for the

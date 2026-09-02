@@ -32,11 +32,20 @@ import (
 
 // Offer is what an operator's endpoint receives.
 type Offer struct {
-	Offer         string    `json:"offer"`
-	Job           string    `json:"job"`
-	Kind          string    `json:"kind"`
-	Title         string    `json:"title"`
-	Where         string    `json:"where,omitempty"`
+	Offer string `json:"offer"`
+	Job   string `json:"job"`
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+	// Area is the coarse locality, and AreaLat and AreaLon the same point the
+	// public board publishes: two decimal places, about a kilometre. The exact
+	// address is deliberately absent. An offer goes to every endpoint in
+	// range before anybody has claimed anything, and an operator who
+	// registered a webhook to harvest front doors must get nothing a stranger
+	// reading the board could not. The address rides only in WorkURL, behind
+	// the capability that a claim mints.
+	Area          string    `json:"area,omitempty"`
+	AreaLat       float64   `json:"area_lat,omitempty"`
+	AreaLon       float64   `json:"area_lon,omitempty"`
 	DistanceMiles float64   `json:"distance_miles,omitempty"`
 	Skills        []Skill   `json:"skills,omitempty"`
 	PayMinor      int64     `json:"pay_minor"`
@@ -136,6 +145,13 @@ func (d *Dispatcher) Announce(ctx context.Context, l *Listing) int {
 		if cap.Webhook == "" || !cap.Accepting || !cap.Takes(l.Kind) {
 			continue
 		}
+		// No position, no offers. The board lets an unpositioned person browse
+		// everything because they are looking; a webhook is not looking, it
+		// is receiving, and "in range" of an operator who is nowhere was
+		// every job in the country.
+		if !cap.Positioned() {
+			continue
+		}
 		if !MeetsSkills(l.Skills, cap.Skills) {
 			continue
 		}
@@ -173,9 +189,13 @@ func (d *Dispatcher) Announce(ctx context.Context, l *Listing) int {
 func (d *Dispatcher) deliver(ctx context.Context, worker string, cap Capacity, l *Listing, miles float64) bool {
 	d.markOffered(l.Job, worker)
 
+	// Built from the public view, so a field this file forgets to strip is
+	// one the board already withholds.
+	pub := l.Public()
 	off := Offer{
 		Offer: fmt.Sprintf("%s:%s", l.Job, shortID(worker)),
-		Job:   l.Job, Kind: l.Kind, Title: l.Title, Where: l.Where,
+		Job:   l.Job, Kind: l.Kind, Title: pub.Title,
+		Area: pub.Area, AreaLat: pub.AreaLat, AreaLon: pub.AreaLon,
 		DistanceMiles: miles, Skills: l.Skills,
 		PayMinor: l.PayMinor, BonusMinor: l.BonusMinor,
 		Currency: l.Currency, Tier: l.Tier, Expires: l.Expires,

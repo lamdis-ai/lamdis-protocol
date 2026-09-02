@@ -20,6 +20,7 @@ import (
 	"github.com/ncruces/go-sqlite3/driver"
 
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/account"
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/anchor"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/api"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/evidence"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/ledger"
@@ -115,6 +116,10 @@ type Server struct {
 	Rail PayoutRail
 	// PayoutAccounts maps a person to their account at the rail.
 	PayoutAccounts *PayoutAccounts
+	// USDC is the stablecoin rail: jobs funded by a transfer to the
+	// exchange's address, earnings routed to an operator's own. Watch-only;
+	// nil when LAMDIS_USDC_ADDRESS and LAMDIS_BASE_RPC are not both set.
+	USDC *USDCRail
 	// Holdbacks is money earned but not yet clear to send, because the buyer
 	// still has time to object.
 	Holdbacks *Holdbacks
@@ -128,6 +133,15 @@ type Server struct {
 	// photograph proves nothing about when or where it was taken. Nil means
 	// nothing is verified and nothing becomes payable.
 	Verify func(api.Submission, func(string) ([]byte, bool)) (api.Submission, error)
+	// OnAccepted is told about every submission that passed verification,
+	// with the listing it answered. Nil means nobody is listening. It is how
+	// the findings store learns what the house jobs found without the
+	// settlement path knowing that a findings store exists.
+	OnAccepted func(l *api.Listing, sub api.Submission)
+	// Anchors ties receipt hashes to Bitcoin through OpenTimestamps, so a
+	// receipt can be proven to have existed unchanged without trusting this
+	// exchange. Nil means receipts are signed but not anchored. See anchor_api.go.
+	Anchors *anchor.Anchorer
 
 	mu sync.Mutex
 	// blobs holds evidence bytes by content hash. In-memory for now; the
@@ -145,6 +159,8 @@ type Server struct {
 	// pending holds jobs posted without an account, until their card is
 	// authorised. Never on the board; dropped after PendingTTL.
 	pending map[string]*pendingJob
+	// guestSeen is when each address last parked unpaid jobs, for the limit.
+	guestSeen map[string][]time.Time
 	// started is when this process came up, for the status page.
 	started time.Time
 
@@ -266,6 +282,13 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 	}
 	srv.PayoutAccounts = NewPayoutAccounts(opt.DataDir)
 	srv.Holdbacks = NewHoldbacks(opt.DataDir)
+	// The stablecoin rail, when its address and an RPC are configured.
+	if usdc, err := NewUSDCRailFromEnv(opt.DataDir); err != nil {
+		return nil, err
+	} else if usdc != nil {
+		srv.USDC = usdc
+		log.Printf("usdc       watching %s for transfers to %s", usdc.Net.Name, usdc.Address())
+	}
 	if rail, err := payment.NewStripe(); err == nil {
 		srv.Rail = rail
 		srv.Charges = rail
@@ -289,8 +312,19 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 	// The verifier. Wired even with no vision model, because it still catches
 	// reuse and geofence violations, and because a nil hook means submissions
 	// are accepted without anyone ever looking at them.
+	// The reuse corpus is on disk when there is a disk. In memory it forgot
+	// every photograph at each deploy, and the same picture earned again the
+	// morning after a restart.
+	corpus := verify.NewCorpus()
+	if opt.DataDir != "" {
+		c, err := verify.OpenCorpus(filepath.Join(opt.DataDir, "corpus.jsonl"))
+		if err != nil {
+			return nil, fmt.Errorf("opening the evidence corpus: %w", err)
+		}
+		corpus = c
+	}
 	srv.Verify = (&SubmissionVerifier{
-		Vision: opt.Vision, Corpus: verify.NewCorpus(),
+		Vision: opt.Vision, Corpus: corpus,
 		Media: opt.Media, Transcriber: opt.Transcriber,
 		StoreFrame: srv.storeFrame,
 		StageDeliverable: func(job string, stage int) (string, bool) {
@@ -380,6 +414,10 @@ func (s *Server) Handler() *http.ServeMux {
 		Caps: s.Caps, Reviews: s.Reviews, Replay: s.Replay,
 		Secrets: s.secretsFor,
 		Blob:    s.blob,
+		// A recorded review frees its seat and is paid from the panel's
+		// escrow. Without both, every review lapsed into an abandonment and
+		// credited nobody.
+		Board: s.Board, Settled: s.settleReview,
 	}
 	rs.Register(mux)
 
@@ -458,6 +496,7 @@ func (s *Server) Handler() *http.ServeMux {
 		mux.HandleFunc("GET /v1/jobs/{job}/bids", s.withBuyer(s.handleListBids))
 		mux.HandleFunc("POST /v1/jobs/{job}/award", s.withBuyer(s.handleAwardBid))
 		mux.HandleFunc("GET /v1/jobs/{job}/receipt", s.withBuyer(s.handleJobReceipt))
+		mux.HandleFunc("GET /v1/jobs/{job}/receipt/anchor", s.withBuyer(s.handleReceiptAnchor))
 		s.registerReview(mux)
 		s.registerQuote(mux)
 		s.registerProjects(mux)
@@ -506,10 +545,16 @@ func (s *Server) Handler() *http.ServeMux {
 	// A capability holder must never be able to mint more capabilities.
 	node := &api.Server{Principal: s.PID}
 	mux.HandleFunc("POST /v1/panels", node.WithAuth(s.handleCreatePanel))
+	// The stablecoin rail's operator and admin routes, and the public list
+	// of which rails are on.
+	s.registerUSDC(mux, node)
 	// One route, two credentials. A person's own key signs; their agent
 	// presents a key that person issued. Registering it twice — once per
 	// scheme — panics the mux at boot, which is how this was found.
 	mux.HandleFunc("POST /v1/tasks", s.postJobAsAnyone(node))
+
+	// The chain of receipt roots, readable by anyone.
+	s.registerAnchors(mux)
 
 	mux.HandleFunc("GET /", s.handleIndex)
 	return mux
@@ -573,11 +618,20 @@ func (s *Server) acceptEvidence(sub api.Submission) (api.Submission, error) {
 	// Money moves here or it never moves. Everything upstream of this line is
 	// a claim about evidence; this is the part the worker came for.
 	if worker, ok := s.Board.WorkerFor(verified.Holder); ok {
-		if err := s.settle(context.Background(), verified.Job, verified, worker); err != nil {
+		if l, ok := s.Board.Get(verified.Job); ok && l.Practice {
+			// A rehearsal holds nothing and pays nothing. Settling it produced
+			// "nothing is held" and the message below, which told a newcomer
+			// their first $0 was "still settling".
+		} else if err := s.settle(context.Background(), verified.Job, verified, worker); err != nil {
 			// The evidence stands even if settlement did not. Losing the
 			// submission because the ledger was busy would be the worse of the
 			// two failures, and the reconciler is what resolves the other.
 			verified.Why = "accepted; payment is still settling"
+		}
+	}
+	if s.OnAccepted != nil && verified.Verified {
+		if l, ok := s.Board.Get(verified.Job); ok {
+			s.OnAccepted(l, verified)
 		}
 	}
 	return verified, nil
@@ -883,6 +937,8 @@ func (s *Server) handleJobReceipt(w http.ResponseWriter, r *http.Request, key *a
 		held, _ := s.Ledger.Held(r.Context(), job, l.Currency)
 		out["escrow_remaining_minor"] = held
 	}
+	// Anchored, so it can be shown to have existed without this server.
+	s.anchorReceipt(job, out)
 	// Signed, so the receipt stands on its own away from this server.
 	if body, err := json.Marshal(out); err == nil {
 		out["signature"] = hex.EncodeToString(ed25519.Sign(s.Key, body))
@@ -1424,6 +1480,10 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 	// token can act as, and its escrow arrives by card rather than balance.
 	guest := principal == guestSentinel
 	if guest {
+		if err := s.guestAllowed(r); err != nil {
+			writeError(w, http.StatusTooManyRequests, err.Error())
+			return
+		}
 		principal = guestOwner(job)
 		postedByAgent = r.Header.Get("X-Lamdis-Posted-By") == "agent"
 		if in.Pricing == api.PriceBids {
@@ -1539,7 +1599,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 	// worker who completes an abusive task has already taken the risk, and
 	// paying them does not undo it.
 	if ref := api.Screen(listing.Title, listing.Detail, listing.Instructions,
-		listing.Deliverable); ref != nil {
+		listing.Deliverable, listing.Brief, listing.Access); ref != nil {
 		if ref.Review {
 			writeError(w, http.StatusUnprocessableEntity, ref.Why)
 			return
@@ -1849,6 +1909,9 @@ func verificationBlock(l *api.Listing, subs []api.Submission) map[string]any {
 		out["site_mark"] = map[string]any{"text": mark.Text, "seen": markSeen,
 			"inferred": mark.Derived}
 	}
+	// A written report is a different kind of thing, and says so. See
+	// receipt_report.go.
+	annotateReportReceipt(out, subs)
 	return out
 }
 

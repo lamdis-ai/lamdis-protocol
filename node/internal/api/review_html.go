@@ -469,21 +469,41 @@ const reviewPageScript = `
         // them on a page with no way forward wastes that and reads as broken.
         var got = out.data.received, want = brief.reviewers;
         var settled = got >= want;
+        // Say what actually happened to the money. The server reports what
+        // it credited; the page used to promise a payout on its own
+        // authority, over a path that credited nothing.
+        var paid = out.data.paid_minor || 0;
+        var big, moneyLine;
+        if (out.data.practice || brief.practice) {
+          big = "Recorded";
+          moneyLine = "This was the demonstration panel. Nothing is paid for it " +
+            "and it does not count toward your record either way.";
+        } else if (paid > 0) {
+          big = money(paid, brief.currency) + " credited";
+          moneyLine = money(paid, brief.currency) + " for looking is in your account. " +
+            "It is sent with your next payout once the review window on it closes" +
+            (brief.bonus_minor
+              ? ", and " + money(brief.bonus_minor, brief.currency) +
+                " more is credited if the panel lands where you did"
+              : "") + ".";
+        } else if (out.data.payable === false) {
+          big = "Recorded";
+          moneyLine = "This link was not taken from the board, so there is no " +
+            "account to credit for it.";
+        } else {
+          big = "Recorded";
+          moneyLine = "The fee for looking has not been credited yet. Your " +
+            "earnings page is the record of what you are owed.";
+        }
         app.innerHTML = '<div class="hud outcome rv"><div class="t ok">' +
           '<div class="k">Recorded</div>' +
-          '<div class="v">' + money(brief.fee_minor, brief.currency) + ' for looking</div>' +
+          '<div class="v">' + esc(big) + '</div>' +
           '<p class="muted">Thank you &mdash; that is recorded. ' + esc(got) + ' of ' + esc(want) + ' answers in. ' +
             (settled
-              ? 'The panel is complete, and the money settles on it.'
+              ? 'The panel is complete, and the finding settles on it.'
               : 'It settles once ' + esc(want) + ' people have looked.') +
           '</p>' +
-          '<p class="muted">' + money(brief.fee_minor, brief.currency) +
-            ' for looking is yours either way' +
-            (brief.bonus_minor
-              ? ', plus ' + money(brief.bonus_minor, brief.currency) +
-                ' if the panel lands where you did'
-              : '') +
-            '. It reaches your account with your next payout.</p>' +
+          '<p class="muted">' + esc(moneyLine) + '</p>' +
           '<div class="row"><button id="next">Verify another</button></div>' +
           '<p class="err" id="nexterr"></p>' +
           '<p class="note"><a href="/board">Back to open work</a></p></div></div>';

@@ -2,6 +2,7 @@ package exchange
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"sort"
 	"time"
@@ -87,7 +88,18 @@ type PriceBand struct {
 }
 
 func (s *Server) registerQuote(mux *http.ServeMux) {
-	mux.HandleFunc("POST /v1/quote", s.withBuyer(s.handleQuote))
+	// Public. A quote reads nothing that belongs to anybody and moves no
+	// money; it is the question an agent has to be able to ask before it
+	// promises a person anything, and the guest tools ask it with no
+	// credential at all.
+	mux.HandleFunc("POST /v1/quote", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "could not read the request")
+			return
+		}
+		s.handleQuote(w, r, nil, "", body)
+	})
 }
 
 func (s *Server) handleQuote(w http.ResponseWriter, r *http.Request, key *account.Key, person string, body []byte) {

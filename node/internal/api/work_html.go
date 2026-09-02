@@ -88,6 +88,21 @@ textarea { width: 100%; box-sizing: border-box; padding: .55rem .6rem;
   color: var(--ink); font: inherit; font-size: .9rem; resize: vertical; }
 textarea:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 .ask-acts { display: flex; gap: .5rem; margin-top: .5rem; }
+/* The report: a small table the job wants filled in, one card per row. */
+.report { margin: 0 0 1rem; }
+.report .row { padding: .8rem .9rem .9rem; margin: 0 0 .6rem; border: 1px solid var(--rule);
+  border-radius: 8px; background: var(--glass); }
+.report .row .rn { font: 600 .62rem/1 var(--mono); letter-spacing: .18em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: .5rem; display: flex; justify-content: space-between; }
+.report .row .rn button { font: inherit; letter-spacing: inherit; background: none; border: 0;
+  color: var(--ink-3); cursor: pointer; padding: 0; }
+.report label { display: block; margin: .35rem 0 .2rem; font: 600 .82rem/1.3 var(--sans); }
+.report label small { font-weight: 400; color: var(--ink-3); }
+.report input, .report select { width: 100%; box-sizing: border-box; padding: .5rem .6rem;
+  border: 1px solid var(--rule-2); border-radius: 4px; background: var(--bg); color: var(--ink);
+  font: inherit; font-size: .9rem; }
+.report input:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.report .add { margin-top: .2rem; }
 /* Stage progress as what it is: money-weighted, not a schedule. */
 .stage { margin: 1rem 0 0; position: relative; overflow: hidden; }
 .stage::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
@@ -166,13 +181,22 @@ function showOutcome(b, sha) {
   try { sessionStorage.removeItem(STASH); } catch (e) {}
   var paid = b.amount_minor ? money(b.amount_minor, b.currency || "usd") : null;
   var accepted = b.status === "accepted" || b.status === "attempt recorded";
-  var pending = !accepted && !b.why;
-  var variant = accepted ? "ok" : (pending ? "money" : "wait");
-  var eyebrow = accepted ? "Accepted" : (pending ? "Submitted · being checked" : "Not accepted");
-  var big = accepted ? (paid ? paid + " earned" : "Accepted")
+  var practice = !!b.practice;
+  var pending = !accepted && !practice && !b.why;
+  var variant = accepted ? "ok" : (pending || practice ? "money" : "wait");
+  var eyebrow = practice ? "Practice run"
+          : accepted ? "Accepted" : (pending ? "Submitted · being checked" : "Not accepted");
+  var big = practice ? (b.why ? "This one did not pass" : "Practice run recorded")
+          : accepted ? (paid ? paid + " earned" : "Accepted")
           : (pending ? "Sent for checking" : "This one did not pass");
-  var lead = accepted
-    ? "It is in your account. Payouts follow your payout setting."
+  // A practice run says what it is. It used to read "payment is still
+  // settling" over an escrow of nothing.
+  var lead = practice
+    ? (b.why ? esc(b.why) + " " : "") + esc(b.note || "This was a practice run. Nothing is paid for it and it does not count toward your record.")
+    : accepted
+    ? (b.reached === "V0"
+        ? "Your report is in and the fee is credited to your account. No photograph was checked, so the receipt records it as a signed claim."
+        : "It is in your account. Payouts follow your payout setting.")
     : (pending
         ? "You will be paid once the evidence is accepted. Your account shows the outcome."
         : esc(b.why) + " You are still here — you can take the job again and reshoot.");
@@ -317,9 +341,60 @@ function stageBar(b) {
     '</div>';
 }
 
+// reportForm draws the table a job wants filled in: one card per row, a
+// field per input, "add another" when the fields repeat.
+function reportField(f, i) {
+  var type = f.kind === "url" ? "url" : f.kind === "phone" ? "tel" : f.kind === "date" ? "date" : "text";
+  var hint = f.kind === "money" ? " <small>(amount, e.g. 1200.00)</small>" : "";
+  if (f.kind === "bool") {
+    return '<label for="rf-' + i + '-' + esc(f.name) + '">' + esc(f.label || f.name) +
+      (f.required ? '' : ' <small>optional</small>') + hint + '</label>' +
+      '<select id="rf-' + i + '-' + esc(f.name) + '" data-field="' + esc(f.name) + '">' +
+        '<option value="">&mdash;</option><option value="yes">Yes</option><option value="no">No</option></select>';
+  }
+  return '<label for="rf-' + i + '-' + esc(f.name) + '">' + esc(f.label || f.name) +
+    (f.required ? '' : ' <small>optional</small>') + hint + '</label>' +
+    '<input id="rf-' + i + '-' + esc(f.name) + '" type="' + type + '" data-field="' + esc(f.name) + '"' +
+    (f.kind === "money" ? ' inputmode="decimal"' : '') + '>';
+}
+function reportRow(fields, i, repeats) {
+  var body = fields.filter(function (f) { return i === 0 || f.repeats; })
+    .map(function (f) { return reportField(f, i); }).join("");
+  if (!body) { return ""; }
+  return '<div class="row" data-row="' + i + '"><div class="rn"><span>' +
+    (repeats ? "Result " + (i + 1) : "Your answer") + '</span>' +
+    (i > 0 ? '<button type="button" class="rm">remove</button>' : '') + '</div>' + body + '</div>';
+}
+function readReport(fields) {
+  var rows = [];
+  Array.prototype.forEach.call(document.querySelectorAll("#report .row"), function (row) {
+    var r = {}, any = false;
+    Array.prototype.forEach.call(row.querySelectorAll("[data-field]"), function (el) {
+      var v = (el.value || "").trim();
+      if (v) { r[el.dataset.field] = v; any = true; }
+    });
+    if (any) { rows.push(r); }
+  });
+  return rows;
+}
+function reportComplete(fields) {
+  var rows = readReport(fields);
+  if (!rows.length) { return false; }
+  return rows.every(function (r, i) {
+    return fields.every(function (f) {
+      if (!f.required) { return true; }
+      if (!f.repeats && i > 0) { return true; }
+      return !!r[f.name];
+    });
+  });
+}
+
 function render() {
   var b = BRIEF;
   var isDo = b.kind === "do";
+  var fields = b.report || [];
+  var isReport = fields.length > 0;
+  var repeats = fields.some(function (f) { return f.repeats; });
   var pill = document.getElementById("pill");
   if (pill) { pill.innerHTML = '<span class="beacon"></span>' + (isDo ? "Do job" : "Observe job") + (b.tier ? ' · ' + esc(b.tier) : ""); }
   document.getElementById("app").innerHTML = '' +
@@ -338,8 +413,21 @@ function render() {
         : '<div class="t soft"><dt class="k">Bring back</dt><dd class="v txt" style="margin-left:0">' +
             esc(b.deliverable || "a clear photo") + '</dd><div class="s">as the camera saved it</div></div>') +
     '</dl>' +
+    (b.practice
+      ? '<p class="fine rv" style="--i:1"><b>Practice run.</b> Nothing is paid for this and it ' +
+        'does not count toward your record either way. It is here so you can see how the flow works.</p>'
+      : "") +
+    (isReport
+      ? '<div class="report rv" id="report" style="--i:2">' +
+          '<span class="eyebrow gold" style="margin-bottom:.5rem">Write down what you found</span>' +
+          reportRow(fields, 0, repeats) +
+          (repeats ? '<p class="add"><button type="button" class="btn" id="addrow">Add another</button></p>' : "") +
+          '<p class="fine" style="margin:.4rem 0 0">A photo is optional on this job. Without one, the ' +
+            'report is recorded as your signed answer and nothing ties it to a time or place.</p>' +
+        '</div>'
+      : "") +
     '<div class="code-card rv" style="--i:2">' +
-      '<span class="eyebrow gold">Write this where the camera can see it</span>' +
+      '<span class="eyebrow gold">' + (isReport ? "If you add a photo, write this where the camera can see it" : "Write this where the camera can see it") + '</span>' +
       '<span class="big">' + esc(b.challenge) + '</span>' +
       '<p>Paper, a phone screen, anything. It proves the photo was taken now, for ' +
         'this job.</p>' +
@@ -348,7 +436,7 @@ function render() {
       '<p class="cap" id="shotcap"></p></div>' +
     '<label class="drop rv" for="f" id="drop" style="--i:3">' +
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>' +
-      '<span class="big" id="droptext">Take a photo</span>' +
+      '<span class="big" id="droptext">' + (isReport ? "Add a photo (optional)" : "Take a photo") + '</span>' +
       '<span class="sm">or drop one here · camera roll works too</span>' +
     '</label>' +
     '<input id="f" type="file" accept="image/*,video/mp4" capture="environment">' +
@@ -431,6 +519,31 @@ function render() {
   var drop = document.getElementById("drop");
   var chosen = null;
 
+  // The report enables the button on its own; a photo is a bonus.
+  var reportBox = document.getElementById("report");
+  function ready() { send.disabled = !(chosen || (isReport && reportComplete(fields))); }
+  if (reportBox) {
+    reportBox.addEventListener("input", ready);
+    reportBox.addEventListener("change", ready);
+    reportBox.addEventListener("click", function (ev) {
+      var t = ev.target;
+      if (t && t.classList && t.classList.contains("rm")) {
+        var row = t.closest(".row");
+        if (row) { row.parentNode.removeChild(row); ready(); }
+      }
+    });
+    var addrow = document.getElementById("addrow");
+    if (addrow) {
+      addrow.addEventListener("click", function () {
+        var n = document.querySelectorAll("#report .row").length;
+        var wrap = document.createElement("div");
+        wrap.innerHTML = reportRow(fields, n, repeats);
+        addrow.parentNode.parentNode.insertBefore(wrap.firstChild, addrow.parentNode);
+        ready();
+      });
+    }
+  }
+
   function took(file) {
     chosen = file;
     if (!chosen) { return; }
@@ -446,7 +559,7 @@ function render() {
         '<b>' + img.naturalWidth + " × " + img.naturalHeight + '</b> · ' + mb + " MB · " +
         esc(chosen.type || "file") + " · sent as saved";
     };
-    send.disabled = false;
+    ready();
     document.getElementById("droptext").textContent = "Choose a different photo";
   }
 
@@ -464,11 +577,45 @@ function render() {
     });
   }
 
+  // Uploading is not submitting. Without the second call the file sat on
+  // the server unclaimed forever: the worker saw a success screen, no
+  // submission was ever created, nothing was verified, and nobody was ever
+  // paid. A report job may skip the upload and go straight to submitting.
+  function finalize(sha) {
+    send.textContent = "Checking…";
+    var attempted = !!window.__lamdisAttempt;
+    var claim = {};
+    if (attempted) { claim.attempted = true; claim.why = window.__lamdisAttemptWhy || ""; }
+    if (isReport) { claim.report = readReport(fields); }
+    var body = (attempted || isReport) ? JSON.stringify(claim) : null;
+    var sub = "/v1/work/" + encodeURIComponent(JOB) + "/submit";
+    var payload = body ? new TextEncoder().encode(body) : new Uint8Array(0);
+    var hs = authHeaders("POST", sub, payload);
+    if (body) { hs["Content-Type"] = "application/json"; }
+    return fetch(sub, { method: "POST", headers: hs, body: body })
+      .then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, body: j, sha: sha }; });
+      })
+      .then(function (res) {
+        if (!res.ok) { throw new Error(res.body && res.body.error || "could not submit"); }
+        showOutcome(res.body, res.sha);
+      });
+  }
+  function failed(e) {
+    document.getElementById("err").textContent = e.message;
+    send.disabled = false;
+    send.textContent = "Submit";
+  }
+
   send.addEventListener("click", function () {
-    if (!chosen) { return; }
+    if (!chosen && !(isReport && reportComplete(fields))) { return; }
     send.disabled = true;
-    send.textContent = "Uploading…";
     document.getElementById("err").textContent = "";
+    if (!chosen) {
+      finalize("").catch(failed);
+      return;
+    }
+    send.textContent = "Uploading…";
 
     // Read the file into memory so the exact bytes can be hashed into the
     // signature and sent unchanged. No canvas, no re-encode: the EXIF is
@@ -476,7 +623,6 @@ function render() {
     var reader = new FileReader();
     reader.onload = function () {
       var bytes = new Uint8Array(reader.result);
-      var attempted = !!window.__lamdisAttempt;
       var path = "/v1/work/" + encodeURIComponent(JOB) + "/evidence";
       var h = authHeaders("POST", path, bytes);
       h["Content-Type"] = "application/octet-stream";
@@ -484,37 +630,12 @@ function render() {
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
         .then(function (res) {
           if (!res.ok) { throw new Error(res.body && res.body.error || "upload failed"); }
-          // Uploading is not submitting. Without this second call the file sat
-          // on the server unclaimed forever: the worker saw a success screen,
-          // no submission was ever created, nothing was verified, and nobody
-          // was ever paid.
-          send.textContent = "Checking…";
-          var sub = "/v1/work/" + encodeURIComponent(JOB) + "/submit";
-          var claim = attempted
-            ? JSON.stringify({attempted: true, why: window.__lamdisAttemptWhy || ""})
-            : null;
-          var payload = claim ? new TextEncoder().encode(claim) : new Uint8Array(0);
-          var hs = authHeaders("POST", sub, payload);
-          if (claim) { hs["Content-Type"] = "application/json"; }
-          return fetch(sub, { method: "POST", headers: hs, body: claim })
-            .then(function (r) {
-              return r.json().then(function (j) { return { ok: r.ok, body: j, sha: res.body.sha256 }; });
-            });
+          return finalize(res.body.sha256);
         })
-        .then(function (res) {
-          if (!res.ok) { throw new Error(res.body && res.body.error || "could not submit"); }
-          showOutcome(res.body, res.sha);
-        })
-        .catch(function (e) {
-          document.getElementById("err").textContent = e.message;
-          send.disabled = false;
-          send.textContent = "Submit";
-        });
+        .catch(failed);
     };
     reader.onerror = function () {
-      document.getElementById("err").textContent = "Could not read that file.";
-      send.disabled = false;
-      send.textContent = "Submit";
+      failed(new Error("Could not read that file."));
     };
     reader.readAsArrayBuffer(chosen);
   });

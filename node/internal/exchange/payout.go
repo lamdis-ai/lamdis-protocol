@@ -320,11 +320,11 @@ func (s *Server) payOut(ctx context.Context, person string, amountMinor int64, c
 // earned, and making them press a button is a way of keeping balances that
 // nobody presses the button for.
 func (s *Server) SweepPayouts(ctx context.Context) (paid int, total int64) {
-	if s.Rail == nil || s.Ledger == nil {
+	if s.Ledger == nil || (s.Rail == nil && s.USDC == nil) {
 		return 0, 0
 	}
 	now := s.now()
-	for _, person := range s.PayoutAccounts.People() {
+	for _, person := range s.payees() {
 		owed, err := s.Ledger.Balance(ctx, ledger.PayableOf(person), "USD")
 		if err != nil || owed <= 0 {
 			continue
@@ -340,6 +340,24 @@ func (s *Server) SweepPayouts(ctx context.Context) (paid int, total int64) {
 			}
 		}
 		if owed < PayoutThresholdMinor {
+			continue
+		}
+		// An address, when the person has given one, takes precedence over
+		// the card rail: the money is queued for a person to send rather
+		// than transferred by the provider.
+		if addr, ok := s.usdcRoute(person); ok {
+			if _, err := s.queueUSDC(ctx, person, addr, owed); err != nil {
+				log.Printf("payout: %s owed %d to %s: %v", person, owed, addr, err)
+				continue
+			}
+			if s.Holdbacks != nil {
+				s.Holdbacks.MarkPaid(person, now)
+			}
+			paid++
+			total += owed
+			continue
+		}
+		if s.Rail == nil {
 			continue
 		}
 		acct, ok := s.PayoutAccounts.Get(person)
@@ -361,6 +379,28 @@ func (s *Server) SweepPayouts(ctx context.Context) (paid int, total int64) {
 		total += owed
 	}
 	return paid, total
+}
+
+// payees is everyone who could be paid by any rail: a connected account, an
+// address, or both.
+func (s *Server) payees() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(people []string) {
+		for _, p := range people {
+			if !seen[p] {
+				seen[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	if s.PayoutAccounts != nil {
+		add(s.PayoutAccounts.People())
+	}
+	if s.USDC != nil {
+		add(s.USDC.Addresses.People())
+	}
+	return out
 }
 
 // People lists everyone with a connected account.
@@ -414,6 +454,10 @@ func (ps *PayoutServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"payout": st, "owed_minor": owed, "currency": "USD",
 		"threshold_minor": PayoutThresholdMinor,
 		"tax":             ps.Server.TaxStatusFor(r.Context(), worker.ID),
+	}
+	// The address path: how much has gone that way, and how much may.
+	for k, v := range ps.Server.usdcStanding(r.Context(), worker.ID) {
+		out[k] = v
 	}
 	if ps.Server.Holdbacks != nil {
 		now := ps.Server.now()
@@ -635,7 +679,7 @@ func (ps *PayoutServer) handlePayoutNow(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s := ps.Server
-	if s.Rail == nil || s.Ledger == nil {
+	if (s.Rail == nil && s.USDC == nil) || s.Ledger == nil {
 		writeError(w, http.StatusServiceUnavailable,
 			"payouts are not switched on for this exchange")
 		return
@@ -661,6 +705,22 @@ func (ps *PayoutServer) handlePayoutNow(w http.ResponseWriter, r *http.Request) 
 			"status": "your earnings are still inside the buyer's review window; " +
 				"they clear on their own",
 			"waiting": s.Holdbacks.Pending(worker.ID, now),
+		})
+		return
+	}
+	if addr, ok := s.usdcRoute(worker.ID); ok {
+		item, err := s.queueUSDC(r.Context(), worker.ID, addr, clear)
+		if err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if s.Holdbacks != nil {
+			s.Holdbacks.MarkPaid(worker.ID, now)
+		}
+		writeJSONResponse(w, map[string]any{
+			"sent": false, "queued": true, "amount_minor": clear, "currency": "USD",
+			"reference": "usdc-queued:" + item.ID, "address": addr,
+			"note": "queued for a person to send from their wallet, on a schedule",
 		})
 		return
 	}

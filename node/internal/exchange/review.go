@@ -92,11 +92,25 @@ func (s *Server) withBuyer(
 
 func (s *Server) handleRelease(w http.ResponseWriter, r *http.Request, key *account.Key, person string, _ []byte) {
 	job := r.PathValue("job")
-	if _, ok := s.ownedBy(w, job, person); !ok {
+	l, ok := s.ownedBy(w, job, person)
+	if !ok {
 		return
 	}
 	if s.Holdbacks == nil {
 		writeError(w, http.StatusServiceUnavailable, "nothing is being held")
+		return
+	}
+	// A job funded by a card or a transfer with no account behind it clears
+	// on the window and not before. Early release is the buyer's courtesy to
+	// a worker they trust; with an anonymous funder it is also the last step
+	// of carding — stolen card, own job, own evidence, release, pay out —
+	// and the window is the only thing between that and the bank.
+	if l.Funding != nil {
+		writeJSONResponse(w, map[string]any{
+			"job": job, "released": 0,
+			"status": "accepted; a job funded without an account clears on the " +
+				"release window rather than early",
+		})
 		return
 	}
 	n := s.Holdbacks.Release(job, s.now())

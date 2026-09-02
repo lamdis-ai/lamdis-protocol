@@ -229,3 +229,74 @@ func TestGuestsCannotUseAccountShapedJobs(t *testing.T) {
 		t.Errorf("open bidding without an account should be refused with a reason: %d %s", w.Code, w.Body.String())
 	}
 }
+
+// The adversarial review's two findings against this path.
+
+func TestThePaidReturnOnlyHandsTheTokenToTheSessionThatPaid(t *testing.T) {
+	s := consoleServer(t)
+	h := s.Handler()
+	out := postAsNobody(t, h)
+	job := out["job"].(string)
+	if err := s.FundFromCard(context.Background(), job, "cs_real", "pi_9", 2300, ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"", "?session=cs_somebody_elses"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "/paid/"+job+q, nil))
+		if w.Code == http.StatusFound || strings.Contains(w.Header().Get("Location"), "lbt_") {
+			t.Fatalf("/paid/%s%s handed out the buyer token", job, q)
+		}
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/paid/"+job+"?session=cs_real", nil))
+	if w.Code != http.StatusFound || !strings.Contains(w.Header().Get("Location"), "lbt_") {
+		t.Fatalf("the session that paid was not sent to its job: %d %s", w.Code, w.Header().Get("Location"))
+	}
+}
+
+func TestACardFundedJobCannotBeReleasedEarly(t *testing.T) {
+	s := consoleServer(t)
+	h := s.Handler()
+	out := postAsNobody(t, h)
+	job, tok := out["job"].(string), out["token"].(string)
+	if err := s.FundFromCard(context.Background(), job, "cs_r", "pi_r", 2300, ""); err != nil {
+		t.Fatal(err)
+	}
+	s.Holdbacks.Add(job, "worker-1", 2300, "USD", s.now(), s.disputeWindow())
+	r := httptest.NewRequest("POST", "/v1/jobs/"+job+"/release", nil)
+	r.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"released":0`) {
+		t.Fatalf("early release on a card-funded job: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAnonymousPostingIsRateLimited(t *testing.T) {
+	s := consoleServer(t)
+	h := s.Handler()
+	var last int
+	for i := 0; i < guestPerHour+1; i++ {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/v1/tasks", bytes.NewReader(guestJobBody(t)))
+		r.Header.Set("X-Forwarded-For", "203.0.113.9")
+		h.ServeHTTP(w, r)
+		last = w.Code
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("the %dth unpaid job from one address got %d, want 429", guestPerHour+1, last)
+	}
+}
+
+// The feasibility check is the question an agent must ask before promising
+// anything, so it must be askable with no credential at all.
+func TestAQuoteNeedsNoCredential(t *testing.T) {
+	s := consoleServer(t)
+	h := s.Handler()
+	raw, _ := json.Marshal(map[string]any{"kind": "observe", "predicate": "the sign is up", "lat": 42.33, "lon": -83.04})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/v1/quote", bytes.NewReader(raw)))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "feasible") {
+		t.Fatalf("anonymous quote: %d %s", w.Code, w.Body.String())
+	}
+}

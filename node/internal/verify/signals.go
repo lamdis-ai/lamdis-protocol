@@ -1,10 +1,13 @@
 package verify
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"math"
 	"math/bits"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -159,11 +162,62 @@ type Corpus struct {
 	mu    sync.Mutex
 	exact map[string]string // sha256 -> first entry that used it
 	phash map[uint64]string
+	// path is where entries are appended, so a restart does not forget every
+	// photograph the exchange has ever seen. Empty means memory only.
+	path string
 }
 
 func NewCorpus() *Corpus {
 	return &Corpus{exact: map[string]string{}, phash: map[uint64]string{}}
 }
+
+// corpusEntry is one line of the on-disk corpus.
+type corpusEntry struct {
+	Entry  string `json:"entry"`
+	SHA256 string `json:"sha256,omitempty"`
+	PHash  uint64 `json:"phash,omitempty"`
+}
+
+// OpenCorpus loads a corpus from a file and appends every later addition to
+// it.
+//
+// In memory only, the reuse check forgot everything at each deploy: the same
+// photograph earned again the morning after a restart. The file is one JSON
+// object per line, appended as artifacts arrive, and read back in full at
+// startup. A missing file is an empty corpus; a line that cannot be read is
+// skipped rather than refusing to start, because a corrupt line must not take
+// the exchange down with it.
+func OpenCorpus(path string) (*Corpus, error) {
+	c := NewCorpus()
+	c.path = path
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Prove the location is writable now, not on the first submission.
+			w, werr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+			if werr != nil {
+				return nil, werr
+			}
+			w.Close()
+			return c, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	for sc.Scan() {
+		var e corpusEntry
+		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Entry == "" {
+			continue
+		}
+		c.addLocked(Evidence{EntryID: e.Entry, SHA256: e.SHA256, PerceptualHash: e.PHash})
+	}
+	return c, sc.Err()
+}
+
+// Path is where this corpus persists, or "" for memory only.
+func (c *Corpus) Path() string { return c.path }
 
 // Seen reports whether this artifact, or one perceptually close to it, has
 // been submitted before, and by which entry.
@@ -193,14 +247,43 @@ func (c *Corpus) Seen(e Evidence) (exact bool, near bool, priorEntry string) {
 func (c *Corpus) Add(e Evidence) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, ok := c.exact[e.SHA256]; !ok {
-		c.exact[e.SHA256] = e.EntryID
+	if !c.addLocked(e) {
+		return
+	}
+	if c.path == "" {
+		return
+	}
+	line, err := json.Marshal(corpusEntry{
+		Entry: e.EntryID, SHA256: e.SHA256, PHash: e.PerceptualHash,
+	})
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(c.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.Write(append(line, '\n'))
+}
+
+// addLocked records an artifact in memory and reports whether anything new
+// was learned. Callers hold the lock.
+func (c *Corpus) addLocked(e Evidence) bool {
+	added := false
+	if e.SHA256 != "" {
+		if _, ok := c.exact[e.SHA256]; !ok {
+			c.exact[e.SHA256] = e.EntryID
+			added = true
+		}
 	}
 	if e.PerceptualHash != 0 {
 		if _, ok := c.phash[e.PerceptualHash]; !ok {
 			c.phash[e.PerceptualHash] = e.EntryID
+			added = true
 		}
 	}
+	return added
 }
 
 // Deterministic runs every check that costs nothing: metadata, freshness,

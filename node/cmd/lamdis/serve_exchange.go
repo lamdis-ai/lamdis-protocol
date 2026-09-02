@@ -12,9 +12,14 @@ import (
 	"image/jpeg"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/anchor"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/api"
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/bootstrap"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/exchange"
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/media"
@@ -41,6 +46,22 @@ func cmdServeExchange(args []string) error {
 		"directory for the ledger and accounts; empty keeps them in memory and loses them on restart")
 	novision := fs.Bool("no-vision", false,
 		"run without a vision model; submissions are stored and never become payable")
+	usdcEvery := fs.Duration("usdc-interval", 30*time.Second,
+		"how often to scan the chain for USDC transfers, when LAMDIS_USDC_ADDRESS and LAMDIS_BASE_RPC are set")
+	// The bootstrap loop: the exchange as its own first buyer. Off unless
+	// asked for, and it cannot be asked for without a budget to cap it.
+	boot := fs.Bool("bootstrap", envOr("LAMDIS_BOOTSTRAP", "") == "1" || envOr("LAMDIS_BOOTSTRAP", "") == "true",
+		"post real observe jobs near signed-in operators from a capped house budget "+
+			"(needs LAMDIS_HOUSE_BUDGET_MINOR and -data)")
+	bootEvery := fs.Duration("bootstrap-every", envDuration("LAMDIS_BOOTSTRAP_EVERY", bootstrap.DefaultEvery),
+		"how often the bootstrap loop runs")
+	anchorOn := fs.Bool("anchor", true,
+		"anchor receipt hashes to Bitcoin through OpenTimestamps; needs -data, costs nothing")
+	anchorEvery := fs.Duration("anchor-every", time.Hour,
+		"how often unanchored receipts are batched into one root and submitted")
+	anchorCalendars := fs.String("anchor-calendars", envOr("LAMDIS_ANCHOR_CALENDARS",
+		strings.Join(anchor.DefaultCalendars, ",")),
+		"comma-separated OpenTimestamps calendar URLs to submit roots to")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -75,6 +96,25 @@ func cmdServeExchange(args []string) error {
 		return err
 	}
 
+	// The house budget is the only money the loop can move, and it is read
+	// from the environment rather than a flag so it cannot be raised by
+	// editing a service file's arguments without also meaning to.
+	var houseBudget int64
+	if v := os.Getenv("LAMDIS_HOUSE_BUDGET_MINOR"); v != "" {
+		houseBudget, err = strconv.ParseInt(v, 10, 64)
+		if err != nil || houseBudget <= 0 {
+			return fmt.Errorf("exchange: LAMDIS_HOUSE_BUDGET_MINOR must be a positive integer of minor units, got %q", v)
+		}
+	}
+	loop, err := bootstrap.New(bootstrap.Config{
+		Enabled: *boot, BudgetMinor: houseBudget, DataDir: *data, Every: *bootEvery,
+		Places: bootstrap.NewOverpass(os.Getenv("LAMDIS_OVERPASS_URL")),
+	})
+	if err != nil {
+		return err
+	}
+	loop.Attach(srv)
+
 	if *seed {
 		if err := seedPanel(srv); err != nil {
 			return err
@@ -101,10 +141,44 @@ func cmdServeExchange(args []string) error {
 	// State the shape of the deployment, because every one of these being
 	// absent is a silent failure that looks like a working service.
 	fmt.Printf("  storage    %s\n", orMemory(*data))
+	if srv.USDC != nil {
+		fmt.Printf("  usdc       ON — watching %s for transfers to %s (no key held)\n",
+			srv.USDC.Net.Name, srv.USDC.Address())
+	} else {
+		fmt.Printf("  usdc       off (set LAMDIS_USDC_ADDRESS and LAMDIS_BASE_RPC)\n")
+	}
 	fmt.Printf("  verifier   %s\n", yesNo(opt.Vision != nil, "vision model", "NONE — nothing can be paid"))
 	fmt.Printf("  video      %s\n", yesNo(opt.Media != nil, "ffmpeg", "unavailable — video will be refused"))
 	fmt.Printf("  accounts   %s\n", yesNo(srv.Workers.Cognito.Enabled(), "cognito", "NONE — nobody can sign in"))
 	fmt.Printf("  board      %s/board\n", *baseURL)
+	// Anchoring needs somewhere to keep the log and the proofs; an in-memory
+	// exchange would lose every root it ever submitted. Off is a choice,
+	// not a silent default.
+	anchorDesc := "off (-anchor=false)"
+	if *anchorOn && *data == "" {
+		anchorDesc = "off (no -data directory to keep proofs in)"
+	} else if *anchorOn {
+		cals := strings.Split(*anchorCalendars, ",")
+		for i := range cals {
+			cals[i] = strings.TrimSpace(cals[i])
+		}
+		a, err := anchor.Open(filepath.Join(*data, "anchor"), anchor.Options{
+			Calendars: cals, Every: *anchorEvery,
+		})
+		if err != nil {
+			return fmt.Errorf("opening the anchor store: %w", err)
+		}
+		defer a.Close()
+		srv.Anchors = a
+		anchorDesc = fmt.Sprintf("opentimestamps every %s via %s", *anchorEvery, strings.Join(cals, ", "))
+	}
+	fmt.Printf("  anchoring  %s\n", anchorDesc)
+	if loop.Enabled() {
+		fmt.Printf("  bootstrap  ON — house budget %d minor, every %s; status at %s/v1/bootstrap\n",
+			houseBudget, *bootEvery, *baseURL)
+	} else {
+		fmt.Printf("  bootstrap  off (set -bootstrap and LAMDIS_HOUSE_BUDGET_MINOR)\n")
+	}
 	if generated {
 		// A generated key means every restart is a different exchange, and
 		// anything it signed before becomes unverifiable. Say so loudly.
@@ -123,14 +197,27 @@ func cmdServeExchange(args []string) error {
 	// least of all the person who is owed it. Hourly, because payouts are
 	// batched to a threshold anyway and a tighter loop only adds rail calls.
 	srv.StartPayoutSweeper(sweepCtx, time.Hour)
+	// Transfers to the exchange's address fund jobs; nobody else will notice
+	// them arriving.
+	srv.StartChainWatcher(sweepCtx, *usdcEvery)
 	// Rebuild the payout mapping now rather than on somebody's first click.
 	srv.WarmPayoutAccounts(sweepCtx)
 	// Tell buyers when their work is going unfilled, while they can still act.
 	srv.StartAlerts(sweepCtx, 30*time.Minute)
+	// Batch receipt hashes and get the roots onto the chain. Network work
+	// lives in this loop only; serving a receipt never waits on a calendar.
+	if srv.Anchors != nil {
+		srv.Anchors.Start(sweepCtx)
+	}
+	// The exchange as its own first buyer, if asked. See internal/bootstrap.
+	loop.Start(sweepCtx)
 
+	mux := srv.Handler()
+	// Public, read-only: what the loop is doing and what it has found.
+	loop.Register(mux)
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           srv.Handler(),
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      120 * time.Second,
@@ -164,6 +251,16 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// envDuration reads a duration, falling back on anything unset or unreadable.
+func envDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return fallback
+}
+
 var _ = protolog.GenesisPrev
 
 // seedBoard puts sample work on the marketplace.
@@ -175,6 +272,10 @@ func seedBoard(srv *exchange.Server) error {
 	now := time.Now()
 
 	// Practice runs, not fake work.
+	//
+	// Shown only while an operator's board is otherwise empty: once real work
+	// is in range — a buyer's, or the bootstrap loop's — the board hides
+	// these. See Board.ForOperator.
 	//
 	// Seeded listings used to be indistinguishable from real ones, so somebody
 	// could claim one, drive to an address and find nothing there — which

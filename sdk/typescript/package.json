@@ -1,0 +1,38 @@
+{
+  "name": "lamdis",
+  "version": "0.1.0",
+  "description": "Client for the Lamdis Exchange: pay people for physical work from an agent. No account needed for a first job.",
+  "license": "Apache-2.0",
+  "homepage": "https://exchange.lamdis.ai/docs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lamdis-ai/lamdis-protocol",
+    "directory": "sdk/typescript"
+  },
+  "keywords": ["lamdis", "agents", "mcp", "physical-work", "exchange"],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

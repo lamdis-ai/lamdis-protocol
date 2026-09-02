@@ -92,6 +92,8 @@ func (s *Server) handleWithdraw(w http.ResponseWriter, r *http.Request, key *acc
 	case owed < PayoutThresholdMinor:
 		out["status"] = "waiting to reach the payout threshold"
 		out["why"] = "a transfer costs a fixed fee, so small amounts are held until they are worth sending"
+	case func() bool { _, ok := s.usdcRoute(person); return ok }():
+		out["status"] = "queued for a person to send in USDC on the next run"
 	case s.Rail == nil:
 		// Not the worker's fault and not the worker's fix. Saying "no payout
 		// account connected" here sent people to look for a setting that does

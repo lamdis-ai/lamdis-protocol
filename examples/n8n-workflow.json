@@ -1,0 +1,40 @@
+{
+  "name": "Lamdis: first job, no account",
+  "nodes": [
+    { "name": "Manual Trigger", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 0], "parameters": {} },
+    {
+      "name": "POST /v1/tasks (anonymous)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "https://exchange.lamdis.ai/v1/tasks",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-Lamdis-Posted-By", "value": "agent" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"kind\":\"observe\",\"predicate\":\"The 'For Lease' sign is still up on the corner unit\",\"where\":\"1200 Valencia St, San Francisco\",\"area\":\"Mission District\",\"lat\":37.7527,\"lon\":-122.4207,\"radius_m\":150,\"fee_minor\":800}",
+        "options": {}
+      }
+    },
+    {
+      "name": "Send the person the pay link",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [520, 0],
+      "parameters": {
+        "assignments": { "assignments": [
+          { "name": "pay_link", "value": "={{ $json.pay_at }}", "type": "string" },
+          { "name": "token", "value": "={{ $json.token }}", "type": "string" },
+          { "name": "job", "value": "={{ $json.job }}", "type": "string" },
+          { "name": "next", "value": "Send the person the pay link. Then poll GET /v1/jobs/{{ $json.job }} with Authorization: Bearer {{ $json.token }}.", "type": "string" }
+        ] }, "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "POST /v1/tasks (anonymous)", "type": "main", "index": 0 }]] },
+    "POST /v1/tasks (anonymous)": { "main": [[{ "node": "Send the person the pay link", "type": "main", "index": 0 }]] }
+  }
+}

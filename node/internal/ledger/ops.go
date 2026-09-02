@@ -147,3 +147,27 @@ func (l *Ledger) Due(ctx context.Context, currency string, thresholdMinor int64)
 func (l *Ledger) Held(ctx context.Context, outcome, currency string) (int64, error) {
 	return l.Balance(ctx, EscrowOf(outcome), currency)
 }
+
+// SetRef replaces the outside reference on an operation that has already
+// been posted: a queued payout that a person later sends, for instance, whose
+// on-chain hash did not exist when the ledger entry was made.
+func (l *Ledger) SetRef(ctx context.Context, key, ref string) error {
+	if key == "" || ref == "" {
+		return fmt.Errorf("ledger: a reference needs a key and a value")
+	}
+	res, err := l.db.ExecContext(ctx, `UPDATE ledger_ops SET ref = ? WHERE key = ?`, ref, key)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("ledger: no operation under %s", key)
+	}
+	return nil
+}
+
+// Ref reads the outside reference recorded on an operation.
+func (l *Ledger) Ref(ctx context.Context, key string) (string, error) {
+	var ref string
+	err := l.db.QueryRowContext(ctx, `SELECT ref FROM ledger_ops WHERE key = ?`, key).Scan(&ref)
+	return ref, err
+}

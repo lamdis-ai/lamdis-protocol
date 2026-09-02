@@ -659,6 +659,18 @@ func (b *Board) Post(l *Listing) (err error) {
 	if l.AttemptMinor > l.PayMinor {
 		return fmt.Errorf("board: a failed attempt cannot pay more than finishing")
 	}
+	// A lease is how long one person may keep a job off the board. The buyer
+	// sets it because they know the work; it is capped because a claim is
+	// also the cheapest way to make a job disappear. Left uncapped, a
+	// 720-hour job was held for a month by whoever clicked first, and the
+	// buyer could not cancel it while it was held.
+	if l.WorkHours > MaxWorkHours {
+		return fmt.Errorf(
+			"board: work_hours is %d; the most one person may hold a job is %d "+
+				"hours (%d days). Cut longer work into stages, which each carry "+
+				"their own lease and are each paid as they are done",
+			l.WorkHours, MaxWorkHours, MaxWorkHours/24)
+	}
 	if l.Slots <= 0 {
 		l.Slots = 1
 	}
@@ -744,6 +756,7 @@ func (b *Board) ForOperator(worker string, cap Capacity) []*Listing {
 		}
 		out = append(out, p)
 	}
+	out = withoutPracticeIfReal(out)
 	// Nearest first: the whole reason somebody shared a location.
 	sort.Slice(out, func(i, j int) bool {
 		a, bb := out[i].DistanceMiles, out[j].DistanceMiles
@@ -756,6 +769,48 @@ func (b *Board) ForOperator(worker string, cap Capacity) []*Listing {
 }
 
 func round1(f float64) float64 { return float64(int64(f*10+.5)) / 10 }
+
+// withoutPracticeIfReal hides practice runs once there is real work to show.
+//
+// A practice job exists so a brand-new operator with an empty board can
+// rehearse the flow. Next to paid work it is noise: somebody with three real
+// jobs in range does not need to photograph a code on their kitchen table, and
+// a board that leads with unpaid rehearsal reads as a board with nothing on it.
+func withoutPracticeIfReal(in []*Listing) []*Listing {
+	real := false
+	for _, l := range in {
+		if !l.Practice {
+			real = true
+			break
+		}
+	}
+	if !real {
+		return in
+	}
+	out := in[:0]
+	for _, l := range in {
+		if !l.Practice {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// Widen enlarges the area a job's evidence may come from. It reports whether
+// the job was open to be widened, and never shrinks one.
+//
+// Used when work has sat unfilled: a slightly larger circle is cheaper than a
+// repost, which would look like new demand and reset every clock on the job.
+func (b *Board) Widen(job string, radiusM int64) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	l, ok := b.listings[job]
+	if !ok || !l.Open(b.now()) || radiusM <= l.RadiusM {
+		return false
+	}
+	l.RadiusM = radiusM
+	return true
+}
 
 // coarseDeg rounds a stored position to two decimal places of a degree —
 // roughly a kilometre — which is the only precision the open board publishes.
@@ -1274,16 +1329,41 @@ func (b *Board) WorkerFor(capHolder string) (string, bool) {
 // but the client's concurrent-work count drops, so finishing a job lets them
 // start another. Without this the limit is a lifetime cap and an honest worker
 // is locked out after three jobs, forever.
+//
+// A practice run frees the seat and counts for nothing. It exists so somebody
+// can learn where the buttons are, and two photographs of a code on a kitchen
+// table must not buy the allowance and the ceiling that real completions do.
 func (b *Board) Done(job, client string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	counts := true
+	if l, ok := b.listings[job]; ok && l.Practice {
+		counts = false
+	}
+	b.finishLocked(job, client, counts)
+}
+
+// DoneUnscored frees a seat without recording a completion.
+//
+// For work that was real enough to hold a seat and not real enough to be a
+// record: the demonstration review panel, which is a real page and a real
+// flow with nothing behind it.
+func (b *Board) DoneUnscored(job, client string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.finishLocked(job, client, false)
+}
+
+func (b *Board) finishLocked(job, client string, counts bool) {
 	// The lease is the person's; the counters are the account's.
 	delete(b.leases[job], client)
 	acct := b.accountFor(client)
 	if b.claims[acct] > 0 {
 		b.claims[acct]--
 	}
-	b.completed[acct]++
+	if counts {
+		b.completed[acct]++
+	}
 }
 
 // AttachReference adds a buyer's reference image to a listing.
@@ -1533,6 +1613,7 @@ func (b *Board) handleList(w http.ResponseWriter, r *http.Request) {
 				tasks = append(tasks, p)
 			}
 		}
+		tasks = withoutPracticeIfReal(tasks)
 	}
 	if tasks == nil {
 		tasks = []*Listing{}
@@ -1784,10 +1865,15 @@ func (l *Listing) DirectedAt(account string) bool {
 // captured never needs refunding, which is what makes this path hold less of
 // other people's money than the balance path, not more.
 type Funding struct {
-	// Kind is "card"; a place for "invoice" and friends later.
+	// Kind is "card", or "usdc" for a stablecoin transfer received on-chain;
+	// a place for "invoice" and friends later.
 	Kind string
-	// Intent is the authorised, uncaptured PaymentIntent on the rail.
+	// Intent is the authorised, uncaptured PaymentIntent on the rail, or for
+	// a chain transfer the transaction hash that funded the job.
 	Intent string
+	// Payer is the sending address of a chain transfer: where an unspent
+	// remainder is owed back to. Empty for a card.
+	Payer string
 	// Session is the checkout session that produced the authorisation.
 	Session string
 	// AuthorizedMinor is the ceiling the card was authorised for.

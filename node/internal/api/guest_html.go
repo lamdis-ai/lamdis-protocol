@@ -25,7 +25,7 @@ func GuestNotice(title, body string) string {
 // MyJobPage follows one job with a token carried in the URL.
 func MyJobPage(job string) string {
 	j := html.EscapeString(job)
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Job ` + j + ` — Lamdis</title><style>` + themeCSS + `
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Job ` + j + ` — Lamdis</title><style>` + themeCSS + `
 .wrap { max-width: 52rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
 .hd { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.4rem; }
 .hd .mark { margin-right: auto; }

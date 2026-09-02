@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Claude Code / Claude Desktop: drop this under mcpServers in ~/.claude.json,",
+    "~/.claude/settings.json, or claude_desktop_config.json. No key needed: without",
+    "one the agent gets the guest tools (check_feasible, observe_world, do_in_world,",
+    "find_out, job_status, job_receipt, job_evidence, list_bids). A posted job comes",
+    "back with pay_at and token. Or, on the command line:",
+    "  claude mcp add --transport http lamdis https://exchange.lamdis.ai/mcp",
+    "With an account, add: \"headers\": { \"Authorization\": \"Bearer lam_sk_...\" }.",
+    "Then ask: 'Find out whether the For Lease sign is still up at 1200 Valencia St,",
+    "pay $8' and send the person the pay link."
+  ],
+  "mcpServers": {
+    "lamdis": {
+      "type": "http",
+      "url": "https://exchange.lamdis.ai/mcp"
+    }
+  }
+}
