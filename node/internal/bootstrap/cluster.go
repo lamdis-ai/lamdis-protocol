@@ -74,6 +74,22 @@ func Clusters(ops map[string]api.Capacity) []Cluster {
 	return out
 }
 
+// ClustersFromInterest groups people who said where they would work but have
+// not registered a capacity.
+//
+// Same grouping, different evidence. A registered interest is the same three
+// facts a capacity carries — a point, a range, and what somebody will take —
+// so it is clustered by exactly the code above rather than a parallel one that
+// could drift. The entries are anonymous here on purpose: this decides where
+// to post, and it has no business knowing who.
+func ClustersFromInterest(in []api.Capacity) []Cluster {
+	ops := make(map[string]api.Capacity, len(in))
+	for i, c := range in {
+		ops[fmt.Sprintf("interest-%06d", i)] = c
+	}
+	return Clusters(ops)
+}
+
 func clusterKey(latE7, lonE7 int64) string {
 	return fmt.Sprintf("%.2f,%.2f", api.Deg(latE7), api.Deg(lonE7))
 }

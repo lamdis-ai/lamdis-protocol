@@ -41,3 +41,9 @@ func (m *exchangeMarket) Topup(ctx context.Context, key, principal string, amoun
 }
 func (m *exchangeMarket) Widen(job string, radiusM int64) bool { return m.s.Board.Widen(job, radiusM) }
 func (m *exchangeMarket) Alert(l *api.Listing)                 { m.s.AlertNewWork(l) }
+func (m *exchangeMarket) Interested() []api.Capacity {
+	if m.s.Coverage == nil {
+		return nil
+	}
+	return m.s.Coverage.Positioned()
+}

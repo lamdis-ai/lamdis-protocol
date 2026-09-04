@@ -82,6 +82,11 @@ type Server struct {
 	Mail Mailer
 	// Watches records which operators want telling when work appears.
 	Watches *Watches
+	// Coverage is who has said where they would work without having an
+	// account yet. It is the only record of supply intent that exists before
+	// anybody signs in, and the only thing the bootstrap loop can aim at when
+	// no capacity has been registered at all.
+	Coverage *Coverages
 	// staleTold remembers which unfilled jobs their buyer has been warned
 	// about, so a slow week does not become a daily email.
 	staleTold map[string]bool
@@ -291,6 +296,7 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 	srv.Book = api.NewBook()
 	srv.Reservations = NewReservations()
 	srv.Watches = NewWatches()
+	srv.Coverage = NewCoverages(opt.DataDir)
 	if m := NewSES(); m != nil {
 		srv.Mail = m
 	}
@@ -477,6 +483,7 @@ func (s *Server) Handler() *http.ServeMux {
 	(&PayoutServer{Server: s, Workers: s.Workers, BaseURL: s.BaseURL}).Register(mux)
 	(&SpendServer{Server: s, Workers: s.Workers}).Register(mux)
 	(&AlertServer{Server: s, Workers: s.Workers}).Register(mux)
+	(&CoverageServer{Server: s}).Register(mux)
 	(&StatementServer{Server: s, Workers: s.Workers}).Register(mux)
 	(&api.SupplierServer{Suppliers: s.Suppliers, Workers: s.Workers,
 		Board: s.Board, Now: s.now}).Register(mux)

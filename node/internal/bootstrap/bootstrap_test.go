@@ -43,13 +43,14 @@ func (f *fixture) Nearby(ctx context.Context, latE7, lonE7 int64, radiusM int) (
 
 // fake is a market with a real board and a counter for a ledger.
 type fake struct {
-	ops     map[string]api.Capacity
-	board   *api.Board
-	balance int64
-	topups  []int64
-	widened map[string]int64
-	alerted []string
-	refuse  func(*api.Listing) error
+	ops      map[string]api.Capacity
+	board    *api.Board
+	balance  int64
+	topups   []int64
+	widened  map[string]int64
+	alerted  []string
+	interest []api.Capacity
+	refuse   func(*api.Listing) error
 }
 
 func newFake(now func() time.Time) *fake {
@@ -92,7 +93,8 @@ func (f *fake) Widen(job string, radiusM int64) bool {
 	f.widened[job] = radiusM
 	return f.board.Widen(job, radiusM)
 }
-func (f *fake) Alert(l *api.Listing) { f.alerted = append(f.alerted, l.Job) }
+func (f *fake) Alert(l *api.Listing)       { f.alerted = append(f.alerted, l.Job) }
+func (f *fake) Interested() []api.Capacity { return f.interest }
 
 func detroitOp(rangeMiles int) api.Capacity {
 	return api.Capacity{Accepting: true, RangeMiles: rangeMiles, MaxConcurrent: 1,
@@ -641,5 +643,84 @@ func TestPostsThroughTheExchange(t *testing.T) {
 	srv.OnAccepted(x, api.Submission{Job: x.Job, Verified: true, At: now})
 	if l.findings.Count() != 1 {
 		t.Errorf("findings = %d", l.findings.Count())
+	}
+}
+
+// The ordering failure this whole path exists to fix.
+//
+// The loop clusters capacities to decide where to post. With no capacity
+// registered anywhere — which is the state of a new exchange — it clustered
+// nothing, posted nowhere, and the board stayed empty however much budget was
+// sitting behind it. Meanwhile people had told the exchange where they work
+// through a form that needed no account, and nothing read it.
+func TestTheLoopPostsWhereInterestWasRegisteredWhenNobodyHasACapacity(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	m := newFake(clock)
+	// Nobody has set a capacity. Two people said they work in Detroit.
+	m.interest = []api.Capacity{
+		{Accepting: true, MaxConcurrent: 1, RangeMiles: 12,
+			LatE7: detroitLat, LonE7: detroitLon},
+		{Accepting: true, MaxConcurrent: 1, RangeMiles: 20,
+			LatE7: detroitLat + 20000, LonE7: detroitLon + 20000},
+	}
+	l := newLoop(t, t.TempDir(), 10000, m, clock)
+
+	rep, err := l.Cycle(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Clusters != 1 {
+		t.Fatalf("two people in one town were not one area: %+v", rep)
+	}
+	if rep.Posted != JobsPerCycle {
+		t.Fatalf("nothing was posted where people said they were: %+v", rep)
+	}
+	for _, x := range m.board.Listings() {
+		if !api.InRange(x.LatE7, x.LonE7, detroitLat, detroitLon, 12) {
+			t.Errorf("%s was posted outside the range anybody said they would travel", x.Job)
+		}
+	}
+}
+
+// A capacity is a promise to take work; a registered interest is only an
+// intention to. So the moment one capacity exists it decides alone, and the
+// register stops being read.
+func TestACapacityBeatsARegisteredInterest(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	m := newFake(clock)
+	m.ops["a"] = detroitOp(12)
+	// Somebody in Phoenix registered interest. It must not pull the loop
+	// two thousand miles away from the operator who actually signed up.
+	m.interest = []api.Capacity{
+		{Accepting: true, MaxConcurrent: 1, RangeMiles: 25,
+			LatE7: 334484000, LonE7: -1120740000},
+	}
+	l := newLoop(t, t.TempDir(), 10000, m, clock)
+
+	rep, err := l.Cycle(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Clusters != 1 {
+		t.Fatalf("the register was read alongside a real capacity: %+v", rep)
+	}
+	for _, x := range m.board.Listings() {
+		if !api.InRange(x.LatE7, x.LonE7, detroitLat, detroitLon, 12) {
+			t.Errorf("%s was posted away from the only operator with a capacity", x.Job)
+		}
+	}
+}
+
+// Somebody who typed a town and never shared a position cannot be posted
+// near, and must not become a cluster at nought degrees.
+func TestInterestWithNoPositionIsNotAnArea(t *testing.T) {
+	cs := ClustersFromInterest([]api.Capacity{
+		{Accepting: true, RangeMiles: 12},
+		{Accepting: true, RangeMiles: 12, LatE7: detroitLat, LonE7: detroitLon},
+	})
+	if len(cs) != 1 || cs[0].LatE7 != detroitLat {
+		t.Fatalf("a place name with no position became an area: %+v", cs)
 	}
 }

@@ -48,3 +48,12 @@ func InRange(jobLatE7, jobLonE7, opLatE7, opLonE7 int64, rangeMiles int) bool {
 	}
 	return MilesBetween(jobLatE7, jobLonE7, opLatE7, opLonE7) <= float64(rangeMiles)
 }
+
+// CoarseE7 rounds a stored position to two decimal places of a degree —
+// roughly a kilometre — which is the only precision anything public here
+// publishes, and the only precision anything public here stores.
+//
+// A hundredth of a degree is exactly 100000 in the stored form, so the
+// rounding is done in that unit rather than by multiplying a rounded float
+// back up: 42.33 is not representable, and int64(42.33*1e7) is 423299999.
+func CoarseE7(e7 int64) int64 { return int64(math.Round(Deg(e7)*100)) * 100000 }

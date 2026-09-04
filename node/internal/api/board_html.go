@@ -9,7 +9,10 @@ package api
 // kind of work before a word is read. What somebody is already holding still
 // comes first, because a person with a job out cannot take another and the
 // first question they have is "where is the thing I already took".
-var boardPageHTML = boardTop + themeCSS + boardMid + boardBody + workerJS + boardJS + panelJS + boardScript
+// The coverage block rides on this page: its styles before the queue's, its
+// markup at the top of the body, and its script beside the queue's own.
+var boardPageHTML = boardTop + themeCSS + coverCSS + boardMid + boardBody +
+	workerJS + boardJS + panelJS + coverJS + boardScript
 
 const boardTop = `<!doctype html>
 <meta charset="utf-8">
@@ -96,6 +99,7 @@ var boardBody = shellTop("queue", "") + `
       </div>
     </div>
     <div class="strip" id="strip" hidden></div>
+` + coverBlock + `
 
     <!-- Summary before detail: the five numbers that decide what to do next. -->
     <div class="hud" id="glance" style="--cols:5">
@@ -131,6 +135,7 @@ var boardBody = shellTop("queue", "") + `
     </nav>
 
     <div id="holding"></div>
+    <div class="rehearse" id="rehearse" hidden></div>
     <div class="cards" id="rows" hidden><div class="empty">Loading&hellip;</div></div>
     <div id="verify"></div>
     <div class="err" id="verify-err"></div>
@@ -177,7 +182,8 @@ function renderStrip() {
     el.hidden = false;
     el.className = "strip warn";
     el.innerHTML = '<span class="d"></span><span><b>You are not signed in.</b> ' +
-      'Sign in to take work and get paid &mdash; one email and a code. ' +
+      'Taking work and getting paid needs an account &mdash; one email and a code. ' +
+      'Saying where you work does not. ' +
       '<a href="/signin?next=/board">Sign in</a></span>';
     return;
   }
@@ -216,13 +222,14 @@ function renderGlance(flash) {
   }
   document.getElementById("hud-open-s").textContent = HIDDEN
     ? HIDDEN + " more outside your range or skills"
-    : (PERSONAL ? "within your range" : "on the board now");
+    : (paidWork() ? (PERSONAL ? "within your range" : "on the board now")
+                  : "practice only \u2014 none of it pays");
 
   countUp(document.getElementById("hud-sum"), boardSum(), asMoney);
   var bids = WORK.filter(function (w) { return w.pricing === "bids"; }).length;
-  document.getElementById("hud-sum-s").textContent = bids
-    ? "plus " + bids + " you price yourself"
-    : "fixed prices, before fees";
+  document.getElementById("hud-sum-s").textContent = !paidWork()
+    ? "nothing here pays"
+    : (bids ? "plus " + bids + " you price yourself" : "fixed prices, before fees");
 
   var room = document.getElementById("tile-room"), clear = document.getElementById("tile-clear");
   if (ME) {
@@ -472,6 +479,26 @@ function termsLine() {
     'in your account, because a transfer costs a flat fee either way.</p>';
 }
 
+// paidWork reports whether anything on the board is real. A practice job is a
+// rehearsal of the flow and pays nothing, so a queue of nothing but practice
+// is an empty market and the page has to say so.
+function paidWork() {
+  return WORK.some(function (w) { return !w.practice; });
+}
+
+// renderRehearse frames the practice runs, when they are all there is.
+function renderRehearse() {
+  var el = document.getElementById("rehearse");
+  var practice = WORK.filter(function (w) { return w.practice; }).length;
+  if (!practice || paidWork()) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  el.innerHTML = "<b>Below is a rehearsal, not work.</b> " +
+    (practice === 1 ? "This job pays" : "These " + practice + " jobs pay") +
+    " nothing and no money is escrowed against " + (practice === 1 ? "it" : "them") +
+    ". They exist so you can walk the flow once \u2014 take one, photograph the code, " +
+    "submit it \u2014 before there is anything paid to take.";
+}
+
 // renderQueue draws the open work. Cards rise in only when the set of jobs
 // changed; a redraw for a new room figure keeps them where they are.
 function renderQueue(animate) {
@@ -481,6 +508,8 @@ function renderQueue(animate) {
   var ready = signedIn();
 
   document.getElementById("terms-line").innerHTML = termsLine();
+  renderRehearse();
+  renderCover(paidWork());
 
   if (!WORK.length) {
     host.innerHTML = '<div class="empty">' + (HIDDEN
@@ -717,7 +746,14 @@ function load() {
       var sig = WORK.map(function (w) { return w.job + "/" + w.taken; }).join(",");
       var changed = sig !== SIG, first = !LAST_AT;
       SIG = sig; LAST_AT = Date.now(); tickUpdated();
-      if (changed) { renderQueue(true); renderRadar(); }
+      // The block and the rehearsal note do not wait on the queue redrawing:
+      // an empty board never changes signature, and the whole point of this
+      // page is that it says something useful when there is nothing on it.
+      renderRehearse();
+      renderCover(paidWork());
+      // First pass draws even when nothing changed, or a board that is empty
+      // from the start sits on "Loading" forever.
+      if (changed || first) { renderQueue(true); renderRadar(); }
       renderLive();
       renderGlance(changed && !first);
       renderVerify();
@@ -733,6 +769,8 @@ session().then(function () {
   renderHealth();
   renderStrip();
   wireTabs();
+  wireCover();
+  coverTally();
   load();
 });
 // Live: re-read the board every twenty seconds while the tab is showing, and

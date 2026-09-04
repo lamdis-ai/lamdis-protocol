@@ -129,7 +129,11 @@ func (s *Server) AlertNewWork(l *api.Listing) {
 		eligible = append(eligible, worker)
 	}
 	due := s.Watches.Due(eligible)
-	if len(due) == 0 {
+	// The register is the other half of who could take this. Somebody who
+	// said where they work but has not signed in is exactly the person this
+	// job was posted near, and telling only the account holders would leave
+	// them out of the one thing they were promised.
+	if len(due) == 0 && (s.Coverage == nil || s.Coverage.Count() == 0) {
 		return
 	}
 	base := trimSlash(s.BaseURL)
@@ -154,6 +158,7 @@ func (s *Server) AlertNewWork(l *api.Listing) {
 		if sent > 0 {
 			log.Printf("alert: told %d operator(s) about %s", sent, l.Job)
 		}
+		s.AlertCoverage(ctx, l)
 	}()
 }
 

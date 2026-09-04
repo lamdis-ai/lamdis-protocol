@@ -364,17 +364,7 @@ const (
 
 // guestAllowed says whether this caller may park another unpaid job.
 func (s *Server) guestAllowed(r *http.Request) error {
-	ip := r.Header.Get("X-Forwarded-For")
-	if i := strings.IndexByte(ip, ','); i >= 0 {
-		ip = ip[:i]
-	}
-	ip = strings.TrimSpace(ip)
-	if ip == "" {
-		ip = r.RemoteAddr
-		if i := strings.LastIndexByte(ip, ':'); i >= 0 {
-			ip = ip[:i]
-		}
-	}
+	ip := callerIP(r)
 	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -820,7 +819,9 @@ func (b *Board) Widen(job string, radiusM int64) bool {
 
 // coarseDeg rounds a stored position to two decimal places of a degree —
 // roughly a kilometre — which is the only precision the open board publishes.
-func coarseDeg(e7 int64) float64 { return math.Round(Deg(e7)*100) / 100 }
+// One rule, stated in CoarseE7, so the board and the coverage register cannot
+// round differently.
+func coarseDeg(e7 int64) float64 { return Deg(CoarseE7(e7)) }
 
 // Get returns a listing whether or not it is still open.
 func (b *Board) Get(job string) (*Listing, bool) {

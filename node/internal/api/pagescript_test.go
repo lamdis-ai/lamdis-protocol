@@ -14,11 +14,12 @@ import (
 // the console is several pages under one shell, each with its own script.
 func allPages() map[string]string {
 	pages := map[string]string{
-		"reviewPageHTML": reviewPageHTML,
-		"boardPageHTML":  boardPageHTML,
-		"workPageHTML":   workPageHTML,
-		"signInPageHTML": signInPageHTML,
-		"jobPage":        jobPage(&Listing{Job: "j-1", Title: "a job"}),
+		"reviewPageHTML":   reviewPageHTML,
+		"boardPageHTML":    boardPageHTML,
+		"workPageHTML":     workPageHTML,
+		"signInPageHTML":   signInPageHTML,
+		"jobPage":          jobPage(&Listing{Job: "j-1", Title: "a job"}),
+		"coveragePageHTML": coveragePageHTML,
 	}
 	for id, page := range consolePages {
 		pages["console/"+id] = page

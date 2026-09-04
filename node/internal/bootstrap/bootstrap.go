@@ -43,6 +43,10 @@ type Market interface {
 	// Alert tells operators who could take a job that it exists, over the
 	// exchange's own alert path.
 	Alert(l *api.Listing)
+	// Interested is where people have said they would work without having
+	// registered a capacity, in the shape of one. Read only when there are no
+	// capacities to cluster at all.
+	Interested() []api.Capacity
 }
 
 // The knobs, in one place.
@@ -189,6 +193,19 @@ func (l *Loop) Cycle(ctx context.Context) (Report, error) {
 	}()
 
 	clusters := Clusters(m.Operators())
+	if len(clusters) == 0 {
+		// Nobody has registered a capacity, so clustering capacities decides
+		// nothing and the loop posts nowhere — which is the state that keeps
+		// an empty exchange empty. The only other evidence of where people
+		// are is who told us where they work, so the first jobs go there.
+		// Superseded the moment one real capacity exists: a capacity is a
+		// promise to take work, and this is only an intention to.
+		clusters = ClustersFromInterest(m.Interested())
+		if len(clusters) > 0 {
+			l.cfg.Logf("bootstrap: no capacities registered; aiming at %d area(s) "+
+				"from the coverage register", len(clusters))
+		}
+	}
 	rep.Clusters = len(clusters)
 	open := m.Open()
 	rep.Widened = l.widenStale(open, now)
