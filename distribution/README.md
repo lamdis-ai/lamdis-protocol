@@ -23,11 +23,11 @@ Both `server.json` files validate against
 | [mcp.so](https://mcp.so) | GitHub issue on `chatmcp/mcpso` | yes | issue filed: https://github.com/chatmcp/mcpso/issues/3898 |
 | [appcypher/awesome-mcp-servers](https://github.com/appcypher/awesome-mcp-servers) | was a PR to `README.md` | — | **dead end** — repo archived 2026; entry text kept in `copy.md` if it reopens |
 | [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) | no longer lists third-party servers; README points at the MCP Registry | — | **nothing to do** — covered by the MCP Registry row |
-| [Glama](https://glama.ai/mcp/servers) | web: *Add MCP Server → Connector*; needs a Glama sign-in to claim the listing later | yes (`streamable-http` only) | **paste** — fields in `copy.md` |
-| [Smithery](https://smithery.ai/new) | web: URL method, paste the public HTTPS endpoint; Smithery scans it for tools | yes | **paste** — fields in `copy.md` |
-| [PulseMCP](https://www.pulsemcp.com/submit) | web form | yes | **paste** — form was paused for a pipeline rebuild; check it is reopened first |
-| [mcpservers.org](https://mcpservers.org/submit) | web form (this is where `wong2/awesome-mcp-servers` sends submissions; that repo takes no PRs) | yes | **paste** — fields in `copy.md`; free listing, the $39 option is optional |
-| [Cursor](https://cursor.directory/plugins/new) | web form on cursor.directory (the old `cursor/mcp-servers` repo is archived and redirects here) | yes | **paste** — fields in `copy.md` |
+| [Glama](https://glama.ai/mcp/servers) | web: *Add MCP Server → Connector*; needs a Glama sign-in to claim the listing later | yes (`streamable-http` only) | **needs you** — Add Server opens a sign-up with a CAPTCHA. Note Glama auto-crawls public GitHub, so the repo may appear without a submission |
+| [Smithery](https://smithery.ai/new) | web: URL method, paste the public HTTPS endpoint; Smithery scans it for tools | yes | **needs you** — sign-in wall (email/Google/GitHub) before the submit form |
+| [PulseMCP](https://www.pulsemcp.com/submit) | web form | yes | **covered automatically** — submissions paused since 2026-09-03, and their notice says to publish to the Official MCP Registry, which they ingest when they reopen. Already published, so nothing to do |
+| [mcpservers.org](https://mcpservers.org/submit) | web form (this is where `wong2/awesome-mcp-servers` sends submissions; that repo takes no PRs) | yes | **submitted** 2026-09-04 as "Lamdis Exchange", free listing (the $39 premium box left unticked); reviewed within 12h, confirmation to hello@lamdis.ai |
+| [Cursor](https://cursor.directory/plugins/new) | web form on cursor.directory (the old `cursor/mcp-servers` repo is archived and redirects here) | yes | **needs you** — GitHub or Google OAuth before the form |
 | n8n MCP servers registry | no public submission path documented; the node panel list is curated by n8n. Users can already connect via the **MCP Client Tool** node with the URL | yes | **no action** — nothing to submit; document the MCP Client Tool URL instead |
 | LangChain / LlamaIndex | neither runs a server directory; `langchain-mcp-adapters` and `llama-index-tools-mcp` consume any MCP server by URL | yes | **no action** — worth an examples/ snippet, not a listing |
 
