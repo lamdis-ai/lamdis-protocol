@@ -237,6 +237,13 @@ func (b *Board) exposureLocked(worker string) int64 {
 
 // AtRiskMinor is what one seat on this job actually puts at stake.
 func (l *Listing) AtRiskMinor() int64 {
+	// A sandbox job escrows nothing, so there is nothing to be at risk. Left
+	// out, the exposure ceiling meant for real money would refuse the
+	// simulated operator its own rehearsal after a few runs, and a developer
+	// would watch the sandbox stop working for no reason they could see.
+	if l.Sandbox {
+		return 0
+	}
 	if !l.Staged() {
 		return l.PayMinor
 	}

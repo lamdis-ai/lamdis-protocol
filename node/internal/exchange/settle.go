@@ -58,6 +58,17 @@ func (s *Server) settle(ctx context.Context, job string, sub api.Submission, wor
 	if !ok {
 		return fmt.Errorf("settle: no such job %s", job)
 	}
+	// The line a sandbox job must never cross.
+	//
+	// Everything above this point is shared with a real job on purpose — the
+	// board, the claim, the submission, acceptEvidence — because a developer
+	// integrating against a mock learns the shape of the mock. This is where
+	// the sharing stops: no capture, no holdback, no card, no payout, no
+	// ledger row of any kind. See internal/exchange/sandbox.go for why the
+	// guard is one line here rather than an exclusion in six other places.
+	if l.Sandbox {
+		return nil
+	}
 	// A job bought through agentic checkout is paid from an authorisation on
 	// the buyer's card, not from a balance. Taking it here means the money
 	// moves at the same moment and on the same condition as every other

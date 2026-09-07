@@ -87,6 +87,10 @@ type Server struct {
 	// anybody signs in, and the only thing the bootstrap loop can aim at when
 	// no capacity has been registered at all.
 	Coverage *Coverages
+	// Demand is the other half of that: work asked for where no supply could
+	// take it. Coverage says where people would work; this says where somebody
+	// wanted work done. See demand.go.
+	Demand *Demands
 	// staleTold remembers which unfilled jobs their buyer has been warned
 	// about, so a slow week does not become a daily email.
 	staleTold map[string]bool
@@ -175,6 +179,10 @@ type Server struct {
 	guestSeen map[string][]time.Time
 	// started is when this process came up, for the status page.
 	started time.Time
+	// SandboxStep is how long each stage of a sandbox job takes. Zero means
+	// SandboxStep in sandbox.go; a test sets it to something shorter so the
+	// suite does not spend six seconds asleep per job.
+	SandboxStep time.Duration
 
 	Now func() time.Time
 }
@@ -297,6 +305,7 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 	srv.Reservations = NewReservations()
 	srv.Watches = NewWatches()
 	srv.Coverage = NewCoverages(opt.DataDir)
+	srv.Demand = NewDemands(opt.DataDir)
 	if m := NewSES(); m != nil {
 		srv.Mail = m
 	}
@@ -459,6 +468,13 @@ func (s *Server) Handler() *http.ServeMux {
 		BaseURL: strings.TrimSuffix(s.BaseURL, "/"), Now: s.now,
 	}
 	s.Board.Announce = func(l *api.Listing) {
+		// A sandbox job reaches nobody. Dispatching one would POST a fake
+		// offer to a real operator's endpoint and email real people about
+		// work that does not exist, which is the fastest way to teach the
+		// supply side that this board is not worth reading.
+		if l.Sandbox {
+			return
+		}
 		if n := s.Dispatch.Announce(context.Background(), l); n > 0 {
 			log.Printf("dispatch: %s offered to %d operator(s)", l.Job, n)
 		}
@@ -484,6 +500,7 @@ func (s *Server) Handler() *http.ServeMux {
 	(&SpendServer{Server: s, Workers: s.Workers}).Register(mux)
 	(&AlertServer{Server: s, Workers: s.Workers}).Register(mux)
 	(&CoverageServer{Server: s}).Register(mux)
+	(&DemandServer{Server: s}).Register(mux)
 	(&StatementServer{Server: s, Workers: s.Workers}).Register(mux)
 	(&api.SupplierServer{Suppliers: s.Suppliers, Workers: s.Workers,
 		Board: s.Board, Now: s.now}).Register(mux)
@@ -629,13 +646,27 @@ func (s *Server) acceptEvidence(sub api.Submission) (api.Submission, error) {
 	s.saveSubmissionsLocked()
 	s.mu.Unlock()
 
-	if s.Verify == nil {
+	// A sandbox job's evidence was drawn by this process a moment ago. Running
+	// the verifier over it would be a test of the drawing function, and it
+	// would fail: there is no describer to read a code out of a picture that
+	// nobody photographed. Accepted by construction instead, and every
+	// artefact downstream says so — see sandbox.go.
+	sandbox := false
+	if l, ok := s.Board.Get(sub.Job); ok && l.Sandbox {
+		sandbox = true
+		sub = sandboxVerify(sub, l.Kind)
+	}
+	if s.Verify == nil && !sandbox {
 		return sub, nil
 	}
-	verified, err := s.Verify(sub, s.blobFor)
-	if err != nil {
-		s.notifyRejected(sub, err.Error(), true)
-		return sub, err
+	verified := sub
+	if !sandbox {
+		var err error
+		verified, err = s.Verify(sub, s.blobFor)
+		if err != nil {
+			s.notifyRejected(sub, err.Error(), true)
+			return sub, err
+		}
 	}
 	s.mu.Lock()
 	if idx < len(s.submissions[sub.Job]) {
@@ -737,6 +768,14 @@ func (s *Server) handleCreateTaskAsAgent(w http.ResponseWriter, r *http.Request,
 		writeError(w, http.StatusBadRequest, "malformed request")
 		return
 	}
+	// A sandbox job spends nothing, so it must not consume the budget its
+	// person set. Committing against the key here would mean a developer
+	// testing an integration exhausted the agent's real allowance on jobs that
+	// never cost anybody a cent, and the first real job would be refused.
+	if peek.Sandbox {
+		s.handleCreateTask(w, r, person, body)
+		return
+	}
 	slots := peek.Slots
 	if slots == 0 {
 		slots = 1
@@ -794,7 +833,11 @@ func (s *Server) handleJobStatus(w http.ResponseWriter, r *http.Request, key *ac
 		"expires":     l.Expires.Format(time.RFC3339),
 		"submissions": len(subs),
 	}
-	if s.Ledger != nil {
+	if l.Sandbox {
+		out["sandbox"] = true
+		out["note"] = SandboxSynthetic
+	}
+	if s.Ledger != nil && !l.Sandbox {
 		held, _ := s.Ledger.Held(r.Context(), job, l.Currency)
 		out["escrow_minor"] = held
 	}
@@ -967,12 +1010,32 @@ func (s *Server) handleJobReceipt(w http.ResponseWriter, r *http.Request, key *a
 	if l.Directed() {
 		out["directed"] = true
 	}
-	if s.Ledger != nil {
+	if s.Ledger != nil && !l.Sandbox {
 		held, _ := s.Ledger.Held(r.Context(), job, l.Currency)
 		out["escrow_remaining_minor"] = held
 	}
-	// Anchored, so it can be shown to have existed without this server.
-	s.anchorReceipt(job, out)
+	// A sandbox receipt says what it is, in words, in the document itself.
+	//
+	// This is the artefact that matters. A receipt is meant to be shown to
+	// somebody who does not trust this exchange, which means it will be read
+	// away from the API that produced it and away from any note in a tool
+	// result. If it can be mistaken for a real one anywhere, it can be
+	// mistaken for a real one everywhere, so the flag and the sentence travel
+	// inside the signed body.
+	//
+	// It is also not anchored. The hourly batch is a public claim that these
+	// receipts existed unchanged at a time, and putting synthetic ones in it
+	// would spend the one thing that makes the batch worth reading.
+	if l.Sandbox {
+		out["sandbox"] = true
+		out["paid_minor"] = int64(0)
+		out["evidence_synthetic"] = true
+		out["note"] = SandboxSynthetic + " This receipt is not anchored and " +
+			"proves nothing about the world."
+	} else {
+		// Anchored, so it can be shown to have existed without this server.
+		s.anchorReceipt(job, out)
+	}
 	// Signed, so the receipt stands on its own away from this server.
 	if body, err := json.Marshal(out); err == nil {
 		out["signature"] = hex.EncodeToString(ed25519.Sign(s.Key, body))
@@ -1337,6 +1400,11 @@ func MaxPayoutFor(l *api.Listing) int64 {
 
 // checkFunded refuses to list work the escrow cannot cover.
 func (s *Server) checkFunded(l *api.Listing) error {
+	// A sandbox job holds nothing because nothing is ever paid out on it. See
+	// sandbox.go for why the ledger is bypassed rather than credited.
+	if l.Sandbox {
+		return nil
+	}
 	if s.Ledger == nil {
 		// No ledger means no money anywhere, which is a development setup
 		// rather than a funded one. Listing is allowed so the board can be
@@ -1457,6 +1525,12 @@ type CreateTaskRequest struct {
 	Slots      int    `json:"slots,omitempty"`
 	Tier       string `json:"tier,omitempty"`
 	TTLSeconds int64  `json:"ttl_seconds,omitempty"`
+
+	// Sandbox posts this against the fulfilment sandbox instead of the real
+	// world: no board, no operator, no money, and a simulated run that walks
+	// the same state machine in seconds so an integration can be finished
+	// today. Opt-in and never a default — see internal/exchange/sandbox.go.
+	Sandbox bool `json:"sandbox,omitempty"`
 }
 
 func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, principal string, body []byte) {
@@ -1499,6 +1573,18 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 				"evidence whichever way the answer turns out. Put the amount in "+
 				"fee_minor, and bonus_minor for the part that depends on the finding")
 		return
+	}
+	// The sandbox, and the terms it cannot walk.
+	//
+	// Checked here, before anything is built, because the alternative is a
+	// sandbox job that lists and then sits forever waiting for a bidder or a
+	// second seat that will never arrive — which teaches a developer that the
+	// loop does not close, the exact thing this is here to disprove.
+	if in.Sandbox {
+		if why := sandboxRefusal(in); why != "" {
+			writeError(w, http.StatusBadRequest, why)
+			return
+		}
 	}
 	if in.Currency == "" {
 		in.Currency = "USD"
@@ -1562,6 +1648,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 		// Recorded from the credential that posted it, so the claim is the
 		// exchange's rather than the buyer's.
 		PostedByAgent: postedByAgent,
+		Sandbox:       in.Sandbox,
 		Expires:       s.now().Add(ttl), Posted: s.now(),
 	}
 	// Multi-part terms, checked before any money moves.
@@ -1717,7 +1804,11 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 				"or there is nothing to check the photographs against")
 		return
 	}
-	if guest {
+	// A sandbox job posted with no credential at all is the one-call case, and
+	// it does not park here. There is nothing to authorise, because nothing
+	// will ever be charged: it goes straight onto the loop below and comes
+	// back with the same buyer token a paid guest job would have carried.
+	if guest && !listing.Sandbox {
 		out, err := s.stagePending(r.Context(), listing)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
@@ -1739,7 +1830,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 	// amount to hold yet — that is what the bids are for — so it carries a
 	// reservation instead, and the escrow happens the moment somebody's price
 	// is accepted.
-	if s.Ledger != nil && listing.Pricing != api.PriceBids {
+	if s.Ledger != nil && listing.Pricing != api.PriceBids && !listing.Sandbox {
 		if _, err := s.Ledger.Hold(r.Context(),
 			"hold-"+job, job, principal, MaxPayoutFor(listing), in.Currency); err != nil {
 			writeError(w, http.StatusPaymentRequired, err.Error())
@@ -1766,6 +1857,22 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 		"escrowed": MaxPayoutFor(listing),
 		"expires":  s.now().Add(ttl).Format(time.RFC3339),
 		"status":   s.BaseURL + "/v1/jobs/" + job,
+	}
+	if listing.Sandbox {
+		// Said in the same breath as the job id, so an agent relaying this to
+		// a person cannot report that work has been arranged.
+		out["sandbox"] = true
+		out["escrowed"] = int64(0)
+		// No board link, because it is not on one and never will be.
+		delete(out, "board")
+		out["note"] = SandboxSynthetic + " It walks the real state machine — " +
+			"taken, evidence submitted, verified, settled, receipt issued — " +
+			"about " + sandboxSeconds(s.sandboxStep()) + " seconds apart. Poll " +
+			"the status url."
+		if guest {
+			out["token"] = s.BuyerToken(job)
+		}
+		s.startSandbox(job)
 	}
 	if in.ProjectID != "" {
 		if pr, ok := s.Projects.Get(in.ProjectID, principal); ok {

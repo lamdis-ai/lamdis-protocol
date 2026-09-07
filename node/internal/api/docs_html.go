@@ -88,6 +88,8 @@ tr:hover td { background: rgba(18,26,34,.5); }
 <a href="#keys">Getting a key</a>
 <a href="#money">Money</a>
 <a href="#buy">Buying work</a>
+<a href="#sandbox">Sandbox</a>
+<a href="#demand">Where work is asked for</a>
 <a href="#supply">Doing work</a>
 <a href="#costs">What it costs</a>
 <a href="#vendors">If you already have vendors</a>
@@ -213,6 +215,60 @@ how a board stops being taken seriously.</p>
   "bids_close_in_hours": 10, "predicate": "The north gutter is clear", ... }</pre>
 <p><code>max_bid_minor</code> is your ceiling and the amount held. Nobody bidding
 can see it.</p>
+
+<h2 id="sandbox">Sandbox</h2>
+<p>Coverage is thin. At most addresses today <code>POST /v1/quote</code> answers
+<code>{"reachable":"none","feasible":false}</code>, honestly, because no
+operator has registered within range &mdash; and an integration cannot be
+finished against an exchange that can only say no.</p>
+<p>So there is a test mode for fulfilment as well as for money. Add
+<code>"sandbox": true</code> to <code>POST /v1/tasks</code> and the job is taken
+by a simulated operator, given generated evidence, verified, settled and issued
+a receipt, each step a couple of seconds apart. It walks the real state machine
+&mdash; the same board, the same submission, the same settlement function
+&mdash; so what you integrate against is the shape you will get in production.</p>
+<pre class="api"><b>curl</b> -X POST https://exchange.lamdis.ai/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"sandbox": true, "kind": "do",
+       "predicate": "The bins are back behind the side gate",
+       "instructions": "Wheel both bins through the side gate and latch it.",
+       "fee_minor": 1200}'
+
+<i># no key needed. The reply carries the job id and a token:</i>
+{ "job": "do-…", "sandbox": true, "escrowed": 0, "token": "lbt_…" }
+
+<i># then, a few seconds later:</i>
+<b>curl</b> -H "Authorization: Bearer lbt_…" https://exchange.lamdis.ai/v1/jobs/do-…
+<b>curl</b> -H "Authorization: Bearer lbt_…" https://exchange.lamdis.ai/v1/jobs/do-…/receipt</pre>
+<p><code>POST /v1/quote</code> takes <code>sandbox</code> too and answers
+<code>{"sandbox":true,"reachable":"simulated","feasible":true}</code> &mdash;
+<code>simulated</code> is deliberately not a word on the
+none/a&nbsp;few/several/plenty ladder, because it is not supply. The MCP tools
+<code>check_feasible</code>, <code>observe_world</code> and
+<code>do_in_world</code> take the same argument.</p>
+<p class="note"><b>A sandbox job is labelled everywhere and touches nothing.</b>
+<code>"sandbox": true</code> appears in every response about it, and its receipt
+states in words that the evidence was generated rather than photographed and
+that nothing was paid. No ledger row is written, so it cannot reach a balance,
+a holdback, the payout queue or the hourly anchoring batch, and its receipt is
+not anchored. It never appears on the public board or in any operator's queue
+&mdash; only the credential that created it can read it &mdash; and it does not
+move the settled price band. Nobody is dispatched and nobody is emailed.</p>
+<p>The sandbox walks one visit for one seat at a fixed fee. Bidding, stages,
+projects, named vendors and extra slots are refused with a sentence saying why,
+rather than accepted into a job that would then never finish.</p>
+
+<h2 id="demand">Where work is asked for</h2>
+<div class="tbl"><table>
+<tr><th>Endpoint</th><th>What it does</th></tr>
+<tr><td>GET /v1/coverage</td><td>Where supply is: operators registered, and people who said they would work there</td></tr>
+<tr><td>GET /v1/demand</td><td>Where work was asked for that nobody within range could take</td></tr>
+</table></div>
+<p>When a live quote comes back infeasible, the request is filed: the coarse
+cell, the kind, the skills, the time. Never the predicate, never an address,
+never anything identifying, and never a sandbox request. Both reports round
+points to two decimal places of a degree and bucket their counts &mdash; under
+five is never a figure.</p>
 
 <h2 id="supply">Doing work</h2>
 <div class="tbl"><table>
@@ -589,6 +645,30 @@ from /console/keys. REST routes (/v1/...) take the key as a header:
   X-Lamdis-Key: lam_sk_...
 The MCP endpoint (/mcp) takes Authorization: Bearer lam_sk_... and accepts
 X-Lamdis-Key as well.
+
+## Sandbox
+Coverage is thin, so most addresses answer feasible:false today. Add
+"sandbox": true to POST /v1/tasks (or to POST /v1/quote, or to the
+check_feasible / observe_world / do_in_world tools) and the job is taken by a
+simulated operator, given generated evidence, verified, settled and given a
+receipt, seconds apart, over the real state machine. One call, no credential:
+  curl -X POST https://exchange.lamdis.ai/v1/tasks -H "Content-Type: application/json" \
+    -d '{"sandbox":true,"kind":"do","predicate":"The bins are back behind the side gate","instructions":"Wheel both bins through the side gate and latch it.","fee_minor":1200}'
+The reply carries {"sandbox":true,"escrowed":0,"job":...,"token":"lbt_..."};
+follow it with that token on GET /v1/jobs/{job} and /receipt. Every response
+about such a job carries sandbox true and the receipt says in words that the
+evidence is synthetic and nothing was paid. It writes no ledger row, never
+appears on the public board, is not anchored, and is readable only by the
+credential that created it. Do not present one to a person as work that
+happened. The sandbox does one visit, one seat, a fixed fee: bids, stages,
+projects, named vendors and extra slots are refused with a reason.
+
+## Where work is asked for
+GET  /v1/coverage                  where supply is, bucketed and coarse
+GET  /v1/demand                    where work was asked for that nobody could take
+A live quote that comes back infeasible is recorded as demand: the coarse cell
+(two decimal places), the kind, the skills, the time. Never the predicate,
+never an address, never anything identifying, never a sandbox request.
 
 ## Core endpoints
 POST /v1/tasks                     post a job

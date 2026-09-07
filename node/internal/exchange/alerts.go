@@ -174,7 +174,7 @@ func (s *Server) AlertStaleJobs(ctx context.Context) int {
 	now := s.now()
 	told := 0
 	for _, l := range s.Board.All() {
-		if !api.IsWork(l.Kind) || l.Practice || l.Cancelled || l.Owner == "" {
+		if !api.IsWork(l.Kind) || l.Practice || l.Sandbox || l.Cancelled || l.Owner == "" {
 			continue
 		}
 		if l.Taken > 0 || l.Expires.Before(now) {

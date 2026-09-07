@@ -40,6 +40,11 @@ type QuoteRequest struct {
 	Predicate    string `json:"predicate,omitempty"`
 	Detail       string `json:"detail,omitempty"`
 	Instructions string `json:"instructions,omitempty"`
+	// Sandbox asks the question of the fulfilment sandbox rather than of the
+	// world. It is feasible by construction there, which is the point: an
+	// integration can be finished today at an address where nothing can
+	// actually be dispatched. See internal/exchange/sandbox.go.
+	Sandbox bool `json:"sandbox,omitempty"`
 }
 
 // Quote is what the exchange can say without being paid.
@@ -71,6 +76,16 @@ type Quote struct {
 
 	// Advice is what would make the job more likely to be taken.
 	Advice []string `json:"advice,omitempty"`
+
+	// Sandbox says this answer is about the sandbox and not about the world.
+	// Present on every sandbox reply and absent from every live one, so an
+	// agent cannot read a feasible answer without also reading what it was
+	// feasible in.
+	Sandbox bool `json:"sandbox,omitempty"`
+	// Recorded says this request was filed against the demand register: coarse
+	// point, kind, skills, timestamp, nothing else. Only ever set on a live
+	// answer that found nothing.
+	Recorded bool `json:"recorded,omitempty"`
 }
 
 // PriceBand is what similar work has actually been paid here.
@@ -116,9 +131,28 @@ func (s *Server) handleQuote(w http.ResponseWriter, r *http.Request, key *accoun
 	}
 	q := Quote{}
 
-	// Would we even carry it. Cheapest question, asked first.
+	// Would we even carry it. Cheapest question, asked first, and asked of a
+	// sandbox job too: what the exchange refuses to list, it refuses to
+	// pretend to list.
 	if ref := api.Screen(in.Predicate, in.Detail, in.Instructions); ref != nil {
 		q.Refused, q.RefusedWhy, q.NeedsReview = true, ref.Why, ref.Review
+	}
+
+	// The sandbox answers for itself. There is exactly one operator there and
+	// it is not a person, so the honest bucket is a word that cannot be
+	// confused with real supply: "simulated" is not on the none/a few/several/
+	// plenty ladder on purpose.
+	if in.Sandbox {
+		q.Sandbox = true
+		q.Reachable = "simulated"
+		q.Feasible = !q.Refused
+		q.Why = "this is the sandbox. Supply here is a simulated operator that " +
+			"takes the job, submits generated evidence and settles it in " +
+			"seconds. Nobody is dispatched, nothing is photographed and no " +
+			"money moves. It says nothing about whether this work can be done " +
+			"at this address — ask again without sandbox for that."
+		writeJSONResponse(w, q)
+		return
 	}
 
 	// Who could take it.
@@ -130,6 +164,32 @@ func (s *Server) handleQuote(w http.ResponseWriter, r *http.Request, key *accoun
 		q.Why = "nobody within range is set up for this work right now. That is " +
 			"not permanent — operators change what they take — but posting it " +
 			"today would most likely sit unclaimed."
+		// The honest answer, and then somewhere to go with it.
+		//
+		// "No" on its own is where every developer evaluating this exchange
+		// stopped, because coverage is thin everywhere and "none" was the
+		// first and last thing they were told. Neither of these sentences
+		// softens the no: one says the integration can be finished today
+		// against the sandbox, and the other says the question was written
+		// down where it is used to decide whom to recruit.
+		q.Advice = append(q.Advice,
+			"the fulfilment sandbox is feasible everywhere and settles in "+
+				"seconds, so the integration can be finished today: ask again "+
+				"with sandbox true, then post with sandbox true. Nothing about "+
+				"it is real and every reply says so.")
+		if !q.Refused && s.Demand != nil {
+			q.Recorded = s.Demand.Record(callerIP(r), Demand{
+				LatE7: api.E7(in.Lat), LonE7: api.E7(in.Lon),
+				Kind: in.Kind, Skills: in.Skills,
+			})
+		}
+		if q.Recorded {
+			q.Advice = append(q.Advice,
+				"this request has been recorded against the demand register — "+
+					"the coarse area, the kind and the skills, nothing else — so "+
+					"supply is recruited where it is being asked for. It is "+
+					"public at GET /v1/demand.")
+		}
 	}
 
 	// What it has cost before.
@@ -236,6 +296,13 @@ func (s *Server) priceBandFor(in QuoteRequest) *PriceBand {
 	currency := "USD"
 	for _, l := range s.Board.All() {
 		if l.Kind != in.Kind {
+			continue
+		}
+		// Sandbox and practice jobs settle at a figure nobody paid. Left in,
+		// a developer running the sandbox in a loop would move the public
+		// price band for everybody, which is the sort of number that misleads
+		// with authority — exactly what this function refuses to produce.
+		if l.Sandbox || l.Practice {
 			continue
 		}
 		if !api.MeetsSkills(in.Skills, l.Skills) && !api.MeetsSkills(l.Skills, in.Skills) {

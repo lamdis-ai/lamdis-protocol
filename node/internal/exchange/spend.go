@@ -93,6 +93,12 @@ func (ss *SpendServer) handleSpend(w http.ResponseWriter, r *http.Request) {
 		if l.Owner != worker.ID {
 			continue
 		}
+		// A sandbox job committed nothing and returned nothing. Listing it
+		// here would put money that does not exist into a buyer's record of
+		// what they have spent.
+		if l.Sandbox {
+			continue
+		}
 		subs := s.Submissions(l.Job)
 		accepted := 0
 		for _, sub := range subs {

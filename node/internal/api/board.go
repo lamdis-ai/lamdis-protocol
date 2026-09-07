@@ -327,6 +327,20 @@ type Listing struct {
 	// pays nothing, and can be done from a kitchen table.
 	Practice bool `json:"practice,omitempty"`
 
+	// Sandbox marks a job posted against the fulfilment sandbox: a real job
+	// walked by a simulated operator, so a developer can integrate the whole
+	// loop today rather than waiting for supply to exist where they are.
+	//
+	// The opposite of Practice, which is the supply side rehearsing. This is
+	// the demand side rehearsing, and the danger runs the other way: a
+	// practice run is unpaid work that a person can see is unpaid, whereas a
+	// sandbox job produces a receipt, and a receipt that could be mistaken for
+	// a real one is the one artefact this exchange must never emit. So it is
+	// labelled in every response that mentions the job, it is kept off the
+	// public board entirely by Listings, and nothing about it reaches a
+	// ledger, a holdback, a payout queue or the anchoring batch.
+	Sandbox bool `json:"sandbox,omitempty"`
+
 	// PostedByAgent records that software, not a person, wrote this job.
 	//
 	// Workers on the first marketplace of this shape had no way to tell
@@ -429,8 +443,13 @@ func (l *Listing) Public() *Listing {
 		// operator decides whether to bid partly on it.
 		PlanBy: l.PlanBy, PlanState: l.PlanState,
 		PostedByAgent: l.PostedByAgent, Practice: l.Practice,
-		SiteID: l.SiteID,
-		Report: l.Report,
+		// Carried even though Listings never lets a sandbox job reach a
+		// stranger. Redaction that depends on a filter somewhere else is one
+		// refactor from being wrong, and the failure here would be an
+		// unlabelled synthetic job on the open board.
+		Sandbox: l.Sandbox,
+		SiteID:  l.SiteID,
+		Report:  l.Report,
 		// Exact coordinates are deliberately absent.
 		//
 		// Removing the street address from the board is undone by publishing
@@ -704,7 +723,13 @@ func (b *Board) Listings() []*Listing {
 	now := b.now()
 	var out []*Listing
 	for _, l := range b.listings {
-		if l.Open(now) {
+		// A sandbox job is never open work. It has a simulated operator
+		// already on the way to it, it pays nothing, and an operator who
+		// travelled to one would have been sent to an address by a developer
+		// who was testing. This is the single place that decision is made, so
+		// everything downstream — the public board, ForOperator, the
+		// bootstrap loop's view of open work — inherits it.
+		if l.Open(now) && !l.Sandbox {
 			cp := *l
 			out = append(out, &cp)
 		}
