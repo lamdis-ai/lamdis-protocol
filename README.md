@@ -264,14 +264,20 @@ Two limits worth knowing before relying on it:
 | `sdk/python/` | `lamdis` on PyPI: exchange client, stdlib only | Apache-2.0 |
 | `examples/` | a first job from each agent framework, no account | Apache-2.0 |
 | `agents.md` | this exchange, written for an agent reading it | Apache-2.0 |
-| `node/` | the `lamdis` node: exchange, store, sync, permissions, portal, MCP | Apache-2.0 |
-| `ui/` | reserved for the portal's successor | Apache-2.0 |
+| `node/` | the `lamdis` node: exchange, store, sync, permissions, portal, MCP | FSL-1.1-MIT |
+| `ui/` | reserved for the portal's successor | FSL-1.1-MIT |
 
-All of it is Apache-2.0. The node was under a source-available licence, which
-was the wrong instrument for a thing that wants to be a rail: rails are adopted
-because nobody has to ask, and a licence a legal team has to think about is a
-licence that loses. Anyone may run this exchange, fork it, or build a competing
-one against the same spec.
+Everything an integrator touches is Apache-2.0: the spec, the SDKs, the
+examples, and the receipt format, because a protocol nobody may implement is
+not a protocol, and a receipt is only checkable without trusting us if the
+rules for checking it are public.
+
+The server is not, and that is deliberate. This is a marketplace, and a
+marketplace is worth what its liquidity is worth: one exchange with a hundred
+operators serves jobs that fifty exchanges with two each cannot. Forking the
+server would fragment the only thing that makes it useful. Each release
+converts to MIT after two years, and a private deployment that federates with
+the public network is the right answer to self-hosting — not a fork.
 
 ### Roadmap
 
