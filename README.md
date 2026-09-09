@@ -9,33 +9,61 @@ runs at [exchange.lamdis.ai](https://exchange.lamdis.ai).
 
 No account is needed for a first job.
 
+## Try it in ten seconds, with nothing
+
+No account, no key, no card. This posts a job into the sandbox and it runs the
+real machinery — claimed, evidence submitted, verified, settled, receipt — in
+about ten seconds.
+
+```sh
+curl -sX POST https://exchange.lamdis.ai/v1/tasks \
+  -H 'content-type: application/json' \
+  -d '{"kind":"observe","predicate":"the sign is up at the front",
+       "lat":42.3314,"lon":-83.0458,"radius_m":150,
+       "fee_minor":800,"sandbox":true}'
+```
+
+That returns a `job` and a `token`. Ten seconds later:
+
+```sh
+curl -s https://exchange.lamdis.ai/v1/jobs/$JOB/receipt -H "authorization: Bearer $TOKEN"
+```
+
+The receipt says `"sandbox": true`, `"evidence_synthetic": true`, `"paid_minor": 0`,
+and states in words that nobody was dispatched and nothing was paid. A sandbox
+job never reaches the public board, never touches the ledger, and is never
+anchored. It exists so you can build the whole integration before a single
+real person is involved.
+
 ## One line, from any agent
 
 ```sh
 claude mcp add --transport http lamdis https://exchange.lamdis.ai/mcp
 ```
 
-Any MCP client works. Connected like that, an agent can check whether anyone
-can reach an address, post a job, and follow it. A job posted with no account
-comes back with a `pay_at` link and a `token`: **send the person the pay
-link.** Their card is authorised for the job's ceiling, not charged; the job
-goes on the board when that lands, and the card is charged once, at the end,
-for exactly what was paid out on proof. The token follows that one job.
+Any MCP client works, and no credential is needed for the guest tools:
+`check_feasible`, `observe_world`, `do_in_world`, `find_out`, `job_status`,
+`job_receipt`, `job_evidence`, `list_bids`. Pass `sandbox: true` to any of them
+to run against the sandbox.
 
-The same over HTTP, in six lines of TypeScript (`npm i lamdis`):
+## A real job
 
-```ts
-import { Lamdis } from "lamdis";
-const x = new Lamdis();                                             // anonymous
-const posted = await x.observe({ predicate: "The 'For Lease' sign is still up on the corner unit",
-  where: "1200 Valencia St, San Francisco", lat: 37.7527, lon: -122.4207, radius_m: 150, fee_minor: 800 });
-console.log(posted.payAt);                                          // send the person the pay link
-console.log(await x.job(posted.job, posted.token).status());        // the token follows this one job
-```
+A job posted for real comes back with a `pay_at` link and a `token`: **send the
+person the pay link.** Their card is authorised for the job's ceiling, not
+charged; the job goes on the board when that lands, and the card is charged
+once, at the end, for exactly what was paid out on proof.
 
-Or Python (`pip install lamdis`), or plain `curl` — see [`examples/`](examples/)
-for a first job from Claude Code, the OpenAI Agents SDK, LangChain, the Vercel
-AI SDK, n8n and the shell.
+**Coverage today is zero.** Nobody has registered as an operator yet, so
+`check_feasible` will honestly tell you a real job would sit unclaimed, and it
+records where the work was asked for so supply can be recruited there — see
+[`/v1/demand`](https://exchange.lamdis.ai/v1/demand). If you can do physical
+work somewhere, [say where](https://exchange.lamdis.ai/coverage). That is the
+constraint, and it is not hidden anywhere in this repository.
+
+The TypeScript and Python clients live in [`sdk/`](sdk) and are not published
+to npm or PyPI yet; use them from source, or `curl`, or the MCP endpoint. See
+[`examples/`](examples/) for a first job from Claude Code, the OpenAI Agents
+SDK, LangChain, the Vercel AI SDK, n8n and the shell.
 
 ## Where to look
 
