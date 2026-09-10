@@ -416,10 +416,14 @@ func (cv *CoverageServer) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /coverage/stop", cv.handleStop)
 	// The page a marketing link lands on. It asks the same question the board
 	// asks when the board has nothing paid on it.
+	page := api.WithSEO(api.CoveragePage(), cv.Server.BaseURL, "/coverage",
+		"Register as a Lamdis operator: say where you could do physical work — "+
+			"a photo taken, a bin moved, a sign checked — and be offered the paid "+
+			"jobs agents post near you.")
 	mux.HandleFunc("GET /coverage", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		fmt.Fprint(w, api.CoveragePage())
+		fmt.Fprint(w, page)
 	})
 }
 

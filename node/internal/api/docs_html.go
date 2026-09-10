@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // The page a developer lands on.
@@ -601,11 +603,15 @@ schedule.</p>
 
 // RegisterDocs mounts the developer page and the machine-readable pointers a
 // client looks for before asking a human.
-func RegisterDocs(mux *http.ServeMux) {
+func RegisterDocs(mux *http.ServeMux, baseURL string) {
+	// Rendered once: the canonical URL and the JSON-LD both need the base URL,
+	// which is configuration rather than something a request can be trusted for.
+	page := WithSEO(docsPageHTML, baseURL, "/docs", docsDescription) +
+		docsJSONLD(baseURL)
 	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		fmt.Fprint(w, docsPageHTML)
+		fmt.Fprint(w, page)
 	})
 	// An agent reading the site rather than the docs should still find its way
 	// in. Cheap to serve, and the alternative is it guessing.
@@ -615,6 +621,42 @@ func RegisterDocs(mux *http.ServeMux) {
 	})
 }
 
+// docsDescription is the sentence a search result shows under /docs.
+const docsDescription = "REST and MCP reference for the Lamdis exchange: post a " +
+	"job an agent wants done in the physical world, hold the money for it, and " +
+	"settle against verified evidence. No account or key is required to start."
+
+// docsJSONLD tells a crawler what kind of thing this page documents.
+//
+// A WebAPI node rather than a SoftwareApplication: what is being described is
+// an endpoint somebody's program calls, and the price is nothing to read it.
+func docsJSONLD(baseURL string) string {
+	base := strings.TrimSuffix(strings.TrimSpace(baseURL), "/")
+	ld := map[string]any{
+		"@context":      "https://schema.org",
+		"@type":         "WebAPI",
+		"name":          "Lamdis Exchange API",
+		"url":           base + "/",
+		"documentation": base + "/docs",
+		"description":   docsDescription,
+		"provider": map[string]any{
+			"@type": "Organization",
+			"name":  "Lamdis",
+			"url":   base + "/",
+		},
+		"offers": map[string]any{
+			"@type":         "Offer",
+			"price":         "0",
+			"priceCurrency": "USD",
+		},
+	}
+	b, err := json.Marshal(ld)
+	if err != nil {
+		return ""
+	}
+	return "\n<script type=\"application/ld+json\">" + string(b) + "</script>\n"
+}
+
 const llmsTXT = `# Lamdis Exchange
 
 Infrastructure for getting things done in the physical world: an agent states
@@ -622,10 +664,33 @@ what should become true, holds the money for it, and settles against verified
 evidence that it happened.
 
 ## How to use it
+No account is needed. No key, no card, no binary. Nothing below requires
+signing in, and a first job can be posted with no credential at all.
+
+Connect any MCP client in one line:
+  claude mcp add --transport http lamdis https://exchange.lamdis.ai/mcp
+
+Or watch the whole machine run in about ten seconds, against the sandbox,
+with nothing:
+  curl -sX POST https://exchange.lamdis.ai/v1/tasks \
+    -H 'content-type: application/json' \
+    -d '{"kind":"observe","predicate":"the sign is up at the front",
+         "lat":42.3314,"lon":-83.0458,"radius_m":150,
+         "fee_minor":800,"sandbox":true}'
+That returns a job and a token; ten seconds later the receipt is at
+GET /v1/jobs/{job}/receipt with "authorization: Bearer <token>". The job was
+claimed, evidenced, verified and settled over the real state machine.
+
+Coverage today is zero. No operator has registered yet, so a real job would
+sit unclaimed and check_feasible says so rather than pretending otherwise.
+Asks nobody could take are recorded, coarsely and without identifying
+anything, at /v1/demand — that is the map supply gets recruited against.
+Anyone who can do physical work somewhere registers at /coverage.
+
 - API reference: /docs
 - Machine-readable summary: /v1/exchange
-- Sign in to get a key: /signin
 - Open work: /board
+- Optional account, for balances and spending limits: /signin
 
 ## Authentication
 None is needed for a first job. POST /v1/tasks with no header, or connect to

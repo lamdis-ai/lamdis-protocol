@@ -59,6 +59,11 @@ func cmdServeExchange(args []string) error {
 		"anchor receipt hashes to Bitcoin through OpenTimestamps; needs -data, costs nothing")
 	anchorEvery := fs.Duration("anchor-every", time.Hour,
 		"how often unanchored receipts are batched into one root and submitted")
+	// Search indexing. IndexNow is keyless and instant; the alternative is
+	// waiting weeks for a crawler that has no reason to come.
+	indexNow := fs.Bool("indexnow-submit", false,
+		"submit every sitemap URL to IndexNow (Bing, DuckDuckGo, Yandex) and exit; "+
+			"needs the same -base-url and -key as the deployment being submitted")
 	anchorCalendars := fs.String("anchor-calendars", envOr("LAMDIS_ANCHOR_CALENDARS",
 		strings.Join(anchor.DefaultCalendars, ",")),
 		"comma-separated OpenTimestamps calendar URLs to submit roots to")
@@ -94,6 +99,27 @@ func cmdServeExchange(args []string) error {
 	srv, err := exchange.Open(key, *baseURL, opt)
 	if err != nil {
 		return err
+	}
+
+	// Submitting is a one-shot errand, not a service: say what will be sent,
+	// send it, and stop. A search engine being unreachable is reported and
+	// never fatal to anything else, because nothing else has started yet.
+	if *indexNow {
+		fmt.Printf("indexnow\n")
+		fmt.Printf("  host       %s\n", *baseURL)
+		fmt.Printf("  key        %s\n", srv.IndexNowKey())
+		fmt.Printf("  key file   %s/%s.txt  (must already be live)\n", *baseURL, srv.IndexNowKey())
+		urls := srv.CrawlURLs()
+		for _, u := range urls {
+			fmt.Printf("  url        %s\n", u)
+		}
+		status, err := srv.SubmitIndexNow(context.Background())
+		if err != nil {
+			fmt.Printf("  result     not submitted: %v\n", err)
+			return nil
+		}
+		fmt.Printf("  result     %d for %d urls\n", status, len(urls))
+		return nil
 	}
 
 	// The house budget is the only money the loop can move, and it is read

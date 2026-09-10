@@ -58,3 +58,33 @@ func TestDocsOnlyPromiseEndpointsThatExist(t *testing.T) {
 func normalizePath(p string) string {
 	return regexp.MustCompile(`\{[^}]+\}`).ReplaceAllString(p, "{}")
 }
+
+// llms.txt is the first thing an agent reads, and it used to open by telling
+// the reader to sign in and get a key — for a service where a first job needs
+// no account at all. The gate it advertised did not exist, and the readers who
+// believed it left.
+func TestLLMsTxtDoesNotDemandAnAccount(t *testing.T) {
+	head := llmsTXT
+	if i := strings.Index(head, "## Authentication"); i > 0 {
+		head = head[:i]
+	}
+	if strings.Contains(head, "Sign in to get a key") {
+		t.Error("llms.txt still opens by asking for a key")
+	}
+	for _, want := range []string{
+		"No account is needed",
+		"claude mcp add --transport http lamdis https://exchange.lamdis.ai/mcp",
+		`"sandbox":true`,
+		"Coverage today is zero",
+		"/v1/demand",
+		"/coverage",
+	} {
+		if !strings.Contains(head, want) {
+			t.Errorf("llms.txt does not open with %q", want)
+		}
+	}
+	// The sandbox command has to be one somebody actually ran.
+	if !strings.Contains(head, "curl -sX POST https://exchange.lamdis.ai/v1/tasks") {
+		t.Error("llms.txt has no runnable ten-second example")
+	}
+}

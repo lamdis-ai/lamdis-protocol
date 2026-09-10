@@ -460,6 +460,9 @@ func (s *Server) Handler() *http.ServeMux {
 	// Nothing reaches the board without the money to pay for it.
 	// The settlement constant, which is the one a worker actually feels.
 	s.Board.FeeBP = FeeBP
+	// The queue page is public and worth indexing; it needs the origin to
+	// name itself canonically.
+	s.Board.BaseURL = s.BaseURL
 	s.Board.PayoutThresholdMinor = PayoutThresholdMinor
 	s.Board.Funded = s.checkFunded
 	s.Board.Workers = s.Workers
@@ -484,7 +487,7 @@ func (s *Server) Handler() *http.ServeMux {
 	}
 	s.Board.Register(mux)
 	api.RegisterSkills(mux)
-	api.RegisterDocs(mux)
+	api.RegisterDocs(mux, s.BaseURL)
 	// The provider's own callback. Nil when no signing secret is configured,
 	// which leaves the endpoint unmounted rather than mounting one that would
 	// credit a balance for anybody who POSTs JSON at it.
@@ -495,7 +498,7 @@ func (s *Server) Handler() *http.ServeMux {
 		log.Printf("payments   NO webhook — deposits only credit if the buyer " +
 			"returns to the page, and bank debits cannot work at all")
 	}
-	api.RegisterTrust(mux)
+	api.RegisterTrust(mux, s.BaseURL)
 	(&PayoutServer{Server: s, Workers: s.Workers, BaseURL: s.BaseURL}).Register(mux)
 	(&SpendServer{Server: s, Workers: s.Workers}).Register(mux)
 	(&AlertServer{Server: s, Workers: s.Workers}).Register(mux)
@@ -590,6 +593,9 @@ func (s *Server) Handler() *http.ServeMux {
 	// A capability holder must never be able to mint more capabilities.
 	node := &api.Server{Principal: s.PID}
 	mux.HandleFunc("POST /v1/panels", node.WithAuth(s.handleCreatePanel))
+	// robots.txt, the sitemap and IndexNow. Mounted here because submitting
+	// speaks for this host and is guarded by the same principal as a panel.
+	s.registerSEO(mux, node)
 	// The stablecoin rail's operator and admin routes, and the public list
 	// of which rails are on.
 	s.registerUSDC(mux, node)

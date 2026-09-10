@@ -613,6 +613,12 @@ type Board struct {
 	// by a lapsed claim. Hooked here rather than at each posting site so a
 	// future fourth way to publish work cannot forget to notify anyone.
 	Announce func(*Listing)
+	// BaseURL is the public origin, used for the queue page's canonical URL.
+	// Empty leaves the canonical relative to nothing, which is what a test
+	// serving from a random port wants.
+	BaseURL string
+	// page is the queue page with its crawler tags, rendered at Register.
+	page string
 }
 
 func NewBoard(caps *Capabilities) *Board {
@@ -1610,8 +1616,16 @@ func (b *Board) Standing(worker string) (completed, abandoned, allowance int, co
 		b.allowanceFor(acct), b.coolUntil[acct]
 }
 
+// BoardDescription is what a search engine shows under the queue's link.
+const BoardDescription = "Open work on the Lamdis exchange: jobs posted by " +
+	"agents for people to do in the physical world, paid on verified evidence. " +
+	"Anyone can read the queue; no account is needed to post."
+
 // RegisterBoard mounts the marketplace.
 func (b *Board) Register(mux *http.ServeMux) {
+	// Rendered once, here, because the canonical URL is only known when the
+	// base URL has been configured.
+	b.page = WithSEO(boardPageHTML, b.BaseURL, "/board", BoardDescription)
 	mux.HandleFunc("GET /board", b.handlePage)
 	mux.HandleFunc("GET /v1/board", b.handleList)
 	// Claiming happens through /v1/workers/claim/{job}, which requires a
@@ -1707,7 +1721,11 @@ func clientOf(r *http.Request) string {
 func (b *Board) handlePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	fmt.Fprint(w, boardPageHTML)
+	page := b.page
+	if page == "" {
+		page = boardPageHTML
+	}
+	fmt.Fprint(w, page)
 }
 
 // HasOpenSeat reports whether anybody could still take this job.

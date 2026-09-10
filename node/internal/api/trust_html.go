@@ -27,33 +27,54 @@ import (
 // trustRoute is what differs between the six paths.
 type trustRoute struct {
 	Path, Eyebrow, Title, Lead string
+	// Desc is the sentence a search engine shows under the link. Written per
+	// page: six pages sharing one description is six pages a crawler treats
+	// as one.
+	Desc string
 }
 
 var trustRoutes = []trustRoute{
 	{"/how-it-works", "How this works", "Route. Execute. Prove. Settle.",
 		"Software hires people to do things in the physical world, and pays only " +
 			"against evidence that the thing was done. Four verbs, one set of money " +
-			"rules, and nothing that depends on trusting us."},
+			"rules, and nothing that depends on trusting us.",
+		"How the Lamdis exchange works: an agent posts what should become true, " +
+			"the money is escrowed before anyone is dispatched, a person does the work " +
+			"and proves it with a coded photograph, and settlement follows the proof."},
 	{"/terms", "Terms", "What each side agrees to",
 		"Plain words rather than a contract you will not read. This is what you are " +
 			"agreeing to when you post work or take it, and what we can honestly " +
-			"claim in return."},
+			"claim in return.",
+		"The terms of the Lamdis exchange in plain words: what a buyer agrees to " +
+			"when they post work, what a worker agrees to when they take it, and what " +
+			"Lamdis does and does not promise about either."},
 	{"/privacy", "Privacy", "What we keep, and what we never see",
 		"An email address, what you took and submitted, and where the evidence says " +
 			"it was taken. No card numbers, no bank accounts, no address on the open " +
-			"board. The detail is below."},
+			"board. The detail is below.",
+		"What the Lamdis exchange stores and what it never sees: an email address " +
+			"and evidence hashes, no card numbers or bank details, and never a private " +
+			"address on the public board."},
 	{"/about", "About", "An exchange for work in the physical world",
 		"Lamdis is early software run by a small team. Agents post what should " +
 			"become true; people make it true and prove it; money moves on the proof. " +
-			"Here is what that means for you, and what it does not."},
+			"Here is what that means for you, and what it does not.",
+		"About Lamdis: an exchange where software hires people for work in the " +
+			"physical world and pays against verified evidence. Early software, run by " +
+			"a small team, with the limits stated rather than hidden."},
 	{"/support", "Support", "A person reads it",
 		"If work was not done, was done badly, or something happened on site, write " +
 			"to support@lamdis.ai. There is no automated appeals process and no " +
-			"arbitration clause. The rules you are asking about are below."},
+			"arbitration clause. The rules you are asking about are below.",
+		"Support for the Lamdis exchange. Write to support@lamdis.ai about a job, a " +
+			"payment or an account and a person reads it: no automated appeals process " +
+			"and no arbitration clause."},
 	{"/contact", "Contact", "How to reach us",
 		"support@lamdis.ai for anything about a job, a payment or an account. " +
 			"security@lamdis.ai for a security problem. What follows is what we can " +
-			"promise, so you know what to ask for."},
+			"promise, so you know what to ask for.",
+		"How to reach Lamdis: support@lamdis.ai for a job, a payment or an account, " +
+			"and security@lamdis.ai to report a security problem."},
 }
 
 // trustPage renders one of the six. Unknown paths fall back to the first.
@@ -407,9 +428,9 @@ pursue anyone acting in good faith.</p>
 // RegisterTrust mounts the plain-language pages. Several paths reach the same
 // body because people look for it under different names, and a 404 on /terms
 // is its own kind of answer. Each is rendered once, at startup.
-func RegisterTrust(mux *http.ServeMux) {
+func RegisterTrust(mux *http.ServeMux, baseURL string) {
 	for _, r := range trustRoutes {
-		page := trustPage(r.Path)
+		page := WithSEO(trustPage(r.Path), baseURL, r.Path, r.Desc)
 		mux.HandleFunc("GET "+r.Path, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Referrer-Policy", "no-referrer")

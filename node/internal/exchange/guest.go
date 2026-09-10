@@ -273,9 +273,13 @@ func (s *Server) registerGuest(mux *http.ServeMux) {
 	mux.HandleFunc("GET /pay/{job}", s.handlePayPage)
 	mux.HandleFunc("GET /paid/{job}", s.handlePaidReturn)
 	mux.HandleFunc("GET /my/{job}", s.handleMyJob)
+	post := api.WithSEO(api.PostPage(), s.BaseURL, "/post",
+		"Post a job on the Lamdis exchange without an account: say what should "+
+			"become true, set what you will pay, and your card is charged only "+
+			"once the work is proved.")
 	mux.HandleFunc("GET /post", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, api.PostPage())
+		fmt.Fprint(w, post)
 	})
 }
 
