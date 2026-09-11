@@ -175,10 +175,14 @@ func TestIndexNowSubmitRefusesTheUnauthenticated(t *testing.T) {
 func TestCrawlablePagesCarryTheirTags(t *testing.T) {
 	_, h := seoServer(t)
 	for _, p := range crawlPages {
-		if p.Path == "/" || p.Path == "/llms.txt" {
-			continue // a redirect and a text file, neither of which has a head
+		if p.Path == "/" {
+			continue // a redirect, which has no head
 		}
-		body := get(t, h, p.Path).Body.String()
+		w := get(t, h, p.Path)
+		if !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") {
+			continue // llms.txt, the OpenAPI document, the agent card: no head
+		}
+		body := w.Body.String()
 		want := `<link rel="canonical" href="https://exchange.example` + p.Path + `">`
 		if !strings.Contains(body, want) {
 			t.Errorf("%s has no canonical %s", p.Path, want)

@@ -61,6 +61,9 @@ var crawlPages = []crawlPage{
 	{"/support", "monthly", "0.4"},
 	{"/contact", "monthly", "0.4"},
 	{"/llms.txt", "weekly", "0.6"},
+	{"/openapi.yaml", "weekly", "0.6"},
+	{"/.well-known/agent-card.json", "weekly", "0.6"},
+	{"/.well-known/agent.json", "weekly", "0.4"},
 }
 
 // CrawlURLs is every absolute URL in the sitemap, in order.
@@ -119,6 +122,9 @@ Allow: /v1/anchors
 Allow: /v1/findings
 Allow: /v1/bootstrap
 Allow: /v1/exchange
+Allow: /.well-known/agent-card.json
+Allow: /.well-known/agent.json
+Allow: /openapi.yaml
 Disallow: /w/
 Disallow: /r/
 Disallow: /my/

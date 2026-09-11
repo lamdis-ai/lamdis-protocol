@@ -578,6 +578,23 @@ schedule.</p>
 <tr><td>GET /v1/payout/usdc/queue</td><td>What is waiting to be sent, and transfers that matched no job. Signed principal</td></tr>
 <tr><td>POST /v1/payout/usdc/queue/{id}/sent</td><td>Record the transaction that paid an item, <code>{"tx": "0x..."}</code>. Signed principal</td></tr>
 </table></div>
+<p><b>Paying inline with x402.</b> An agent that holds the wallet itself need
+not wait on the chain. When <code>GET /v1/rails</code> reports
+<code>x402.on</code>, an anonymous <code>POST /v1/tasks</code> with
+<code>"x402": true</code> in the body answers <code>402</code> with the
+<a href="https://x402.org">x402</a> payment requirements: scheme
+<code>exact</code>, the network, <code>maxAmountRequired</code> in USDC atomic
+units (the same exact amount <code>pay_usdc</code> quotes), <code>payTo</code>,
+<code>asset</code>, and the EIP-712 domain in <code>extra</code>; the body
+also carries the job id and token. Sign an EIP-3009 authorisation for that
+amount, retry the same request with it base64-encoded in <code>X-PAYMENT</code>,
+and the facilitator verifies and settles it while the request is open: the
+reply is <code>200</code> with the job listed and the transaction in
+<code>X-PAYMENT-RESPONSE</code>. If verification or settlement fails the job is
+not listed and the reply says why. A replayed payment lists the job once. The
+exchange still holds no key; the facilitator does the chain work, and a settled
+job is prepaid exactly as a transfer-funded one is. Nothing changes for a
+request that does not ask: the pay link is the default.</p>
 <p class="foot-links"><a href="/board">Board</a> &middot;
 <a href="/console">Console</a> &middot;
 <a href="/how-it-works">How this works</a> &middot;
@@ -608,6 +625,9 @@ func RegisterDocs(mux *http.ServeMux, baseURL string) {
 	// which is configuration rather than something a request can be trusted for.
 	page := WithSEO(docsPageHTML, baseURL, "/docs", docsDescription) +
 		docsJSONLD(baseURL)
+	// The machine-readable forms of this page, in the head where a client
+	// that follows rel=alternate looks for them.
+	page = strings.Replace(page, seoAnchor, seoAnchor+docsAlternateLinks, 1)
 	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -620,6 +640,13 @@ func RegisterDocs(mux *http.ServeMux, baseURL string) {
 		fmt.Fprint(w, llmsTXT)
 	})
 }
+
+// docsAlternateLinks points a client at the OpenAPI document and the A2A
+// agent card, which say in machine terms what this page says in prose. The
+// OpenAPI type is the one RFC 9512 registered for YAML; the JSON rendering is
+// not served, so it is not linked.
+const docsAlternateLinks = "\n<link rel=\"alternate\" type=\"application/yaml\" href=\"/openapi.yaml\" title=\"OpenAPI 3.1\">" +
+	"\n<link rel=\"alternate\" type=\"application/json\" href=\"/.well-known/agent-card.json\" title=\"A2A Agent Card\">"
 
 // docsDescription is the sentence a search result shows under /docs.
 const docsDescription = "REST and MCP reference for the Lamdis exchange: post a " +
@@ -688,6 +715,8 @@ anything, at /v1/demand — that is the map supply gets recruited against.
 Anyone who can do physical work somewhere registers at /coverage.
 
 - API reference: /docs
+- OpenAPI 3.1 document (YAML): /openapi.yaml
+- A2A agent card: /.well-known/agent-card.json (also /.well-known/agent.json)
 - Machine-readable summary: /v1/exchange
 - Open work: /board
 - Optional account, for balances and spending limits: /signin
@@ -747,6 +776,7 @@ POST /v1/jobs/{job}/award          accept one
 GET  /v1/agent/balance             what this key may still spend
 POST /v1/balance/topup             add funds
 GET  /v1/rails                     which rails are on; with USDC on, an anonymous job reply carries pay_usdc: send exactly that amount to that address and the job lists after 12 confirmations
+x402: with rails.x402.on, an anonymous POST /v1/tasks with "x402": true answers 402 with x402 payment requirements (scheme exact, USDC on Base); retry with a signed X-PAYMENT header and the job lists in the same round trip, transaction in X-PAYMENT-RESPONSE
 
 ## MCP
 One endpoint, /mcp, two surfaces chosen by credential.

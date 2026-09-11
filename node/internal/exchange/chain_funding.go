@@ -312,6 +312,14 @@ func (s *Server) usdcQuote(job string, amountMinor int64) map[string]any {
 // listed once. amountMinor is the transfer in USD minor units at par, dust
 // dropped; from is the sending address, which is where any remainder is owed.
 func (s *Server) FundFromChain(ctx context.Context, job, txHash string, amountMinor int64, from string) error {
+	return s.fundFromChain(ctx, job, txHash, amountMinor, from, "usdc")
+}
+
+// fundFromChain is FundFromChain with the funding kind named: "usdc" for a
+// transfer the watcher saw, "x402" for one a facilitator settled inline. The
+// ledger keys are the same either way, so the two paths seeing the same
+// transaction fund the job once between them.
+func (s *Server) fundFromChain(ctx context.Context, job, txHash string, amountMinor int64, from, kind string) error {
 	p, ok := s.pendingFor(job)
 	if !ok {
 		if l, live := s.Board.Get(job); live && l.Funding != nil && l.Funding.Intent == txHash {
@@ -325,7 +333,7 @@ func (s *Server) FundFromChain(ctx context.Context, job, txHash string, amountMi
 	owner := guestOwner(job)
 	l := p.L
 	l.Owner = owner
-	l.Funding = &api.Funding{Kind: "usdc", Intent: txHash, AuthorizedMinor: p.Amount, Payer: from}
+	l.Funding = &api.Funding{Kind: kind, Intent: txHash, AuthorizedMinor: p.Amount, Payer: from}
 	if s.Ledger != nil {
 		key := "usdc:" + txHash
 		if done, err := s.Ledger.Applied(ctx, key); err != nil {
@@ -352,6 +360,11 @@ func (s *Server) FundFromChain(ctx context.Context, job, txHash string, amountMi
 	return nil
 }
 
+// chainFunded is whether a listing was paid in USDC, by transfer or inline.
+func chainFunded(f *api.Funding) bool {
+	return f != nil && (f.Kind == "usdc" || f.Kind == x402FundingKind)
+}
+
 // settleChain closes the USDC side once a job can no longer be worked.
 //
 // A transfer is prepaid, so there is nothing to capture: what the job paid
@@ -359,7 +372,7 @@ func (s *Server) FundFromChain(ctx context.Context, job, txHash string, amountMi
 // is withdrawn again and owed back to the sender through the queue.
 func (s *Server) settleChain(ctx context.Context, l *api.Listing, remainder int64) {
 	f := l.Funding
-	if f == nil || f.Kind != "usdc" || f.Settled {
+	if f == nil || !chainFunded(f) || f.Settled {
 		return
 	}
 	f.Settled = true
@@ -662,5 +675,13 @@ func (s *Server) handleRails(w http.ResponseWriter, r *http.Request) {
 			"person, on a schedule."
 	}
 	out["usdc"] = usdc
+	x402 := map[string]any{"on": s.x402On()}
+	if s.x402On() {
+		for k, v := range s.x402Advert() {
+			x402[k] = v
+		}
+		x402["facilitator"] = s.X402.Facilitator
+	}
+	out["x402"] = x402
 	writeJSONResponse(w, out)
 }

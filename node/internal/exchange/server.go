@@ -129,6 +129,10 @@ type Server struct {
 	// exchange's address, earnings routed to an operator's own. Watch-only;
 	// nil when LAMDIS_USDC_ADDRESS and LAMDIS_BASE_RPC are not both set.
 	USDC *USDCRail
+	// X402 is the facilitator that verifies and settles an inline USDC
+	// payment on POST /v1/tasks. Needs USDC; nil when
+	// LAMDIS_X402_FACILITATOR is not set. See x402.go.
+	X402 *X402
 	// Holdbacks is money earned but not yet clear to send, because the buyer
 	// still has time to object.
 	Holdbacks *Holdbacks
@@ -323,6 +327,16 @@ func Open(key ed25519.PrivateKey, baseURL string, opt Options) (*Server, error) 
 	} else if usdc != nil {
 		srv.USDC = usdc
 		log.Printf("usdc       watching %s for transfers to %s", usdc.Net.Name, usdc.Address())
+	}
+	// Inline payment, when a facilitator is named and there is a rail to
+	// receive on. A facilitator with no rail is a price with no address.
+	if x, err := NewX402FromEnv(); err != nil {
+		return nil, err
+	} else if x != nil && srv.USDC != nil {
+		srv.X402 = x
+		log.Printf("x402       inline USDC payment on %s via %s", srv.USDC.Net.Name, x.Facilitator)
+	} else if x != nil {
+		log.Printf("x402       LAMDIS_X402_FACILITATOR is set but the USDC rail is off; inline payment stays off")
 	}
 	if rail, err := payment.NewStripe(); err == nil {
 		srv.Rail = rail
@@ -596,6 +610,9 @@ func (s *Server) Handler() *http.ServeMux {
 	// robots.txt, the sitemap and IndexNow. Mounted here because submitting
 	// speaks for this host and is guarded by the same principal as a panel.
 	s.registerSEO(mux, node)
+	// The A2A agent card and the OpenAPI document: what an agent asks a
+	// host for directly, by well-known path, rather than via a search engine.
+	s.registerDiscovery(mux)
 	// The stablecoin rail's operator and admin routes, and the public list
 	// of which rails are on.
 	s.registerUSDC(mux, node)
@@ -1537,6 +1554,10 @@ type CreateTaskRequest struct {
 	// the same state machine in seconds so an integration can be finished
 	// today. Opt-in and never a default — see internal/exchange/sandbox.go.
 	Sandbox bool `json:"sandbox,omitempty"`
+	// X402 asks to pay for this job inline, with a signed USDC authorisation
+	// on the retry, instead of through a pay link. Only meaningful with no
+	// credential; never the default. See x402.go.
+	X402 bool `json:"x402,omitempty"`
 }
 
 func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, principal string, body []byte) {
@@ -1609,10 +1630,15 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 	// A poster with no account: the job belongs to a principal only its
 	// token can act as, and its escrow arrives by card rather than balance.
 	guest := principal == guestSentinel
+	// An x402 retry carries the payment for a job that was already parked
+	// and counted; it is not another unpaid job from this address.
+	paying := guest && in.X402 && s.x402On() && r.Header.Get("X-PAYMENT") != ""
 	if guest {
-		if err := s.guestAllowed(r); err != nil {
-			writeError(w, http.StatusTooManyRequests, err.Error())
-			return
+		if !paying {
+			if err := s.guestAllowed(r); err != nil {
+				writeError(w, http.StatusTooManyRequests, err.Error())
+				return
+			}
 		}
 		principal = guestOwner(job)
 		postedByAgent = r.Header.Get("X-Lamdis-Posted-By") == "agent"
@@ -1815,6 +1841,12 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request, princi
 	// will ever be charged: it goes straight onto the loop below and comes
 	// back with the same buyer token a paid guest job would have carried.
 	if guest && !listing.Sandbox {
+		// Asked for inline payment, and it is on: the 402 path. Off, the
+		// request falls through to the pay link as if it had never asked.
+		if in.X402 && s.x402On() {
+			s.handleX402(w, r, listing)
+			return
+		}
 		out, err := s.stagePending(r.Context(), listing)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())

@@ -135,6 +135,10 @@ func (s *Server) stagePending(ctx context.Context, l *api.Listing) (map[string]a
 	if q := s.usdcQuote(l.Job, amount); q != nil {
 		out["pay_usdc"] = q
 	}
+	// Or paid inline, in this same call, by an agent holding the wallet.
+	if a := s.x402Advert(); a != nil {
+		out["x402"] = a
+	}
 	return out, nil
 }
 
@@ -217,7 +221,7 @@ func (s *Server) FundFromCard(ctx context.Context, job, session, intent string, 
 // captured.
 func (s *Server) settleCard(ctx context.Context, l *api.Listing, remainder int64) {
 	f := l.Funding
-	if f != nil && f.Kind == "usdc" {
+	if chainFunded(f) {
 		s.settleChain(ctx, l, remainder)
 		return
 	}
