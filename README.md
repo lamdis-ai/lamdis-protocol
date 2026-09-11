@@ -41,6 +41,20 @@ real person is involved.
 claude mcp add --transport http lamdis https://exchange.lamdis.ai/mcp
 ```
 
+Or install the Claude Code plugin, which adds the server and a skill that
+teaches the agent how to use it honestly — feasibility first, sandbox to try,
+hand the person the pay link, never claim work is arranged until it is taken:
+
+```sh
+claude plugin marketplace add lamdis-ai/lamdis-plugins
+claude plugin install lamdis@lamdis-plugins
+```
+
+The same skill ships here at [`skills/lamdis/SKILL.md`](skills/lamdis/SKILL.md).
+Agents that discover by well-known paths find an A2A card at
+[`/.well-known/agent-card.json`](https://exchange.lamdis.ai/.well-known/agent-card.json)
+and the OpenAPI at [`/openapi.yaml`](https://exchange.lamdis.ai/openapi.yaml).
+
 Any MCP client works, and no credential is needed for the guest tools:
 `check_feasible`, `observe_world`, `do_in_world`, `find_out`, `job_status`,
 `job_receipt`, `job_evidence`, `list_bids`. Pass `sandbox: true` to any of them
