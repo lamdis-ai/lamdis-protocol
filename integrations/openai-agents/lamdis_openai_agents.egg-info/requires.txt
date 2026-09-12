@@ -1,2 +1,0 @@
-openai-agents>=0.1
-httpx>=0.24

@@ -1,3 +1,0 @@
-crewai>=0.100
-httpx>=0.24
-pydantic>=2

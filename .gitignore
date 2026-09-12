@@ -9,3 +9,5 @@ dist/
 
 # The AI SDK integration ships its build so a GitHub tarball install needs no step.
 !integrations/vercel-ai/dist/
+integrations/*/build/
+integrations/*/*.egg-info/
