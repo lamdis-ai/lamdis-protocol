@@ -1,0 +1,39 @@
+{
+  "name": "@lamdis/ai-sdk-tools",
+  "version": "0.1.0",
+  "description": "Vercel AI SDK tools for the Lamdis Exchange: pay people for physical work, sandbox first.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "smoke": "npm run build && tsx test/smoke.ts"
+  },
+  "peerDependencies": {
+    "ai": ">=5.0.0",
+    "zod": ">=3.25.0"
+  },
+  "devDependencies": {
+    "ai": "7.0.99",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "zod": "4.6.3"
+  },
+  "engines": { "node": ">=18" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lamdis-ai/lamdis-protocol.git",
+    "directory": "integrations/vercel-ai"
+  },
+  "homepage": "https://exchange.lamdis.ai",
+  "keywords": ["ai-sdk", "vercel", "tools", "agents", "lamdis", "physical-world"]
+}

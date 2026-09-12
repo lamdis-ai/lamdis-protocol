@@ -1,0 +1,8 @@
+pyproject.toml
+lamdis_crewai/__init__.py
+lamdis_crewai/_client.py
+lamdis_crewai.egg-info/PKG-INFO
+lamdis_crewai.egg-info/SOURCES.txt
+lamdis_crewai.egg-info/dependency_links.txt
+lamdis_crewai.egg-info/requires.txt
+lamdis_crewai.egg-info/top_level.txt

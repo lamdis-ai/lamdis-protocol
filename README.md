@@ -35,6 +35,33 @@ job never reaches the public board, never touches the ledger, and is never
 anchored. It exists so you can build the whole integration before a single
 real person is involved.
 
+## Integrations
+
+Already using an agent framework? Each of these installs straight from this
+repository — nothing is on npm or PyPI — and gives the agent the same three
+tools: `lamdis_check_feasible`, `lamdis_run_job` (sandbox by default) and
+`lamdis_job_status`. None needs an account, and the sandbox costs nothing.
+
+| framework | install |
+|---|---|
+| [LangChain](integrations/langchain/) | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/langchain"` |
+| [OpenAI Agents SDK](integrations/openai-agents/) | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/openai-agents"` |
+| [CrewAI](integrations/crewai/) | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/crewai"` |
+| [Vercel AI SDK](integrations/vercel-ai/) | `npm install "https://gitpkg.vercel.app/lamdis-ai/lamdis-protocol/integrations/vercel-ai?main"` |
+
+```python
+from lamdis_langchain import lamdis_tools      # or lamdis_openai_agents, lamdis_crewai
+llm.bind_tools(lamdis_tools)
+```
+
+```ts
+import { lamdisTools } from "@lamdis/ai-sdk-tools";
+generateText({ model, tools: lamdisTools, prompt: "..." });
+```
+
+Each package README has a ten-line example that runs against the live sandbox
+and the exact JSON every tool returns; see [`integrations/`](integrations/).
+
 ## One line, from any agent
 
 ```sh

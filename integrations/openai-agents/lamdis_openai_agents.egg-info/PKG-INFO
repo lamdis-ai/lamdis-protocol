@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: lamdis-openai-agents
+Version: 0.1.0
+Summary: OpenAI Agents SDK function tools for the Lamdis Exchange: pay people for physical work, sandbox first.
+License: Apache-2.0
+Project-URL: Homepage, https://exchange.lamdis.ai
+Project-URL: Source, https://github.com/lamdis-ai/lamdis-protocol/tree/main/integrations/openai-agents
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: openai-agents>=0.1
+Requires-Dist: httpx>=0.24
