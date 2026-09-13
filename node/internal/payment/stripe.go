@@ -109,7 +109,7 @@ func NewStripe() (*Stripe, error) {
 // same reflex as the budget guard: the failure it prevents is not recoverable
 // by noticing it afterwards.
 func (s *Stripe) checkKey() error {
-	if strings.HasPrefix(s.Secret, "sk_live_") && !s.AllowLive {
+	if s.Live() && !s.AllowLive {
 		return fmt.Errorf("payment: refusing a live Stripe key; " +
 			"set LAMDIS_STRIPE_ALLOW_LIVE=1 to move real money")
 	}
@@ -129,7 +129,13 @@ func (s *Stripe) now() time.Time {
 }
 
 // Live reports whether this rail is pointed at real money.
-func (s *Stripe) Live() bool { return strings.HasPrefix(s.Secret, "sk_live_") }
+//
+// A restricted key (rk_live_) moves exactly as much real money as a standard
+// one within its permissions; treating only sk_live_ as live let a restricted
+// key past the guard and printed "test mode" over real charges.
+func (s *Stripe) Live() bool {
+	return strings.HasPrefix(s.Secret, "sk_live_") || strings.HasPrefix(s.Secret, "rk_live_")
+}
 
 // object is the subset of a Stripe response we act on. Everything else is kept
 // verbatim in Result.Raw so the ledger can record what the rail actually said.
