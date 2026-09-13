@@ -375,13 +375,23 @@ whose name ends up on the account is you, not whoever paid. Say no and tell us
 at <a href="mailto:support@lamdis.ai">support@lamdis.ai</a>.</p>
 
 <h2>Money</h2>
-<p>Money you add sits in our account at Stripe until it is paid out. We do hold
-it in that sense, and we would rather say so plainly than use a form of words
-that implies otherwise.</p>
-<p>What we do not do: we run no wallet of our own, we hold nothing outside
-Stripe, and we never see a card number or a bank account. Adding funds and
-setting up payouts both happen on Stripe's own pages, and payouts go to an
-account in your name that you control.</p>
+<p>Who holds the money depends on the rail, and we would rather name the rail
+than use a form of words that covers both.</p>
+<p><b>On the stablecoin rail</b> we hold no key at all. A job is funded by a
+transfer of an exact amount to an address this exchange watches: it can see
+that the money arrived and it cannot move it. Payouts and refunds are sent by
+a person, on a schedule, from a wallet outside this software.</p>
+<p><b>On the card rail</b>, when it is switched on, an authorisation is taken
+against your card and captured once, at the end, for what the job actually
+paid out. Money added to a balance sits in our account at the payment provider
+until it is paid out. We do hold it in that sense.</p>
+<p>What never happens on either: we do not see a card number or a bank
+account. Adding funds and setting up payouts happen on the provider's own
+pages, and payouts go to an account in your name that you control.</p>
+<p>You do not have to take any of this from a page we wrote.
+<a href="/v1/rails">GET /v1/rails</a> says which rails are on right now, and
+the stablecoin entry states in its own words that the exchange holds no
+key.</p>
 
 <h2>What we are not</h2>
 <div class="plain">
