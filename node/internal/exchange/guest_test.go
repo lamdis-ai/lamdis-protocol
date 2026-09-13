@@ -79,7 +79,7 @@ func TestNobodyCanPostAJobAndGetsAPayLink(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "/pay/"+job, nil))
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "cannot take card payments") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "cannot take payments") {
 		t.Errorf("the pay page should say plainly that there is no rail: %d %s", w.Code, w.Body.String()[:120])
 	}
 

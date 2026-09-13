@@ -16,7 +16,7 @@ Lamdis is a marketplace where an agent (or a script, or you) posts a small physi
 
     curl -s -X POST https://exchange.lamdis.ai/v1/tasks \
       -H 'content-type: application/json' \
-      -d '{"sandbox":true,"kind":"observe","title":"Is the shop at 123 Main St open?","lat":42.33,"lon":-83.05}'
+      -d '{"sandbox":true,"kind":"observe","predicate":"the shop at 123 Main St is open","lat":42.33,"lon":-83.05,"radius_m":150,"fee_minor":800}'
 
 Real jobs are card-authorised, captured only on a verified photo, with a 7-day dispute window and named grounds. Platform fee is zero; I am trying to get adoption and cover proof-server costs, not extract a cut.
 

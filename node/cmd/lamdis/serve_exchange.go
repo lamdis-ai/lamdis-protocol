@@ -152,6 +152,12 @@ func cmdServeExchange(args []string) error {
 		if err := seedDemoProject(srv); err != nil {
 			return err
 		}
+	} else {
+		// Not seeding is not the same as unseeding: the practice runs and the
+		// demonstration project persisted on disk from every earlier boot that
+		// did seed, and an agent arriving at a board of "Practice:" and
+		// "Demonstration only" listings reads the whole exchange as a toy.
+		unseedBoard(srv)
 	}
 
 	fmt.Printf("lamdis exchange\n")

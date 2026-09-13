@@ -26,6 +26,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/chain"
 	"log"
 	"net/http"
 	"strings"
@@ -301,7 +302,22 @@ func (s *Server) handlePayPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, p.PayAt, http.StatusFound)
 		return
 	}
-	fmt.Fprint(w, api.GuestNotice("This exchange cannot take card payments yet",
+	// No card rail, but a wallet: the page is the payment instruction, the
+	// same one the API returned as pay_usdc, for the person who was sent the
+	// link rather than the agent that posted the job.
+	if q := s.usdcQuote(job, p.Amount); q != nil {
+		fmt.Fprint(w, api.GuestNotice("Pay this job in USDC",
+			fmt.Sprintf("Send exactly %s USDC on %s (chain id %v) to %s. "+
+				"The amount's last digits identify this job, so send it exactly; a different "+
+				"amount cannot be matched and is returned by hand. The job goes on the board "+
+				"after %d confirmations, and whatever it does not pay out on proof is sent back "+
+				"to the sending address by a person, on a schedule. USDC contract: %s. "+
+				"This link is good for a day.",
+				q["amount_usdc"], q["chain"], q["chain_id"], q["address"],
+				chain.Confirmations, q["contract"])))
+		return
+	}
+	fmt.Fprint(w, api.GuestNotice("This exchange cannot take payments yet",
 		"The job is saved for a day. When a payment rail is configured this link will open the checkout."))
 }
 
