@@ -62,6 +62,14 @@ const coverCSS = `
 .rehearse { margin: 0 0 .9rem; padding: .7rem .9rem; border: 1px dashed var(--rule-2);
   border-radius: 4px; font-size: .84rem; line-height: 1.5; color: var(--ink-3); }
 .rehearse b { color: var(--ink-2); font-weight: 600; }
+/* The deal, said plainly, for somebody who arrived from a link and has never
+   heard of any of this. It sits above the register because asking for an email
+   before saying what the work pays is how a register stays empty. */
+.deal { margin: 0 0 1.4rem; padding: 1rem 1.1rem; border: 1px solid var(--rule);
+  border-radius: 4px; background: var(--panel); }
+.deal p { margin: 0 0 .7rem; font-size: .9rem; line-height: 1.6; color: var(--ink-2); }
+.deal p:last-child { margin-bottom: 0; }
+.deal b { color: var(--ink); font-weight: 600; }
 `
 
 // coverBlock is the markup. Hidden until the page knows whether there is real
@@ -280,18 +288,30 @@ var coveragePageHTML = coverageTop + themeCSS + coverCSS + coveragePageBody +
 const coverageTop = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Where you work — Lamdis</title>
+<title>Get paid to go and look — Lamdis</title>
 <style>`
 
 var coveragePageBody = `</style>` + shellTop("queue", "") + `
     <div class="bhead">
       <div>
         <p class="eyebrow">Operator register</p>
-        <h1>Where you work</h1>
-        <p class="lead">Who could take work where, so the first paid jobs are posted
-          somewhere somebody can reach.</p>
+        <h1>Get paid to go and look</h1>
+        <p class="lead">Somebody, or something, wants to know whether a shop is open, a
+          sign went up, a unit is empty. You go, you photograph it with the code you are
+          given in frame, and you are paid for it.</p>
       </div>
     </div>
+    <section class="deal">
+      <p><b>The work.</b> Go to a place and photograph one thing, with a one-time code
+        for that job in frame. That code is what makes the photograph proof rather than
+        a picture, and it is why the money can move without anybody vouching for you.</p>
+      <p><b>The money.</b> Whoever posts the job names what it pays. Lamdis takes
+        <b>nothing</b> — no cut, no fee, no subscription. You are paid in USDC once you
+        are owed more than $20, sent by a person rather than instantly.</p>
+      <p><b>Signing up.</b> An email and roughly where you are. No account, no ID, no
+        interview, nothing owed either way, and every message we send carries a link
+        that takes you back off this register.</p>
+    </section>
     ` + coverBlock + `
     <p class="note">The open work, whatever there is of it, is on <a href="/board">the board</a>.</p>
 ` + shellBottom + `
