@@ -9,7 +9,7 @@ repository; nothing here is on npm or PyPI.
 | [LangChain](langchain/) | `lamdis_langchain` | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/langchain"` |
 | [OpenAI Agents SDK](openai-agents/) | `lamdis_openai_agents` | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/openai-agents"` |
 | [CrewAI](crewai/) | `lamdis_crewai` | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/crewai"` |
-| [Vercel AI SDK](vercel-ai/) | `@lamdis/ai-sdk-tools` | `npm install "https://gitpkg.vercel.app/lamdis-ai/lamdis-protocol/integrations/vercel-ai?main"` |
+| [Vercel AI SDK](vercel-ai/) | `@lamdis/ai-sdk-tools` | `pnpm add "github:lamdis-ai/lamdis-protocol#path:integrations/vercel-ai"` — npm: `npx degit lamdis-ai/lamdis-protocol/integrations/vercel-ai vendor/lamdis` then `npm install ./vendor/lamdis` |
 
 Every package exposes the same three tools, named the same way:
 

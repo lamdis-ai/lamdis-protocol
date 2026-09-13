@@ -47,7 +47,7 @@ tools: `lamdis_check_feasible`, `lamdis_run_job` (sandbox by default) and
 | [LangChain](integrations/langchain/) | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/langchain"` |
 | [OpenAI Agents SDK](integrations/openai-agents/) | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/openai-agents"` |
 | [CrewAI](integrations/crewai/) | `pip install "git+https://github.com/lamdis-ai/lamdis-protocol.git#subdirectory=integrations/crewai"` |
-| [Vercel AI SDK](integrations/vercel-ai/) | `npm install "https://gitpkg.vercel.app/lamdis-ai/lamdis-protocol/integrations/vercel-ai?main"` |
+| [Vercel AI SDK](integrations/vercel-ai/) | `pnpm add "github:lamdis-ai/lamdis-protocol#path:integrations/vercel-ai"` — npm: `npx degit lamdis-ai/lamdis-protocol/integrations/vercel-ai vendor/lamdis` then `npm install ./vendor/lamdis` |
 
 ```python
 from lamdis_langchain import lamdis_tools      # or lamdis_openai_agents, lamdis_crewai

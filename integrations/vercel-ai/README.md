@@ -9,19 +9,24 @@ Three tools with zod schemas, no account, and a sandbox that costs nothing.
 Straight from GitHub, no npm registry. `dist/` is committed, so nothing has
 to be built on install.
 
-npm cannot install a subdirectory of a git repository on its own
-(`github:owner/repo#path:dir` is not an npm form), so use the tarball that
-[gitpkg](https://gitpkg.vercel.app) cuts from the subdirectory, pinned to the
-versions this was tested with:
+npm has no form for a subdirectory of a git repository (`github:owner/repo#path:dir`
+is not npm syntax, and the gitpkg.vercel.app tarball service that used to fill
+the gap now answers `402 Payment Required`). Two forms were verified against
+this repository:
 
-```sh
-npm install "https://gitpkg.vercel.app/lamdis-ai/lamdis-protocol/integrations/vercel-ai?main" ai@7.0.99 zod@4.6.3
-```
-
-pnpm does understand `path:`, so with pnpm the direct form works too:
+**pnpm** understands `path:`, so it is one line, pinned to the versions this
+was tested with:
 
 ```sh
 pnpm add "github:lamdis-ai/lamdis-protocol#path:integrations/vercel-ai" ai@7.0.99 zod@4.6.3
+```
+
+**npm**: copy the subdirectory out of GitHub with `degit`, then install the
+folder (npm links it):
+
+```sh
+npx degit lamdis-ai/lamdis-protocol/integrations/vercel-ai vendor/lamdis-ai-sdk-tools
+npm install ./vendor/lamdis-ai-sdk-tools ai@7.0.99 zod@4.6.3
 ```
 
 Peer dependencies: `ai >= 5` (the `inputSchema` tool API) and `zod >= 3.25`.
