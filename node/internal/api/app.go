@@ -155,6 +155,12 @@ type appThread struct {
 	Last    string `json:"last,omitempty"`
 	Shared  int    `json:"shared"`
 	Pending int    `json:"pending"`
+	// LastShared is when the most recent summary was approved, and SinceShared
+	// counts entries written after it. A share link reads the summary lane, so
+	// this is exactly "how stale is what they can see".
+	LastShared  string `json:"last_shared,omitempty"`
+	SinceShared int    `json:"since_shared"`
+	EverShared  bool   `json:"ever_shared"`
 }
 
 func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +184,11 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 			if e.Lane != protolog.LaneControl {
 				t.Entries++
 				t.Last = e.TS
+			}
+			if e.Lane == protolog.LaneSummary {
+				t.LastShared, t.EverShared, t.SinceShared = e.TS, true, 0
+			} else if e.Lane == protolog.LaneContent && t.EverShared {
+				t.SinceShared++
 			}
 			if e.Kind == protolog.KindGrant {
 				var b struct {
@@ -208,6 +219,7 @@ type appEntry struct {
 	Mine   bool   `json:"mine"`
 	TS     string `json:"ts"`
 	Text   string `json:"text"`
+	Agent  string `json:"agent,omitempty"` // MCP client name when an agent wrote it
 }
 
 // entriesFor reads a thread through one principal's eyes.
@@ -233,6 +245,7 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 		var b struct {
 			Text  string `json:"text"`
 			Title string `json:"title"`
+			Agent string `json:"agent"`
 		}
 		json.Unmarshal(e.Body, &b)
 		txt := b.Text
@@ -244,8 +257,8 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 		}
 		out = append(out, appEntry{
 			ID: e.ID, Lane: string(e.Lane), Kind: e.Kind, Author: e.Author,
-			Who: a.name(e.Author), Mine: e.Author == a.Self,
-			TS: e.TS, Text: txt,
+			Who: a.displayName(e.Author), Mine: e.Author == a.Self,
+			TS: e.TS, Text: txt, Agent: b.Agent,
 		})
 	}
 	return st.Title, out, nil
@@ -307,14 +320,26 @@ func (a *App) handlePost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"id": e.ID, "lane": string(lane)})
 }
 
+// handleAsk answers from one thread or from every thread the owner has.
+//
+// A thread is the unit of sharing, not the unit of thinking. The edge around
+// a thread exists so a counterparty can be given exactly that much; the owner
+// is on the inside of every edge, and a question like "what did we tell the
+// lender about the roof" should find its answer wherever it lives. So the
+// default scope is everything, each line carries its thread's title, and the
+// model is told to say which thread a fact came from.
 func (a *App) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Thread   string `json:"thread"`
 		Question string `json:"question"`
+		Scope    string `json:"scope"` // "thread" or "all"; all when empty
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in) != nil || strings.TrimSpace(in.Question) == "" {
 		http.Error(w, "a question is required", http.StatusBadRequest)
 		return
+	}
+	if in.Scope == "" || in.Thread == "" {
+		in.Scope = "all"
 	}
 	if a.Ask == nil {
 		// Said plainly, with the fix, because a dead button teaches nobody.
@@ -323,25 +348,58 @@ func (a *App) handleAsk(w http.ResponseWriter, r *http.Request) {
 			"Everything else here works without it."})
 		return
 	}
-	_, entries, err := a.entriesFor(r.Context(), in.Thread,
-		[]protolog.Lane{protolog.LaneSummary, protolog.LaneContent})
-	if err != nil {
-		http.Error(w, "no such thread", http.StatusNotFound)
-		return
+	ctx := r.Context()
+	ids := []string{in.Thread}
+	if in.Scope == "all" {
+		all, err := a.Store.Threads(ctx)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		ids = all
 	}
-	lines := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if strings.TrimSpace(e.Text) == "" {
+	lanes := []protolog.Lane{protolog.LaneSummary, protolog.LaneContent}
+	var lines []string
+	threads := 0
+	for _, id := range ids {
+		title, entries, err := a.entriesFor(ctx, id, lanes)
+		if err != nil {
 			continue
 		}
-		lines = append(lines, e.TS[:10]+" "+e.Who+": "+e.Text)
+		n := 0
+		for _, e := range entries {
+			if strings.TrimSpace(e.Text) == "" {
+				continue
+			}
+			prefix := ""
+			if in.Scope == "all" {
+				prefix = "[" + title + "] "
+			}
+			lines = append(lines, prefix+e.TS[:10]+" "+e.Who+": "+e.Text)
+			n++
+		}
+		if n > 0 {
+			threads++
+		}
 	}
-	answer, err := a.Ask(r.Context(), in.Question, lines)
+	if in.Scope != "all" && threads == 0 && len(ids) == 1 {
+		if _, err := a.Store.Thread(ctx, in.Thread); err != nil {
+			http.Error(w, "no such thread", http.StatusNotFound)
+			return
+		}
+	}
+	q := in.Question
+	if in.Scope == "all" {
+		q = "Entries are prefixed with the thread they come from in square brackets. " +
+			"When you rely on one, name the thread. Question: " + in.Question
+	}
+	answer, err := a.Ask(ctx, q, lines)
 	if err != nil {
 		writeJSON(w, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, map[string]any{"answer": answer, "grounded_in": len(lines), "model": a.Model})
+	writeJSON(w, map[string]any{"answer": answer, "grounded_in": len(lines),
+		"threads": threads, "scope": in.Scope, "model": a.Model})
 }
 
 // --- sharing ------------------------------------------------------------
@@ -522,20 +580,48 @@ func (a *App) handleSummarize(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"draft": "", "model": ""})
 		return
 	}
-	lines := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if strings.TrimSpace(e.Text) != "" {
-			lines = append(lines, e.TS[:10]+" "+e.Who+": "+e.Text)
+	// If something has already been shared, the draft is an update: what has
+	// changed since, not the whole story told again. That is what a person
+	// would write, and it is what the other side wants to read.
+	var lastSummary appEntry
+	lastIdx := -1
+	for i, e := range entries {
+		if e.Lane == string(protolog.LaneSummary) {
+			lastSummary, lastIdx = e, i
 		}
 	}
-	q := "Write a short summary of this thread for someone outside it, titled \"" + title + "\". " +
-		"State the current situation, decisions made, and what is still open. Leave out anything " +
-		"that reads as a private note, a number someone would not want a counterparty to know, or " +
-		"a walk-away position. Plain prose, no headings, under 120 words."
+	lines := make([]string, 0, len(entries))
+	for i, e := range entries {
+		if strings.TrimSpace(e.Text) == "" || e.Lane == string(protolog.LaneSummary) {
+			continue
+		}
+		if lastIdx >= 0 && i < lastIdx {
+			continue
+		}
+		lines = append(lines, e.TS[:10]+" "+e.Who+": "+e.Text)
+	}
+	guard := "Leave out anything that reads as a private note, a number someone would not want a " +
+		"counterparty to know, or a walk-away position. Plain prose, no headings, under 120 words."
+	var q string
+	mode := "summary"
+	if lastIdx >= 0 {
+		mode = "update"
+		if len(lines) == 0 {
+			writeJSON(w, map[string]any{"draft": "", "mode": "current", "model": a.Model,
+				"previous": lastSummary.Text})
+			return
+		}
+		q = "The reader already has this earlier update about \"" + title + "\":\n\n" + lastSummary.Text +
+			"\n\nWrite the next update for the same reader, covering only what has happened since. " +
+			"Say what changed, what was decided, and what is still open. Do not repeat the earlier update. " + guard
+	} else {
+		q = "Write a short summary of this thread for someone outside it, titled \"" + title + "\". " +
+			"State the current situation, decisions made, and what is still open. " + guard
+	}
 	draft, err := a.Ask(r.Context(), q, lines)
 	if err != nil {
 		writeJSON(w, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, map[string]any{"draft": draft, "model": a.Model})
+	writeJSON(w, map[string]any{"draft": draft, "mode": mode, "model": a.Model, "since": len(lines)})
 }

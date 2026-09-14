@@ -116,8 +116,16 @@ func NewServer(n *Node, version string) *sdk.Server {
 			if err != nil {
 				return nil, nil, err
 			}
-			e, err := author.Append(protolog.Draft{Kind: kind, Lane: lane,
-				Body: map[string]any{"text": a.Text}})
+			// Record which agent wrote this so people can tell their own words
+			// from their agent's in the interface. The name comes from the MCP
+			// client's handshake (e.g. "claude-code"); it is a label, not proof.
+			body := map[string]any{"text": a.Text}
+			if ip := req.Session.InitializeParams(); ip != nil && ip.ClientInfo != nil && ip.ClientInfo.Name != "" {
+				body["agent"] = ip.ClientInfo.Name
+			} else {
+				body["agent"] = "agent"
+			}
+			e, err := author.Append(protolog.Draft{Kind: kind, Lane: lane, Body: body})
 			if err != nil {
 				return nil, nil, err
 			}

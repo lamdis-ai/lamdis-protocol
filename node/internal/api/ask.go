@@ -30,9 +30,9 @@ import (
 // and the id is shown in the interface so nobody has to guess what answered.
 const DefaultModel = "openai/gpt-5.6-luna"
 
-const askSystem = `You answer questions about a single shared thread.
+const askSystem = `You answer questions from one or more shared threads.
 
-The thread is a record of what people and their agents actually wrote. You are
+Each thread is a record of what people and their agents actually wrote. Entries written by an agent are marked with the agent name. You are
 given every entry the person asking is permitted to see, oldest first, each with
 a date and an author.
 

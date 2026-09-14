@@ -51,6 +51,13 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .thread .name{font-size:.925rem;font-weight:560;line-height:1.35;margin-bottom:.15rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .thread .sub{font:.73rem/1.4 var(--mono);color:var(--ink4);display:flex;gap:.45rem;align-items:center}
 .pip{display:inline-flex;padding:.06rem .36rem;border-radius:5px;font-size:.66rem;font-weight:500;background:rgba(74,222,128,.1);color:var(--green)}
+.pip.warn{background:var(--gold-glow);color:var(--gold)}
+.nudge{display:flex;align-items:center;gap:.8rem;padding:.7rem .95rem;border:1px solid var(--gold-dim);border-radius:12px;background:var(--gold-glow);font-size:.86rem;color:var(--ink2);animation:rise .3s both}
+.nudge span{flex:1}
+.ref{color:var(--gold);cursor:pointer;border-bottom:1px dotted var(--gold-dim)}
+.ref.dead{color:var(--ink3);cursor:default;border-bottom-style:dashed}
+.tag.ai{background:rgba(125,211,252,.12);color:#7DD3FC}
+.entry.agent .auth{color:#7DD3FC}
 .me{border-top:1px solid var(--line);padding:.8rem 1.4rem;display:flex;align-items:center;gap:.7rem}
 .me .avatar{width:30px;height:30px;border-radius:50%;background:var(--panel2);border:1px solid var(--line2);display:grid;place-items:center;font-size:.76rem;font-weight:600;color:var(--ink2);flex:none}
 .me b{flex:1;min-width:0;font-size:.88rem;font-weight:560;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -145,7 +152,7 @@ summary:before{content:"▸ ";color:var(--ink4)}details[open] summary:before{con
 
 const appJS = `
 "use strict";
-var cur=null, me=null, entries=[], sheetEl=null;
+var cur=null, me=null, entries=[], sheetEl=null, scope="all", titles={};
 var $=function(i){return document.getElementById(i)};
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function when(ts){var d=new Date(ts);if(isNaN(d))return ts||"";var n=new Date();
@@ -163,38 +170,50 @@ function loadMe(){return api("/app/api/me").then(function(d){me=d;$("me-name").t
 
 function threads(){return api("/app/api/threads").then(function(d){var el=$("threads");
   if(!d.threads.length){el.innerHTML="";empty();return}
+  titles={};d.threads.forEach(function(t){titles[t.title.toLowerCase()]=t.id});
   el.innerHTML=d.threads.map(function(t){var sub=[];if(t.last)sub.push(when(t.last));else sub.push("empty");
-    return '<button class="thread" data-id="'+esc(t.id)+'" aria-current="'+(t.id===cur)+'"><div class="name">'+esc(t.title)+'</div><div class="sub">'+esc(sub.join(" · "))+
-      (t.shared?'<span class="pip">shared</span>':'')+'</div></button>'}).join("");
+    var pip=t.since_shared?'<span class="pip warn">'+t.since_shared+' new since shared</span>':(t.ever_shared||t.shared?'<span class="pip">shared</span>':'');
+    return '<button class="thread" data-id="'+esc(t.id)+'" aria-current="'+(t.id===cur)+'"><div class="name">'+esc(t.title)+'</div><div class="sub">'+esc(sub.join(" · "))+pip+'</div></button>'}).join("");
+  window._threads=d.threads;
   Array.prototype.forEach.call(el.querySelectorAll(".thread"),function(n){n.onclick=function(){open(n.getAttribute("data-id"))}});
   if(!cur)empty()})}
 
-function empty(){$("title").textContent="Lamdis";$("share").disabled=true;
+function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("scope").hidden=true;
   $("stream").innerHTML='<div class="void"><h2>Write things down with your AI. Share what you choose.</h2>'+
   '<p>Start a thread for one topic. Everything you and your AI write in it stays private until you share a summary, or all of it, with someone by link.</p>'+
   '<button class="btn solid" id="e-new">Start a thread</button></div>';$("e-new").onclick=newThread}
 
+function body(t){return esc(t).replace(/\[\[([^\]]{1,120})\]\]/g,function(m,name){var id=titles[name.trim().toLowerCase()];
+  return id?'<a class="ref" data-go="'+esc(id)+'">'+esc(name)+'</a>':'<span class="ref dead" title="No thread with this title">'+esc(name)+'</span>'})}
 function render(es){return es.map(function(e){var sum=e.lane==="summary";
-  return '<article class="entry'+(sum?' summary':'')+'"><div class="meta"><span class="auth">'+esc(e.who)+'</span><span>'+esc(when(e.ts))+'</span>'+
-    (sum?'<span class="tag">what you shared</span>':'')+'</div><div class="body">'+esc(e.text)+'</div></article>'}).join("")}
+  return '<article class="entry'+(sum?' summary':'')+(e.agent?' agent':'')+'"><div class="meta"><span class="auth">'+esc(e.who)+'</span>'+(e.agent?'<span class="tag ai">'+esc(e.agent)+'</span>':'')+'<span>'+esc(when(e.ts))+'</span>'+
+    (sum?'<span class="tag">what you shared</span>':'')+'</div><div class="body">'+body(e.text)+'</div></article>'}).join("")}
+function wireRefs(){Array.prototype.forEach.call(document.querySelectorAll("[data-go]"),function(a){a.onclick=function(){open(a.getAttribute("data-go"))}})}
 
-function open(id){cur=id;$("share").disabled=false;threads();
+function open(id){cur=id;$("share").disabled=false;$("scope").hidden=false;setScope(scope);threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){entries=d.entries;$("title").textContent=d.title||"Untitled";
     var vis=d.entries.filter(function(e){return e.lane!=="control"});
-    $("stream").innerHTML=vis.length?render(vis):'<div class="void"><h2>'+esc(d.title)+'</h2><p>Nothing here yet. Write the first thing below, or ask your AI to.</p></div>';
-    $("feed").scrollTop=$("feed").scrollHeight})}
+    var t=(window._threads||[]).filter(function(x){return x.id===id})[0]||{};
+    var nudge=t.since_shared?'<div class="nudge"><span>'+t.since_shared+(t.since_shared===1?" entry":" entries")+' since you last shared '+esc(when(t.last_shared))+'.</span><button class="btn sm solid" id="nudge-go">Send an update</button></div>':'';
+    $("stream").innerHTML=nudge+(vis.length?render(vis):'<div class="void"><h2>'+esc(d.title)+'</h2><p>Nothing here yet. Write the first thing below, or ask your AI to.</p></div>');
+    if(t.since_shared)$("nudge-go").onclick=shareSheet;
+    wireRefs();$("feed").scrollTop=$("feed").scrollHeight;$("text").focus()})}
 
 function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px"}
 function post(){var t=$("text").value.trim();if(!cur||!t)return;
   api("/app/api/post",{thread:cur,text:t,lane:"content"}).then(function(d){if(d.error){$("note").textContent=d.error;$("note").className="note bad";return}
     $("text").value="";grow();$("note").textContent="";open(cur)})}
-function ask(){var q=$("text").value.trim();if(!cur||!q)return;var n=$("note");n.textContent="Reading…";n.className="note";
-  api("/app/api/ask",{thread:cur,question:q}).then(function(d){if(d.error){n.textContent=d.error;n.className="note warn";return}
+function setScope(sc){scope=sc;$("scope").textContent=sc==="all"?"Everything ▾":"This thread ▾"}
+function ask(){var q=$("text").value.trim();if(!q)return;var n=$("note");n.textContent="Reading…";n.className="note";
+  var sc=cur?scope:"all";
+  api("/app/api/ask",{thread:cur||"",question:q,scope:sc}).then(function(d){if(d.error){n.textContent=d.error;n.className="note warn";return}
     n.textContent="";$("text").value="";grow();var box=document.createElement("div");box.className="reply";
-    box.innerHTML='<div class="q">'+esc(q)+'</div><div class="a">'+esc(d.answer)+'</div><div class="foot"><span>Answer · not saved</span>'+
-      '<button class="btn sm" data-keep>Keep</button><button class="btn sm" data-x>Dismiss</button></div>';
-    box.querySelector("[data-keep]").onclick=function(){api("/app/api/post",{thread:cur,text:d.answer,lane:"content"}).then(function(){box.remove();open(cur)})};
-    box.querySelector("[data-x]").onclick=function(){box.remove()};$("stream").appendChild(box);$("feed").scrollTop=$("feed").scrollHeight})}
+    var src=sc==="all"?"Read "+d.threads+(d.threads===1?" thread":" threads"):"Read this thread";
+    box.innerHTML='<div class="q">'+esc(q)+'</div><div class="a">'+body(d.answer)+'</div><div class="foot"><span>'+src+' · not saved</span>'+
+      (cur?'<button class="btn sm" data-keep>Keep</button>':'')+'<button class="btn sm" data-x>Dismiss</button></div>';
+    if(!cur){$("stream").innerHTML="";}
+    var k=box.querySelector("[data-keep]");if(k)k.onclick=function(){api("/app/api/post",{thread:cur,text:d.answer,lane:"content"}).then(function(){box.remove();open(cur)})};
+    box.querySelector("[data-x]").onclick=function(){box.remove();if(!cur)empty()};$("stream").appendChild(box);wireRefs();$("feed").scrollTop=$("feed").scrollHeight})}
 
 function sheet(html){closeSheet();sheetEl=document.createElement("div");sheetEl.className="veil";
   sheetEl.innerHTML='<div class="sheet" role="dialog" aria-modal="true">'+html+'</div>';document.body.appendChild(sheetEl);
@@ -211,10 +230,10 @@ function newThread(){var s=sheet('<header><h2>Start a thread</h2><p>One topic pe
 /* Share: one button, two choices, one link. */
 function shareSheet(){if(!cur)return;var mode="summary";
   api("/app/api/thread/"+tid()+"/access").then(function(d){
-    var s=sheet('<header><h2>Share this thread</h2><p>Anyone with the link can read it. No account needed. You can stop sharing any time.</p></header>'+
+    var s=sheet('<header><h2>Share this thread</h2><p>Anyone with the link reads what you have shared, as dated updates. No account needed. Stop sharing any time.</p></header>'+
     '<section><div class="choices"><button class="choice" data-m="summary" aria-pressed="true"><b>A summary</b><span>Your AI drafts it, you edit it. That is all they see.</span></button>'+
     '<button class="choice" data-m="read" aria-pressed="false"><b>Everything</b><span>The whole thread as it is.</span></button></div>'+
-    '<div id="sum"><label class="f">What they will read</label><textarea id="draft" rows="5" placeholder="Drafting…"></textarea><p class="hint" id="drafthint"></p></div>'+
+    '<div id="sum"><label class="f" for="draft">What they will read</label><textarea id="draft" rows="5" placeholder="Drafting…"></textarea><p class="hint" id="drafthint"></p></div>'+
     '<label class="f">Who is it for? <span class="dim">(only you see this)</span></label><input id="label" placeholder="The lender, my accountant, Sam…">'+
     '<div class="linkbox"><input id="link" readonly placeholder="Your link will appear here"><button class="btn solid" id="go">Create link</button></div>'+
     (d.links.length?'<label class="f">Currently shared with</label><div class="list">'+d.links.map(function(l){return '<div class="row"><div class="t"><b>'+esc(l.label||"Someone")+'</b><span>'+
@@ -227,10 +246,11 @@ function shareSheet(){if(!cur)return;var mode="summary";
       s.querySelector("#sum").hidden=(m!=="summary")}
     Array.prototype.forEach.call(s.querySelectorAll(".choice"),function(b){b.onclick=function(){setMode(b.getAttribute("data-m"))}});
     var existing=entries.filter(function(e){return e.lane==="summary"});
-    if(existing.length){draft.value=existing[existing.length-1].text;hint.textContent="This is what you shared last time. Edit it if things have moved on."}
-    else{api("/app/api/summarize",{thread:cur}).then(function(r){if(r.error){draft.placeholder="";hint.textContent=r.error;return}
-      if(!r.draft){draft.placeholder="Write what you want them to know.";hint.textContent="Set a model key in settings and this gets drafted for you.";return}
-      draft.value=r.draft;hint.textContent="Drafted from the thread. Edit anything before you share it."})}
+    api("/app/api/summarize",{thread:cur}).then(function(r){if(r.error){draft.placeholder="";hint.textContent=r.error;return}
+      if(r.mode==="current"){draft.value=r.previous||draft.value;hint.textContent="Nothing new since your last update. This is what they can already read; edit it or just copy the link again.";return}
+      if(!r.draft){if(!draft.value)draft.placeholder="Write what you want them to know.";hint.textContent="Set a model key in settings and this gets drafted for you.";return}
+      draft.value=r.draft;s.querySelector("label[for=draft]").textContent=r.mode==="update"?"Your next update: what changed since last time":"What they will read";
+      hint.textContent=r.mode==="update"?"Drafted from the "+r.since+(r.since===1?" entry":" entries")+" since your last update. Edit anything before you share it.":"Drafted from the thread. Edit anything before you share it."})
     s.querySelector("#go").onclick=function(){var label=s.querySelector("#label").value;var go=s.querySelector("#go");go.disabled=true;
       var mint=function(){api("/app/api/share",{thread:cur,scope:mode,days:30,label:label}).then(function(r){go.disabled=false;
         if(r.error){alert(r.error);return}var url=location.origin+r.path;copy(url);s.querySelector("#link").value=url;go.textContent="Copied";open(cur)})};
@@ -269,7 +289,7 @@ function settings(){var m=me||{};var origin=location.origin;
       api("/app/api/thread/"+tid()+"/grant",{to:s.querySelector("#g-to").value,scopes:[s.querySelector("#g-scope").value.trim()||"summary"]}).then(function(r){
         st.innerHTML='<div class="status '+(r.error?"bad":"ok")+'">'+esc(r.error||("Granted to "+r.name))+'</div>';grants()})}}}
 
-$("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("new").onclick=newThread;$("gear").onclick=settings;
+$("post").onclick=post;$("ask").onclick=ask;$("scope").onclick=function(){setScope(scope==="all"?"thread":"all")};$("share").onclick=shareSheet;$("new").onclick=newThread;$("gear").onclick=settings;
 $("text").oninput=grow;$("text").onkeydown=function(e){if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();post()}};
 document.onkeydown=function(e){if(e.key==="Escape")closeSheet()};
 loadMe().then(threads);setInterval(function(){if(!sheetEl){cur?open(cur):threads()}},15000);
@@ -292,8 +312,8 @@ func appHTML(model string, canAsk bool) string {
     <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
     <div class="composer"><div class="box">
       <div class="field">
-        <textarea id="text" rows="1" placeholder="Write something down, or ask a question about this thread…"></textarea>
-        <div class="tools"><span class="hint">Private until you share it.</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
+        <textarea id="text" rows="1" placeholder="Write something down, or ask a question…"></textarea>
+        <div class="tools"><span class="hint">Private until you share it. [[Thread title]] points at another thread.</span><button class="btn sm" id="scope" hidden>Everything ▾</button><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
       </div>
       <div class="note" id="note"></div>
     </div></div>
