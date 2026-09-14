@@ -658,10 +658,38 @@ func cmdInit(dataDir string) error {
 	return nil
 }
 
+// ensureIdentity makes a first run work.
+//
+// A node that refuses to start until you have run a separate init command is a
+// node most people never start. Someone adds this as an MCP server with one
+// command, the server exits with "run init first", and the client reports a
+// failed connection with no way to act on it. So absence of a key is treated
+// as a first run rather than as an error: generate one, keep 0600, and carry
+// on. An existing key is never touched, and a corrupt one still fails loudly,
+// because silently replacing a key would orphan every entry it ever signed.
+func ensureIdentity(dataDir string) error {
+	if _, err := os.Stat(keyPath(dataDir)); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return err
+	}
+	_, priv, err := protolog.GenerateKeypair()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(keyPath(dataDir), []byte(hex.EncodeToString(priv.Seed())+"\n"), 0o600)
+}
+
 func loadKey(dataDir string) (ed25519.PrivateKey, string, error) {
+	if err := ensureIdentity(dataDir); err != nil {
+		return nil, "", err
+	}
 	raw, err := os.ReadFile(keyPath(dataDir))
 	if err != nil {
-		return nil, "", fmt.Errorf("no person key (run `lamdis init` first): %w", err)
+		return nil, "", fmt.Errorf("cannot read the person key at %s: %w", keyPath(dataDir), err)
 	}
 	seed, err := hex.DecodeString(strings.TrimSpace(string(raw)))
 	if err != nil || len(seed) != ed25519.SeedSize {
@@ -675,9 +703,13 @@ func loadKey(dataDir string) (ed25519.PrivateKey, string, error) {
 	return priv, pid, nil
 }
 
+// openStore opens the node's database, creating it on a first run.
+//
+// Same reasoning as ensureIdentity: an empty node is a valid state, and the
+// first thing a new user does should not be reading an error.
 func openStore(dataDir string) (store.Store, error) {
-	if _, err := os.Stat(dbPath(dataDir)); err != nil {
-		return nil, fmt.Errorf("no store at %s (run `lamdis init` first)", dbPath(dataDir))
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return nil, err
 	}
 	return store.OpenSQLite(dbPath(dataDir))
 }
