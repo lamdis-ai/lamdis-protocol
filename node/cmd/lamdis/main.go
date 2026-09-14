@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -495,6 +497,12 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 		fmt.Printf("asking     %s\n", model)
 	}
 	fmt.Printf("peers      give them this URL; grants decide what they can pull\n")
+	// Open the interface. The address carries a token and nobody should have
+	// to copy it out of a terminal; a person who just typed one command gets a
+	// window, which is what "one command" means. Disable with LAMDIS_NO_OPEN=1.
+	if os.Getenv("LAMDIS_NO_OPEN") == "" {
+		go openBrowser(fmt.Sprintf("http://%s/app?token=%s", host, token))
+	}
 	return http.ListenAndServe(*addr, mux)
 }
 
@@ -1118,4 +1126,20 @@ func loadDotEnv(dataDir string) {
 		}
 		os.Setenv(key, val)
 	}
+}
+
+// openBrowser asks the desktop to show a URL, and does nothing loudly if it
+// cannot: a headless box is not an error.
+func openBrowser(url string) {
+	time.Sleep(400 * time.Millisecond)
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	default:
+		return
+	}
+	_ = cmd.Start()
 }

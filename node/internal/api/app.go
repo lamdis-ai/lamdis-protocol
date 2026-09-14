@@ -82,6 +82,7 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /app/api/thread/{id}", a.owner(a.handleThread))
 	mux.HandleFunc("POST /app/api/post", a.owner(a.handlePost))
 	mux.HandleFunc("POST /app/api/ask", a.owner(a.handleAsk))
+	mux.HandleFunc("POST /app/api/summarize", a.owner(a.handleSummarize))
 	mux.HandleFunc("POST /app/api/share", a.owner(a.handleShare))
 	mux.HandleFunc("GET /app/api/me", a.owner(a.handleMe))
 	mux.HandleFunc("POST /app/api/me", a.owner(a.handleSetName))
@@ -494,4 +495,47 @@ func (a *App) sharedThread(w http.ResponseWriter, r *http.Request) {
 		"title": title, "entries": entries,
 		"lanes": c.Lanes, "expires": strconv.FormatInt(c.Exp, 10),
 	})
+}
+
+// handleSummarize drafts what a stranger should be told about a thread.
+//
+// This is how the shareable layer gets written without asking a person to
+// classify every sentence as they type. Everything they write is private; when
+// they decide to share, the draft is proposed, they edit it, and only the
+// approved text is published. Without a model configured the person writes
+// the summary themselves, which is slower but the same shape.
+func (a *App) handleSummarize(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Thread string `json:"thread"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil || in.Thread == "" {
+		http.Error(w, "thread is required", http.StatusBadRequest)
+		return
+	}
+	title, entries, err := a.entriesFor(r.Context(), in.Thread,
+		[]protolog.Lane{protolog.LaneSummary, protolog.LaneContent})
+	if err != nil {
+		http.Error(w, "no such thread", http.StatusNotFound)
+		return
+	}
+	if a.Ask == nil {
+		writeJSON(w, map[string]any{"draft": "", "model": ""})
+		return
+	}
+	lines := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if strings.TrimSpace(e.Text) != "" {
+			lines = append(lines, e.TS[:10]+" "+e.Who+": "+e.Text)
+		}
+	}
+	q := "Write a short summary of this thread for someone outside it, titled \"" + title + "\". " +
+		"State the current situation, decisions made, and what is still open. Leave out anything " +
+		"that reads as a private note, a number someone would not want a counterparty to know, or " +
+		"a walk-away position. Plain prose, no headings, under 120 words."
+	draft, err := a.Ask(r.Context(), q, lines)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"draft": draft, "model": a.Model})
 }
