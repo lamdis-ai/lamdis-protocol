@@ -529,13 +529,59 @@ func scopeFilter(req SearchRequest) (string, []any) {
 }
 
 // ftsQuery quotes each term so user input is never interpreted as FTS5 syntax.
+// ftsStopwords are function words that carry no retrieval signal. Deliberately
+// short: only words that are almost never the point of a question. "How" and
+// "why" are absent because a thread can be about how or why something happened.
+var ftsStopwords = map[string]bool{
+	"a": true, "an": true, "and": true, "any": true, "are": true, "as": true,
+	"at": true, "be": true, "been": true, "but": true, "by": true, "can": true,
+	"did": true, "do": true, "does": true, "for": true, "from": true, "get": true,
+	"had": true, "has": true, "have": true, "i": true, "if": true, "in": true,
+	"into": true, "is": true, "it": true, "its": true, "me": true, "of": true,
+	"on": true, "or": true, "our": true, "should": true, "so": true, "than": true,
+	"that": true, "the": true, "their": true, "them": true, "then": true,
+	"there": true, "these": true, "they": true, "this": true, "to": true,
+	"was": true, "we": true, "were": true, "what": true, "when": true,
+	"which": true, "who": true, "will": true, "with": true, "would": true,
+	"you": true, "your": true,
+}
+
+// ftsQuery turns a natural-language question into an FTS5 MATCH expression.
+//
+// Bare terms separated by spaces are an implicit AND in FTS5, so every word had
+// to appear in the same entry. One stray function word sank the whole query: an
+// agent asking "does the exchange hold the money" matched nothing, because no
+// entry contained "does". Agents ask in sentences rather than in keywords, so
+// the query has to survive being a sentence.
+//
+// Function words are dropped and the rest are OR-ed. Precision does not suffer
+// the way it looks like it should, because ranking already favours entries that
+// match more of the terms — it comes from bm25 rather than from demanding every
+// word be present.
 func ftsQuery(q string) string {
 	fields := strings.Fields(q)
-	quoted := make([]string, 0, len(fields))
-	for _, f := range fields {
-		quoted = append(quoted, `"`+strings.ReplaceAll(f, `"`, `""`)+`"`)
+	quote := func(f string) string {
+		return `"` + strings.ReplaceAll(f, `"`, `""`) + `"`
 	}
-	return strings.Join(quoted, " ")
+	terms := make([]string, 0, len(fields))
+	for _, f := range fields {
+		word := strings.Trim(strings.ToLower(f), `.,;:!?'"()[]`)
+		if word == "" || ftsStopwords[word] {
+			continue
+		}
+		terms = append(terms, quote(f))
+	}
+	// A question made entirely of function words still has to mean something,
+	// and an empty MATCH is a syntax error rather than an empty result.
+	if len(terms) == 0 {
+		for _, f := range fields {
+			terms = append(terms, quote(f))
+		}
+	}
+	if len(terms) == 0 {
+		return `""`
+	}
+	return strings.Join(terms, " OR ")
 }
 
 func placeholders(n int) string {
