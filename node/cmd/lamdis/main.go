@@ -465,14 +465,28 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 	}
 	token := strings.TrimSpace(string(tokenRaw))
 	mux := (&api.Server{Sync: &syncp.Server{Store: s}, Principal: pid}).Handler()
-	portal := &api.Portal{Store: s, Key: priv, Self: pid, Token: token,
-		Names: func(principal string) string { return peerName(dataDir, principal) }}
+	names := func(principal string) string { return peerName(dataDir, principal) }
+	portal := &api.Portal{Store: s, Key: priv, Self: pid, Token: token, Names: names}
 	portal.Register(mux)
+	ask, model := api.AskFromEnv()
+	app := &api.App{Store: s, Key: priv, Self: pid, Token: token, Names: names,
+		Ask: ask, Model: model}
+	app.Register(mux)
 	host := *addr
 	if strings.HasPrefix(host, ":") {
 		host = "localhost" + host
 	}
-	fmt.Printf("lamdis node serving on %s\nprincipal: %s\nportal:    http://%s/portal?token=%s\ngive peers your URL; grants decide what they can pull\n", *addr, pid, host, token)
+	// The address to open comes first: it is the only line most people need,
+	// and burying it under the principal made them hunt for it.
+	fmt.Printf("open       http://%s/app?token=%s\n", host, token)
+	fmt.Printf("approvals  http://%s/portal?token=%s\n", host, token)
+	fmt.Printf("principal  %s\n", pid)
+	if ask == nil {
+		fmt.Printf("asking     off - set LAMDIS_OPENROUTER_KEY to answer questions about a thread\n")
+	} else {
+		fmt.Printf("asking     %s\n", model)
+	}
+	fmt.Printf("peers      give them this URL; grants decide what they can pull\n")
 	return http.ListenAndServe(*addr, mux)
 }
 
