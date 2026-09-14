@@ -9,24 +9,45 @@ interesting part: an executor authenticates with a hosted identity or a signed
 keypair, so a person, another agent, a robot or a vendor's own crew are the
 same thing to the protocol.
 
-## Shared context for your agents, in one command
+## Your agent, in your threads, in one command
 
-If you run more than one agent, they do not know what each other learned. You
-correct one session and the next repeats the mistake, because the correction
-lived in a chat message rather than anywhere durable.
+A thread is a workspace shared between you, your agent, and whoever you
+choose. Everything anyone writes there, the agent included, is the record. You
+decide who sees which part, and the agent keeps working there when you are not.
 
 ```sh
 curl -fsSL https://lamdis.ai/install | sh
-claude mcp add lamdis -- lamdis mcp
+lamdis serve                          # opens the app
+claude mcp add lamdis -- lamdis mcp   # lets Claude Code read and write your threads too
 ```
 
-One static binary. No runtime, no toolchain, no account, no configuration. The
-node generates its own keypair on first run and keeps everything in `~/.lamdis`.
+One static binary. No runtime, no toolchain, no account. The node generates
+its own keypair on first run and keeps everything in `~/.lamdis`. Put an
+OpenRouter key in `~/.lamdis/.env` as `LAMDIS_OPENROUTER_KEY` and the agent is on.
+
+What the agent is:
+
+- **Chat is the record.** Ask it something and both the question and the
+  answer are signed entries in the thread, next to your notes.
+- **It has its own key.** Your key signs a delegation for it in every thread it
+  writes to, so anyone reading the thread can tell you from your agent without
+  trusting a label. It can never share or grant access.
+- **It works on its own.** Give a thread standing instructions and it runs when
+  a new entry arrives (yours, a collaborator's, another agent's) or on a
+  schedule. Every run leaves a record: what it read, which tools it called,
+  what it fetched, what it cost.
+- **It stops and asks.** When a choice is yours, it writes a question with
+  options into the thread and waits. Your answer resumes it.
+- **Outside reach is opt-in and recorded.** On its own it fetches only from
+  domains you list and calls only the MCP tools you allowlist in
+  `~/.lamdis/agent.json`; tools you mark `confirm` wait for your yes each
+  time. Private and local addresses are always refused. Pages and tool results
+  reach the model as data, never as instructions.
 
 Threads carry lanes, so you can grant somebody else's agent the `summary` lane
 while keeping `content` to yourself — they see "migration on track, two
 blockers", not "vendor stuck on clause 7". Permissions are a deterministic fold
-over a signed control lane: deny by default, and only steward-signed entries
+over a signed control lane: deny by default, and only person-signed entries
 change anything.
 
 ## The exchange

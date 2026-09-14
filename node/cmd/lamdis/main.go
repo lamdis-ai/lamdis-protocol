@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/api"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/embed"
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
@@ -481,6 +482,40 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 	ask, model := api.AskFromEnv()
 	app := &api.App{Store: s, Key: priv, Self: pid, Token: token, Names: names,
 		Ask: ask, Model: model, DataDir: dataDir}
+	// The built-in agent: its own key, delegated per thread, and a scheduler
+	// that lets it work when nobody is looking.
+	agentKey, agentPID, err := agent.LoadOrMintAgentKey(dataDir)
+	if err != nil {
+		return err
+	}
+	state := agent.LoadState(dataDir)
+	var mdl agent.Model
+	if or := agent.NewOpenRouter(os.Getenv("LAMDIS_OPENROUTER_KEY"), model); or != nil {
+		mdl = or
+	}
+	runner := &agent.Runner{Store: s, PersonKey: priv, Person: pid, AgentKey: agentKey, Agent: agentPID,
+		Model: mdl, ModelName: model, DataDir: dataDir, Names: names, Embedder: embedderFromEnv(), State: state,
+		Logf: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}
+	sched := &agent.Scheduler{Runner: runner, State: state,
+		Logf: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}
+	sched.Sync = func(ctx context.Context) error {
+		peers, err := loadPeers(dataDir)
+		if err != nil || len(peers) == 0 {
+			return nil
+		}
+		var firstErr error
+		for name, p := range peers {
+			client := &syncp.Client{Store: s, Peer: api.NewHTTPTransport(p.URL, priv), Self: pid,
+				SelfKeys: map[string]bool{agentPID: true}}
+			if _, err := client.SyncAll(ctx); err != nil && firstErr == nil {
+				firstErr = fmt.Errorf("%s: %w", name, err)
+			}
+		}
+		drainEmbeds(ctx, s)
+		return firstErr
+	}
+	app.Runner, app.Scheduler, app.AgentSelf = runner, sched, agentPID
+	go sched.Start(context.Background())
 	app.Register(mux)
 	host := *addr
 	if strings.HasPrefix(host, ":") {
@@ -491,6 +526,7 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 	fmt.Printf("open       http://%s/app?token=%s\n", host, token)
 	fmt.Printf("approvals  http://%s/portal?token=%s\n", host, token)
 	fmt.Printf("principal  %s\n", pid)
+	fmt.Printf("agent      %s acting for you; revoke from Settings\n", agentPID)
 	if ask == nil {
 		fmt.Printf("asking     off - set LAMDIS_OPENROUTER_KEY to answer questions about a thread\n")
 	} else {
@@ -533,7 +569,7 @@ func cmdSync(ctx context.Context, dataDir string, s store.Store, args []string) 
 	}
 	round := func() {
 		for name, p := range peers {
-			client := &syncp.Client{Store: s, Peer: api.NewHTTPTransport(p.URL, priv), Self: pid}
+			client := &syncp.Client{Store: s, Peer: api.NewHTTPTransport(p.URL, priv), Self: pid, SelfKeys: selfKeys(dataDir)}
 			counts, err := client.SyncAll(ctx)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "lamdis: sync %s: %v\n", name, err)
@@ -737,6 +773,18 @@ func loadKey(dataDir string) (ed25519.PrivateKey, string, error) {
 //
 // Same reasoning as ensureIdentity: an empty node is a valid state, and the
 // first thing a new user does should not be reading an error.
+// selfKeys lists the delegated keys this node also authors as, so their
+// chains are offered to peers. Only the built-in agent for now.
+func selfKeys(dataDir string) map[string]bool {
+	if !agent.HasAgentKey(dataDir) {
+		return nil
+	}
+	if _, pid, err := agent.LoadOrMintAgentKey(dataDir); err == nil {
+		return map[string]bool{pid: true}
+	}
+	return nil
+}
+
 func openStore(dataDir string) (store.Store, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, err

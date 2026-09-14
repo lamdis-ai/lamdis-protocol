@@ -14,21 +14,17 @@ package api
 // so plainly rather than hoping.
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
 )
 
 // DefaultModel is cheap, long-context, and good enough to read a thread and
 // answer from it. Override with LAMDIS_MODEL; anything OpenRouter serves works,
 // and the id is shown in the interface so nobody has to guess what answered.
-const DefaultModel = "openai/gpt-5.6-luna"
+const DefaultModel = agent.DefaultModel
 
 const askSystem = `You answer questions from one or more shared threads.
 
@@ -52,17 +48,13 @@ You are reading someone's working record. Say what is there.`
 // NewOpenRouterAsk builds the answering function, or nil when no key is set.
 //
 // Nil rather than an erroring stub on purpose: the interface asks whether it
-// can answer and tells the person how to switch it on, which is more use than
-// a button that fails when pressed.
+// can answer and tells the person how to switch it on. This is the no-tools
+// path the share sheet uses to draft summaries; chat goes through the agent.
 func NewOpenRouterAsk(key, model string) func(context.Context, string, []string) (string, error) {
-	key = strings.TrimSpace(key)
-	if key == "" {
+	m := agent.NewOpenRouter(key, model)
+	if m == nil {
 		return nil
 	}
-	if model == "" {
-		model = DefaultModel
-	}
-	client := &http.Client{Timeout: 90 * time.Second}
 	return func(ctx context.Context, question string, entries []string) (string, error) {
 		if len(entries) == 0 {
 			return "This thread has nothing in it yet, so there is nothing for me to read.", nil
@@ -75,65 +67,11 @@ func NewOpenRouterAsk(key, model string) func(context.Context, string, []string)
 		}
 		sb.WriteString("\nQuestion: ")
 		sb.WriteString(question)
-
-		body, err := json.Marshal(map[string]any{
-			"model": model,
-			"messages": []map[string]string{
-				{"role": "system", "content": askSystem},
-				{"role": "user", "content": sb.String()},
-			},
-			"temperature": 0.2,
-		})
+		out, _, err := m.Complete(ctx, []agent.Message{{Role: "system", Content: askSystem}, {Role: "user", Content: sb.String()}}, nil)
 		if err != nil {
 			return "", err
 		}
-		req, err := http.NewRequestWithContext(ctx, "POST",
-			"https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(body))
-		if err != nil {
-			return "", err
-		}
-		req.Header.Set("Authorization", "Bearer "+key)
-		req.Header.Set("Content-Type", "application/json")
-		// OpenRouter attributes traffic with these; harmless and polite.
-		req.Header.Set("HTTP-Referer", "https://lamdis.ai")
-		req.Header.Set("X-Title", "Lamdis")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("could not reach the model: %w", err)
-		}
-		defer resp.Body.Close()
-		raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		if err != nil {
-			return "", err
-		}
-		if resp.StatusCode != http.StatusOK {
-			// Surface the provider's own words: "insufficient credits" is
-			// something the person can act on, "HTTP 402" is not.
-			var e struct {
-				Error struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			if json.Unmarshal(raw, &e) == nil && e.Error.Message != "" {
-				return "", fmt.Errorf("%s", e.Error.Message)
-			}
-			return "", fmt.Errorf("the model returned HTTP %d", resp.StatusCode)
-		}
-		var out struct {
-			Choices []struct {
-				Message struct {
-					Content string `json:"content"`
-				} `json:"message"`
-			} `json:"choices"`
-		}
-		if err := json.Unmarshal(raw, &out); err != nil {
-			return "", err
-		}
-		if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
-			return "", fmt.Errorf("the model returned nothing")
-		}
-		return strings.TrimSpace(out.Choices[0].Message.Content), nil
+		return strings.TrimSpace(out.Content), nil
 	}
 }
 

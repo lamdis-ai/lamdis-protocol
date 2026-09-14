@@ -1,0 +1,298 @@
+package api
+
+// The agent's routes. Chat writes the question and the answer into the
+// thread; a brief sets standing instructions; a decision is how the person
+// answers the agent; the agent endpoint is who the agent is and what it did
+// today. Nothing here can grant access: that stays a person-signed control
+// entry, written elsewhere.
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
+	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/perm"
+)
+
+const noModel = "No model is configured, so your agent cannot answer yet. " +
+	"Set LAMDIS_OPENROUTER_KEY (get one at openrouter.ai/keys) and restart the node. Everything else works without it."
+
+// runCtx detaches a run from the request so a closed tab does not abandon a
+// half-written run; the runner has its own deadline.
+func runCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 5*time.Minute)
+}
+
+func (a *App) agentReady() (string, bool) {
+	if a.Runner == nil || a.Runner.Model == nil {
+		return noModel, false
+	}
+	if a.agentRevoked {
+		return "The agent's key was revoked. Restart the node to mint a new one.", false
+	}
+	return "", true
+}
+
+// personAppend writes one entry signed by the person.
+func (a *App) personAppend(ctx context.Context, thread string, d protolog.Draft) (*protolog.Entry, error) {
+	tl, err := a.Store.Thread(ctx, thread)
+	if err != nil {
+		return nil, err
+	}
+	author, err := protolog.NewAuthor(tl, a.Key)
+	if err != nil {
+		return nil, err
+	}
+	e, err := author.Append(d)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.Store.AppendEntries(ctx, []*protolog.Entry{e}); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func (a *App) handleChat(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Thread string `json:"thread"`
+		Text   string `json:"text"`
+		Scope  string `json:"scope"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in) != nil || strings.TrimSpace(in.Text) == "" || in.Thread == "" {
+		http.Error(w, "thread and text are required", http.StatusBadRequest)
+		return
+	}
+	if msg, ok := a.agentReady(); !ok {
+		writeJSON(w, map[string]any{"error": msg})
+		return
+	}
+	ctx, cancel := runCtx()
+	defer cancel()
+	q, err := a.personAppend(ctx, in.Thread, protolog.Draft{Kind: agent.KindQuestion, Lane: protolog.LaneContent,
+		Body: map[string]any{"text": strings.TrimSpace(in.Text), "scope": in.Scope}})
+	if err != nil {
+		http.Error(w, "no such thread", http.StatusNotFound)
+		return
+	}
+	res := a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerChat, Thread: in.Thread, Entry: q.ID})
+	if a.Scheduler != nil {
+		a.Scheduler.Consume(ctx, in.Thread)
+	}
+	writeJSON(w, map[string]any{"question": q.ID, "answer": res.Answer, "answer_id": res.AnswerID,
+		"run": res.RunID, "outcome": res.Outcome, "error": res.Error, "waiting": res.Outcome == "waiting",
+		"model": a.Model})
+}
+
+func (a *App) handleBriefGet(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	tl, err := a.Store.Thread(r.Context(), id)
+	if err != nil {
+		http.Error(w, "no such thread", http.StatusNotFound)
+		return
+	}
+	b, has := agent.LoadBrief(tl, a.Self)
+	writeJSON(w, map[string]any{"brief": b, "has": has, "reach": a.reach()})
+}
+
+// reach is what the node can offer a thread: the domains and tools the
+// person configured. The brief picks from it.
+func (a *App) reach() map[string]any {
+	cfg, _ := agent.LoadConfig(a.DataDir)
+	type toolOut struct {
+		Name    string   `json:"name"`
+		Tools   []string `json:"tools"`
+		Confirm []string `json:"confirm"`
+	}
+	tools := []toolOut{}
+	for _, t := range cfg.Tools {
+		tools = append(tools, toolOut{Name: t.Name, Tools: t.Allow, Confirm: t.Confirm})
+	}
+	return map[string]any{"allow_domains": cfg.AllowDomains, "tools": tools,
+		"max_runs_per_day": cfg.MaxRunsPerDay, "max_fetches_per_day": cfg.MaxFetchesPerDay,
+		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json"}
+}
+
+func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var in agent.Brief
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<18)).Decode(&in) != nil {
+		http.Error(w, "bad brief", http.StatusBadRequest)
+		return
+	}
+	switch in.OnNewEntry {
+	case "off", "others", "all":
+	default:
+		in.OnNewEntry = "off"
+	}
+	if in.Every != "" {
+		if d, err := time.ParseDuration(in.Every); err != nil || d < 10*time.Minute {
+			http.Error(w, "schedule must be a duration of at least 10m, e.g. 6h", http.StatusBadRequest)
+			return
+		}
+	}
+	ctx := r.Context()
+	tl, err := a.Store.Thread(ctx, id)
+	if err != nil {
+		http.Error(w, "no such thread", http.StatusNotFound)
+		return
+	}
+	prev, has := agent.LoadBrief(tl, a.Self)
+	var refs *protolog.Refs
+	if has {
+		refs = &protolog.Refs{Supersedes: prev.ID}
+	}
+	body := map[string]any{"text": strings.TrimSpace(in.Text), "on_new_entry": in.OnNewEntry, "every": in.Every,
+		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools}
+	e, err := a.personAppend(ctx, id, protolog.Draft{Kind: agent.KindBrief, Lane: protolog.LaneContent, Refs: refs, Body: body})
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if a.Scheduler != nil {
+		a.Scheduler.Consume(ctx, id)
+	}
+	writeJSON(w, map[string]any{"id": e.ID})
+}
+
+func (a *App) handleRunNow(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if msg, ok := a.agentReady(); !ok {
+		writeJSON(w, map[string]any{"error": msg})
+		return
+	}
+	ctx, cancel := runCtx()
+	defer cancel()
+	res := a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerManual, Thread: id})
+	if a.Scheduler != nil {
+		a.Scheduler.Consume(ctx, id)
+	}
+	writeJSON(w, res)
+}
+
+// handleDecision records the person's answer and lets the agent continue.
+func (a *App) handleDecision(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ID     string `json:"id"`
+		Choice string `json:"choice"`
+		Text   string `json:"text"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil || in.ID == "" || (in.Choice == "" && strings.TrimSpace(in.Text) == "") {
+		http.Error(w, "id and a choice or text are required", http.StatusBadRequest)
+		return
+	}
+	if msg, ok := a.agentReady(); !ok {
+		writeJSON(w, map[string]any{"error": msg})
+		return
+	}
+	ctx, cancel := runCtx()
+	defer cancel()
+	thread, decision := a.findEntry(ctx, in.ID)
+	if decision == nil || decision.Kind != agent.KindDecision {
+		http.Error(w, "no such decision", http.StatusNotFound)
+		return
+	}
+	var db struct {
+		Chain int `json:"chain"`
+	}
+	json.Unmarshal(decision.Body, &db)
+	reply, err := a.personAppend(ctx, thread, protolog.Draft{Kind: agent.KindDecisionReply, Lane: protolog.LaneContent,
+		Refs: &protolog.Refs{RepliesTo: in.ID},
+		Body: map[string]any{"choice": in.Choice, "text": strings.TrimSpace(in.Text)}})
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	res := a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerDecision, Thread: thread, Entry: reply.ID, Chain: db.Chain})
+	if a.Scheduler != nil {
+		a.Scheduler.Consume(ctx, thread)
+	}
+	writeJSON(w, map[string]any{"reply": reply.ID, "answer": res.Answer, "outcome": res.Outcome, "error": res.Error})
+}
+
+func (a *App) findEntry(ctx context.Context, id string) (string, *protolog.Entry) {
+	ids, err := a.Store.Threads(ctx)
+	if err != nil {
+		return "", nil
+	}
+	for _, t := range ids {
+		if tl, err := a.Store.Thread(ctx, t); err == nil {
+			if e := tl.Get(id); e != nil {
+				return t, e
+			}
+		}
+	}
+	return "", nil
+}
+
+func (a *App) handleAgent(w http.ResponseWriter, r *http.Request) {
+	out := map[string]any{"principal": a.AgentSelf, "name": a.displayName(a.AgentSelf),
+		"person": a.Self, "model": a.Model, "reach": a.reach(), "revoked": a.agentRevoked}
+	if msg, ok := a.agentReady(); !ok {
+		out["problem"] = msg
+	}
+	if a.Scheduler != nil {
+		out["status"] = a.Scheduler.Status(a.now())
+	}
+	n := 0
+	if ids, err := a.Store.Threads(r.Context()); err == nil {
+		for _, id := range ids {
+			if tl, err := a.Store.Thread(r.Context(), id); err == nil {
+				if perm.Fold(id, tl.Entries()).ActsFor(a.AgentSelf, a.Self) && a.AgentSelf != a.Self {
+					n++
+				}
+			}
+		}
+	}
+	out["delegated_threads"] = n
+	writeJSON(w, out)
+}
+
+func (a *App) handleAgentRevoke(w http.ResponseWriter, r *http.Request) {
+	if a.AgentSelf == "" {
+		http.Error(w, "no agent", http.StatusBadRequest)
+		return
+	}
+	n, err := agent.RevokeAgent(r.Context(), a.Store, a.DataDir, a.Key, a.Self, a.AgentSelf)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error(), "revoked_in": n})
+		return
+	}
+	a.agentRevoked = true
+	writeJSON(w, map[string]any{"ok": true, "revoked_in": n})
+}
+
+func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		AllowDomains []string `json:"allow_domains"`
+		Brief        *string  `json:"brief"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil {
+		http.Error(w, "bad config", http.StatusBadRequest)
+		return
+	}
+	cfg, _ := agent.LoadConfig(a.DataDir)
+	if in.AllowDomains != nil {
+		clean := []string{}
+		for _, d := range in.AllowDomains {
+			d = strings.ToLower(strings.TrimSpace(d))
+			if d != "" {
+				clean = append(clean, d)
+			}
+		}
+		cfg.AllowDomains = clean
+	}
+	if in.Brief != nil {
+		cfg.Brief = strings.TrimSpace(*in.Brief)
+	}
+	if err := agent.SaveConfig(a.DataDir, cfg); err != nil {
+		http.Error(w, "could not save", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "reach": a.reach()})
+}

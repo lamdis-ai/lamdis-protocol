@@ -57,6 +57,9 @@ func (a *App) savePeers(p map[string]peerRecord) error {
 
 // displayName resolves a principal to something a person would say.
 func (a *App) displayName(principal string) string {
+	if principal != "" && principal == a.AgentSelf {
+		return "your agent"
+	}
 	if principal == a.Self {
 		if raw, err := os.ReadFile(a.namePath()); err == nil && strings.TrimSpace(string(raw)) != "" {
 			return strings.TrimSpace(string(raw))
@@ -139,7 +142,8 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 		"peers":     list,
 		"pending":   pending,
 		"model":     a.Model,
-		"can_ask":   a.Ask != nil,
+		"can_ask":   a.Runner != nil && a.Runner.Model != nil && !a.agentRevoked,
+		"agent":     a.AgentSelf,
 	})
 }
 

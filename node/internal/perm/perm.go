@@ -355,3 +355,10 @@ func (st *State) ActsFor(author, principal string) bool {
 	}
 	return st.delegations[author] == principal
 }
+
+// IsAgent reports whether p is currently a delegated agent key in this
+// thread, i.e. it acts for someone rather than being a person itself.
+func (st *State) IsAgent(p string) bool {
+	_, ok := st.delegations[p]
+	return ok
+}

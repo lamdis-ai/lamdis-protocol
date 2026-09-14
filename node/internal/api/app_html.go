@@ -8,9 +8,10 @@ import "html/template"
 // binary should not need a toolchain to show you anything.
 //
 // The whole thing has to fit in one sentence, because that is how much of a
-// manual anyone reads: write things down with your AI, then share a summary
-// or everything with anyone by link. Everything you write is private. Sharing
-// is one button and two choices. Nothing about keys, lanes, peers, nodes or
+// manual anyone reads: a thread is a workspace shared between you, your
+// agent, and whoever you choose. Everything anyone writes there, the agent
+// included, is the record; you decide who sees which part; the agent keeps
+// working there when you are not. Nothing about keys, lanes, peers, nodes or
 // grants appears on the main path; the protocol is underneath, not in front.
 
 const appCSS = `
@@ -58,6 +59,32 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .ref.dead{color:var(--ink3);cursor:default;border-bottom-style:dashed}
 .tag.ai{background:rgba(125,211,252,.12);color:#7DD3FC}
 .entry.agent .auth{color:#7DD3FC}
+.entry.q .body{color:var(--ink2);font-style:normal;padding-left:.9rem;border-left:2px solid var(--line2)}
+.decision{border:1px solid rgba(125,211,252,.35);border-radius:14px;padding:.9rem 1.05rem;background:rgba(125,211,252,.05)}
+.decision .ask{font-size:.95rem;line-height:1.6;margin-bottom:.7rem}
+.decision .opts{display:flex;flex-wrap:wrap;gap:.45rem;margin-bottom:.6rem}
+.decision .free{display:flex;gap:.5rem}
+.decision .done{font:.78rem/1.5 var(--mono);color:var(--ink3)}
+.run{font:.74rem/1.5 var(--mono);color:var(--ink4);display:flex;gap:.5rem;align-items:baseline}
+.run summary{display:inline;cursor:pointer;color:var(--ink4)}
+.run summary:before{content:""}
+.run details{margin:0;border:none;padding:0;display:inline}
+.run .more{margin:.3rem 0 0 1rem;color:var(--ink3);white-space:pre-wrap}
+.run.bad{color:var(--red)}
+.pill{display:inline-flex;align-items:center;gap:.35rem;border:1px solid var(--line2);border-radius:99px;padding:.3rem .7rem;font-size:.78rem;color:var(--ink2);transition:all .14s}
+.pill:hover{border-color:var(--ink4);color:var(--ink)}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--ink4)}
+.pill.on i{background:#7DD3FC;box-shadow:0 0 8px #7DD3FC}
+.pill.wait i{background:var(--gold);box-shadow:0 0 8px var(--gold)}
+.pip.wait{background:var(--gold-glow);color:var(--gold)}
+.pip.auto{background:rgba(125,211,252,.12);color:#7DD3FC}
+select{background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:.55rem .7rem;color:var(--ink);width:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}}
+.check{display:flex;align-items:center;gap:.5rem;font-size:.86rem;color:var(--ink2);padding:.3rem 0}
+.check input{width:auto}
+.thinking{font:.78rem/1.5 var(--mono);color:#7DD3FC;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
 .me{border-top:1px solid var(--line);padding:.8rem 1.4rem;display:flex;align-items:center;gap:.7rem}
 .me .avatar{width:30px;height:30px;border-radius:50%;background:var(--panel2);border:1px solid var(--line2);display:grid;place-items:center;font-size:.76rem;font-weight:600;color:var(--ink2);flex:none}
 .me b{flex:1;min-width:0;font-size:.88rem;font-weight:560;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -152,68 +179,92 @@ summary:before{content:"▸ ";color:var(--ink4)}details[open] summary:before{con
 
 const appJS = `
 "use strict";
-var cur=null, me=null, entries=[], sheetEl=null, scope="all", titles={};
+var cur=null, me=null, entries=[], sheetEl=null, titles={}, agentInfo=null, busy=false;
 var $=function(i){return document.getElementById(i)};
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function when(ts){var d=new Date(ts);if(isNaN(d))return ts||"";var n=new Date();
   return d.toDateString()===n.toDateString()?d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})
   :d.toLocaleDateString([],{month:"short",day:"numeric"})+" "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
+function ago(ts){if(!ts)return "never";var m=Math.round((Date.now()-new Date(ts))/60000);if(m<1)return "just now";if(m<60)return m+"m ago";var h=Math.round(m/60);if(h<48)return h+"h ago";return Math.round(h/24)+"d ago"}
 function api(p,body){var o=body?{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}:undefined;
   return fetch(p,o).then(function(r){return r.text().then(function(t){var d;try{d=JSON.parse(t)}catch(e){d={error:t||("HTTP "+r.status)}}
     if(!r.ok&&!d.error)d.error="HTTP "+r.status;return d})})}
 function copy(t){if(navigator.clipboard)navigator.clipboard.writeText(t)}
 function initials(n){return (n&&n!=="you")?n.split(/\s+/).map(function(w){return w[0]}).join("").slice(0,2).toUpperCase():"·"}
 function tid(){return encodeURIComponent(cur)}
+function note(t,cls){$("note").textContent=t||"";$("note").className="note"+(cls?" "+cls:"")}
 
 function loadMe(){return api("/app/api/me").then(function(d){me=d;$("me-name").textContent=d.name;$("me-av").textContent=initials(d.name);
-  $("ask").hidden=!d.can_ask;$("note").textContent=d.can_ask?"":"Answers are off until a model key is set. Open settings for how.";$("note").className=d.can_ask?"note":"note warn"})}
+  $("ask").hidden=!d.can_ask;if(!d.can_ask)note("Your agent is off until a model key is set. Open settings for how.","warn")})}
+function loadAgent(){return api("/app/api/agent").then(function(d){agentInfo=d;return d})}
 
 function threads(){return api("/app/api/threads").then(function(d){var el=$("threads");
   if(!d.threads.length){el.innerHTML="";empty();return}
   titles={};d.threads.forEach(function(t){titles[t.title.toLowerCase()]=t.id});
   el.innerHTML=d.threads.map(function(t){var sub=[];if(t.last)sub.push(when(t.last));else sub.push("empty");
-    var pip=t.since_shared?'<span class="pip warn">'+t.since_shared+' new since shared</span>':(t.ever_shared||t.shared?'<span class="pip">shared</span>':'');
-    return '<button class="thread" data-id="'+esc(t.id)+'" aria-current="'+(t.id===cur)+'"><div class="name">'+esc(t.title)+'</div><div class="sub">'+esc(sub.join(" · "))+pip+'</div></button>'}).join("");
+    var pips="";if(t.waiting)pips+='<span class="pip wait">needs you</span>';if(t.auto)pips+='<span class="pip auto">agent on</span>';
+    if(t.since_shared)pips+='<span class="pip warn">'+t.since_shared+' new since shared</span>';else if(t.ever_shared||t.shared)pips+='<span class="pip">shared</span>';
+    return '<button class="thread" data-id="'+esc(t.id)+'" aria-current="'+(t.id===cur)+'"><div class="name">'+esc(t.title)+'</div><div class="sub">'+esc(sub.join(" · "))+pips+'</div></button>'}).join("");
   window._threads=d.threads;
   Array.prototype.forEach.call(el.querySelectorAll(".thread"),function(n){n.onclick=function(){open(n.getAttribute("data-id"))}});
   if(!cur)empty()})}
 
-function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("scope").hidden=true;
-  $("stream").innerHTML='<div class="void"><h2>Write things down with your AI. Share what you choose.</h2>'+
-  '<p>Start a thread for one topic. Everything you and your AI write in it stays private until you share a summary, or all of it, with someone by link.</p>'+
+function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("agentbtn").hidden=true;
+  $("stream").innerHTML='<div class="void"><h2>A thread is a workspace for you, your agent, and whoever you choose.</h2>'+
+  '<p>Write notes. Ask your agent; its answers stay in the thread. Give it standing instructions and it keeps working while you are away. Share a summary, or everything, by link.</p>'+
   '<button class="btn solid" id="e-new">Start a thread</button></div>';$("e-new").onclick=newThread}
 
-function body(t){return esc(t).replace(/\[\[([^\]]{1,120})\]\]/g,function(m,name){var id=titles[name.trim().toLowerCase()];
+function body(t){return esc(t).replace(/\*\*([^*\n]{1,200})\*\*/g,"<b>$1</b>").replace(/\[\[([^\]]{1,120})\]\]/g,function(m,name){var id=titles[name.trim().toLowerCase()];
   return id?'<a class="ref" data-go="'+esc(id)+'">'+esc(name)+'</a>':'<span class="ref dead" title="No thread with this title">'+esc(name)+'</span>'})}
-function render(es){return es.map(function(e){var sum=e.lane==="summary";
-  return '<article class="entry'+(sum?' summary':'')+(e.agent?' agent':'')+'"><div class="meta"><span class="auth">'+esc(e.who)+'</span>'+(e.agent?'<span class="tag ai">'+esc(e.agent)+'</span>':'')+'<span>'+esc(when(e.ts))+'</span>'+
-    (sum?'<span class="tag">what you shared</span>':'')+'</div><div class="body">'+body(e.text)+'</div></article>'}).join("")}
-function wireRefs(){Array.prototype.forEach.call(document.querySelectorAll("[data-go]"),function(a){a.onclick=function(){open(a.getAttribute("data-go"))}})}
+function meta(e,extra){return '<div class="meta"><span class="auth">'+esc(e.who)+'</span>'+(e.agent?'<span class="tag ai">'+esc(e.agent==="agent"?"agent":e.agent)+'</span>':'')+'<span>'+esc(when(e.ts))+'</span>'+(extra||'')+'</div>'}
+function dataOf(e){var d=e.data||{};if(typeof d==="string"){try{d=JSON.parse(d)}catch(x){d={}}}return d}
+function runRow(e){var d=dataOf(e);
+  var more=[];if(d.threads_read&&d.threads_read.length)more.push("read: "+d.threads_read.map(function(id){var t=(window._threads||[]).filter(function(x){return x.id===id})[0];return t?t.title:id}).join(", "));
+  if(d.tool_calls&&d.tool_calls.length)more.push("tools: "+d.tool_calls.join(", "));
+  if(d.fetches&&d.fetches.length)more.push("fetched: "+d.fetches.map(function(f){return f.url+(f.error?" ("+f.error+")":"")}).join("\n         "));
+  if(d.external&&d.external.length)more.push("external: "+d.external.map(function(x){return x.tool+(x.error?" ("+x.error+")":"")}).join(", "));
+  if(d.tokens)more.push("tokens: "+(d.tokens.prompt||0)+" in, "+(d.tokens.completion||0)+" out · "+Math.round((d.duration_ms||0)/1000)+"s · "+esc(d.model||""));
+  if(d.problems&&d.problems.length)more.push("problems: "+d.problems.join("; "));
+  if(d.error)more.push("error: "+d.error);
+  return '<div class="run'+(d.outcome==="error"?' bad':'')+'"><span>'+esc(when(e.ts))+'</span><details><summary>agent ran ('+esc(d.trigger||"")+') · '+esc(e.text)+'</summary><div class="more">'+esc(more.join("\n"))+'</div></details></div>'}
+function decisionCard(e,all){var reply=all.filter(function(x){return x.kind==="agent.decision_reply"&&x.replies_to===e.id})[0];
+  var h='<article class="entry agent">'+meta(e,'<span class="tag">needs your call</span>')+'<div class="decision"><div class="ask">'+body(e.text)+'</div>';
+  if(reply){var r=dataOf(reply);h+='<div class="done">You answered: '+esc((r.choice||"")+(r.text?" "+r.text:""))+'</div>'}
+  else{h+='<div class="opts">'+(e.options||[]).map(function(o){return '<button class="btn sm" data-dec="'+esc(e.id)+'" data-choice="'+esc(o)+'">'+esc(o)+'</button>'}).join("")+'</div>'+
+    '<div class="free"><input placeholder="Or answer in your own words" data-decin="'+esc(e.id)+'"><button class="btn sm solid" data-dec="'+esc(e.id)+'" data-free="1">Reply</button></div>'}
+  return h+'</div></article>'}
+function render(es){return es.map(function(e){
+  if(e.kind==="thread.brief"||e.kind==="agent.decision_reply"||e.lane==="control")return "";
+  if(e.kind==="agent.run")return runRow(e);
+  if(e.kind==="agent.decision")return decisionCard(e,es);
+  var sum=e.lane==="summary",q=e.kind==="chat.question";
+  return '<article class="entry'+(sum?' summary':'')+(e.agent?' agent':'')+(q?' q':'')+'">'+meta(e,(sum?'<span class="tag">what you shared</span>':'')+(q?'<span class="tag">asked</span>':''))+'<div class="body">'+body(e.text)+'</div></article>'}).join("")}
+function wire(){Array.prototype.forEach.call(document.querySelectorAll("[data-go]"),function(a){a.onclick=function(){open(a.getAttribute("data-go"))}});
+  Array.prototype.forEach.call(document.querySelectorAll("[data-dec]"),function(b){b.onclick=function(){var id=b.getAttribute("data-dec"),choice=b.getAttribute("data-choice")||"",text="";
+    if(b.getAttribute("data-free")){var inp=document.querySelector('[data-decin="'+id+'"]');text=inp?inp.value.trim():"";if(!text)return}
+    b.disabled=true;thinking("Your agent is continuing…");api("/app/api/decision",{id:id,choice:choice,text:text}).then(function(d){if(d.error)note(d.error,"bad");open(cur)})}})}
+function thinking(t){var el=document.createElement("div");el.className="thinking";el.id="thinking";el.textContent=t||"Your agent is reading…";$("stream").appendChild(el);$("feed").scrollTop=$("feed").scrollHeight}
 
-function open(id){cur=id;$("share").disabled=false;$("scope").hidden=false;setScope(scope);threads();
-  return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){entries=d.entries;$("title").textContent=d.title||"Untitled";
-    var vis=d.entries.filter(function(e){return e.lane!=="control"});
-    var t=(window._threads||[]).filter(function(x){return x.id===id})[0]||{};
+function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.waiting>0;
+  b.className="pill"+(wait?" wait":(on?" on":""));b.innerHTML="<i></i>"+(wait?"Agent needs you":(on?"Agent on":"Agent"))}
+
+function open(id){cur=id;$("share").disabled=false;threads();
+  return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(d.error){note(d.error,"bad");return}entries=d.entries;$("title").textContent=d.title||"Untitled";
+    var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"});
+    var t=(window._threads||[]).filter(function(x){return x.id===id})[0]||{};agentPill(t);
     var nudge=t.since_shared?'<div class="nudge"><span>'+t.since_shared+(t.since_shared===1?" entry":" entries")+' since you last shared '+esc(when(t.last_shared))+'.</span><button class="btn sm solid" id="nudge-go">Send an update</button></div>':'';
-    $("stream").innerHTML=nudge+(vis.length?render(vis):'<div class="void"><h2>'+esc(d.title)+'</h2><p>Nothing here yet. Write the first thing below, or ask your AI to.</p></div>');
+    $("stream").innerHTML=nudge+(vis.length?render(d.entries):'<div class="void"><h2>'+esc(d.title)+'</h2><p>Nothing here yet. Write the first thing below, or ask your agent something.</p></div>');
     if(t.since_shared)$("nudge-go").onclick=shareSheet;
-    wireRefs();$("feed").scrollTop=$("feed").scrollHeight;$("text").focus()})}
+    wire();$("feed").scrollTop=$("feed").scrollHeight;if(!busy)$("text").focus()})}
 
 function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px"}
 function post(){var t=$("text").value.trim();if(!cur||!t)return;
-  api("/app/api/post",{thread:cur,text:t,lane:"content"}).then(function(d){if(d.error){$("note").textContent=d.error;$("note").className="note bad";return}
-    $("text").value="";grow();$("note").textContent="";open(cur)})}
-function setScope(sc){scope=sc;$("scope").textContent=sc==="all"?"Everything ▾":"This thread ▾"}
-function ask(){var q=$("text").value.trim();if(!q)return;var n=$("note");n.textContent="Reading…";n.className="note";
-  var sc=cur?scope:"all";
-  api("/app/api/ask",{thread:cur||"",question:q,scope:sc}).then(function(d){if(d.error){n.textContent=d.error;n.className="note warn";return}
-    n.textContent="";$("text").value="";grow();var box=document.createElement("div");box.className="reply";
-    var src=sc==="all"?"Read "+d.threads+(d.threads===1?" thread":" threads"):"Read this thread";
-    box.innerHTML='<div class="q">'+esc(q)+'</div><div class="a">'+body(d.answer)+'</div><div class="foot"><span>'+src+' · not saved</span>'+
-      (cur?'<button class="btn sm" data-keep>Keep</button>':'')+'<button class="btn sm" data-x>Dismiss</button></div>';
-    if(!cur){$("stream").innerHTML="";}
-    var k=box.querySelector("[data-keep]");if(k)k.onclick=function(){api("/app/api/post",{thread:cur,text:d.answer,lane:"content"}).then(function(){box.remove();open(cur)})};
-    box.querySelector("[data-x]").onclick=function(){box.remove();if(!cur)empty()};$("stream").appendChild(box);wireRefs();$("feed").scrollTop=$("feed").scrollHeight})}
+  api("/app/api/post",{thread:cur,text:t,lane:"content"}).then(function(d){if(d.error){note(d.error,"bad");return}
+    $("text").value="";grow();note("");open(cur)})}
+function ask(){var q=$("text").value.trim();if(!cur||!q||busy)return;busy=true;note("");
+  $("text").value="";grow();var el=document.createElement("article");el.className="entry q";el.innerHTML='<div class="meta"><span class="auth">'+esc(me?me.name:"you")+'</span><span class="tag">asked</span></div><div class="body">'+esc(q)+'</div>';
+  $("stream").appendChild(el);thinking();
+  api("/app/api/chat",{thread:cur,text:q}).then(function(d){busy=false;if(d.error)note(d.error,"bad");open(cur)}).catch(function(){busy=false;open(cur)})}
 
 function sheet(html){closeSheet();sheetEl=document.createElement("div");sheetEl.className="veil";
   sheetEl.innerHTML='<div class="sheet" role="dialog" aria-modal="true">'+html+'</div>';document.body.appendChild(sheetEl);
@@ -227,12 +278,37 @@ function newThread(){var s=sheet('<header><h2>Start a thread</h2><p>One topic pe
   var go=function(){var t=s.querySelector("#nt").value.trim();if(!t)return;api("/app/api/threads",{title:t}).then(function(d){if(d.error){alert(d.error);return}closeSheet();threads().then(function(){open(d.id)})})};
   s.querySelector("[data-go]").onclick=go;s.querySelector("#nt").onkeydown=function(e){if(e.key==="Enter")go()}}
 
+/* The agent sheet: what it should do here on its own, and what it may reach. */
+function agentSheet(){if(!cur)return;
+  Promise.all([api("/app/api/thread/"+tid()+"/brief"),loadAgent()]).then(function(r){var d=r[0],a=r[1]||{},b=d.brief||{},reach=d.reach||{};var st=a.status||{};
+    var tools=[];(reach.tools||[]).forEach(function(srv){(srv.tools||[]).forEach(function(t){tools.push({id:srv.name+"."+t,confirm:(srv.confirm||[]).indexOf(t)>=0})})});
+    var s=sheet('<header><h2>Your agent in this thread</h2><p>It answers when you ask. Give it standing instructions and it can also act on its own: when something new arrives, or on a schedule. Everything it does is written here for you to read.</p></header><section>'+
+    '<label class="f" for="brief">Standing instructions</label><textarea id="brief" rows="4" placeholder="Example: When the other side posts a price, compare it with our position in [[Q3 payments migration]] and note the gap. Ask me before agreeing to anything.">'+esc(b.text||"")+'</textarea>'+
+    '<div class="grid2"><div><label class="f">Act when a new entry arrives</label><select id="b-on"><option value="off">No</option><option value="others">From other people</option><option value="all">From anyone, including me</option></select></div>'+
+    '<div><label class="f">Also run on a schedule</label><select id="b-every"><option value="">No</option><option value="1h">Every hour</option><option value="6h">Every 6 hours</option><option value="24h">Once a day</option></select></div></div>'+
+    '<label class="f">On its own, it may also use</label>'+
+    '<label class="check"><input type="checkbox" id="b-web"> The web, on these domains: <input id="b-dom" placeholder="*.sec.gov, docs.stripe.com" style="flex:1"></label>'+
+    (reach.allow_domains&&reach.allow_domains.length?'<p class="hint">Always allowed (from settings): '+esc(reach.allow_domains.join(", "))+'</p>':'')+
+    (tools.length?tools.map(function(t){return '<label class="check"><input type="checkbox" data-tool="'+esc(t.id)+'"> '+esc(t.id)+(t.confirm?' <span class="dim">(asks you first)</span>':'')+'</label>'}).join(""):'<p class="hint">No external tools connected. Add MCP servers in <span class="mono">'+esc(reach.config_path||"agent.json")+'</span>.</p>')+
+    '<p class="hint">When you ask it something yourself, it can use everything you have connected and any public page, and every fetch is recorded in the thread.</p>'+
+    '<p class="hint" style="margin-top:.8rem">Last run '+esc(ago(st.last_run))+' · '+esc(String(st.runs_today||0))+' runs today'+(st.last_error?' · <span style="color:var(--red)">'+esc(st.last_error)+'</span>':'')+(a.problem?' · <span style="color:var(--gold)">'+esc(a.problem)+'</span>':'')+'</p>'+
+    '</section><footer><button class="btn" id="b-run">Run now</button><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" id="b-save">Save</button></footer>');
+    s.querySelector("[data-x]").onclick=closeSheet;
+    s.querySelector("#b-on").value=b.on_new_entry||"off";s.querySelector("#b-every").value=b.every||"";s.querySelector("#b-web").checked=!!b.web;s.querySelector("#b-dom").value=(b.allow_domains||[]).join(", ");
+    Array.prototype.forEach.call(s.querySelectorAll("[data-tool]"),function(c){c.checked=(b.tools||[]).indexOf(c.getAttribute("data-tool"))>=0});
+    var read=function(){var doms=s.querySelector("#b-dom").value.split(",").map(function(x){return x.trim()}).filter(Boolean);
+      return {text:s.querySelector("#brief").value,on_new_entry:s.querySelector("#b-on").value,every:s.querySelector("#b-every").value,web:s.querySelector("#b-web").checked,allow_domains:doms,
+        tools:Array.prototype.filter.call(s.querySelectorAll("[data-tool]"),function(c){return c.checked}).map(function(c){return c.getAttribute("data-tool")})}};
+    s.querySelector("#b-save").onclick=function(){api("/app/api/thread/"+tid()+"/brief",read()).then(function(r){if(r.error){alert(r.error);return}closeSheet();open(cur)})};
+    s.querySelector("#b-run").onclick=function(){var btn=s.querySelector("#b-run");btn.disabled=true;btn.textContent="Running…";
+      api("/app/api/thread/"+tid()+"/brief",read()).then(function(){return api("/app/api/thread/"+tid()+"/run")}).then(function(r){closeSheet();if(r.error)note(r.error,"bad");open(cur)})}})}
+
 /* Share: one button, two choices, one link. */
 function shareSheet(){if(!cur)return;var mode="summary";
   api("/app/api/thread/"+tid()+"/access").then(function(d){
     var s=sheet('<header><h2>Share this thread</h2><p>Anyone with the link reads what you have shared, as dated updates. No account needed. Stop sharing any time.</p></header>'+
-    '<section><div class="choices"><button class="choice" data-m="summary" aria-pressed="true"><b>A summary</b><span>Your AI drafts it, you edit it. That is all they see.</span></button>'+
-    '<button class="choice" data-m="read" aria-pressed="false"><b>Everything</b><span>The whole thread as it is.</span></button></div>'+
+    '<section><div class="choices"><button class="choice" data-m="summary" aria-pressed="true"><b>A summary</b><span>Your agent drafts it, you edit it. That is all they see.</span></button>'+
+    '<button class="choice" data-m="read" aria-pressed="false"><b>Everything</b><span>Your notes, your questions, and what your agent wrote.</span></button></div>'+
     '<div id="sum"><label class="f" for="draft">What they will read</label><textarea id="draft" rows="5" placeholder="Drafting…"></textarea><p class="hint" id="drafthint"></p></div>'+
     '<label class="f">Who is it for? <span class="dim">(only you see this)</span></label><input id="label" placeholder="The lender, my accountant, Sam…">'+
     '<div class="linkbox"><input id="link" readonly placeholder="Your link will appear here"><button class="btn solid" id="go">Create link</button></div>'+
@@ -260,24 +336,36 @@ function shareSheet(){if(!cur)return;var mode="summary";
     Array.prototype.forEach.call(s.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="Copied"}});
     Array.prototype.forEach.call(s.querySelectorAll("[data-kill]"),function(b){b.onclick=function(){api("/app/api/share/revoke",{id:b.getAttribute("data-kill")}).then(function(){shareSheet()})}})})}
 
-/* Settings: name, your AI, and everything else folded away. */
+/* Settings: name, your agent, what it may reach, and everything else folded away. */
 function settings(){var m=me||{};var origin=location.origin;
+  loadAgent().then(function(a){a=a||{};var reach=a.reach||{},st=a.status||{};
   var s=sheet('<header><h2>Settings</h2></header><section>'+
   '<label class="f">Your name</label><div style="display:flex;gap:.5rem"><input id="c-name" value="'+esc(m.name==="you"?"":m.name)+'" placeholder="How others will see you"><button class="btn" id="c-save">Save</button></div>'+
+  '<label class="f">Your agent</label>'+
+  (a.problem?'<p class="hint" style="color:var(--gold)">'+esc(a.problem)+'</p>':'<p class="hint">Runs on '+esc(a.model||"")+'. Acting for you in '+esc(String(a.delegated_threads||0))+' thread'+(a.delegated_threads===1?"":"s")+'. Today: '+esc(String(st.runs_today||0))+' runs, '+esc(String(st.fetches_today||0))+' fetches, '+esc(String(st.tokens_today||0))+' tokens.'+(st.last_sync?' Synced with peers '+esc(ago(st.last_sync))+'.':'')+(st.last_sync_error?' <span style="color:var(--red)">Sync: '+esc(st.last_sync_error)+'</span>':'')+'</p>')+
+  '<p class="hint">It has its own key, signed by yours, so anyone reading a thread can tell you from your agent. Anything it writes says so. It can never share or grant access.</p>'+
+  '<label class="f">Domains it may read on its own</label><div style="display:flex;gap:.5rem"><input id="c-dom" value="'+esc((reach.allow_domains||[]).join(", "))+'" placeholder="*.sec.gov, docs.stripe.com"><button class="btn" id="c-domsave">Save</button></div>'+
+  '<p class="hint">When you ask it something yourself it may fetch any public page. On its own it is limited to these plus whatever a thread allows. Private and local addresses are always refused.</p>'+
+  '<label class="f">External tools</label>'+((reach.tools||[]).length?'<div class="list">'+reach.tools.map(function(t){return '<div class="row"><div class="t"><b>'+esc(t.name)+'</b><span>'+esc((t.tools||[]).join(", "))+(t.confirm&&t.confirm.length?' · asks first: '+esc(t.confirm.join(", ")):'')+'</span></div></div>'}).join("")+'</div>':'<p class="hint">None yet.</p>')+
+  '<p class="hint">Connect MCP servers in <span class="mono">'+esc(reach.config_path||"agent.json")+'</span>: <span class="mono">{"tools":[{"name":"gh","command":"gh-mcp","allow":["get_issue"],"confirm":["create_issue"]}]}</span>. Only allowlisted tools are visible to it; confirm tools wait for your yes each time.</p>'+
   '<label class="f">Use with Claude</label><div class="cmd">claude mcp add lamdis -- lamdis mcp<button data-copy="claude mcp add lamdis -- lamdis mcp">copy</button></div>'+
-  '<p class="hint">Run that once. Claude can then read your threads and write into them. Any other AI that speaks MCP works the same way.</p>'+
-  (m.can_ask?'<p class="hint">Answers come from '+esc(m.model)+'.</p>':'<p class="hint">To get answers and drafted summaries, put <span class="mono">LAMDIS_OPENROUTER_KEY=…</span> in the <span class="mono">.env</span> file next to your data and restart. Keys are at openrouter.ai/keys.</p>')+
-  '<details><summary>Advanced: identity, other nodes, direct grants</summary>'+
+  '<p class="hint">Run that once. Claude Code can then read your threads and write into them; its entries are labelled. Any other AI that speaks MCP works the same way.</p>'+
+  (m.can_ask?'':'<p class="hint">To switch your agent on, put <span class="mono">LAMDIS_OPENROUTER_KEY=…</span> in the <span class="mono">.env</span> file next to your data and restart. Keys are at openrouter.ai/keys.</p>')+
+  '<details><summary>Advanced: identity, other nodes, direct grants, revoke the agent</summary>'+
   '<label class="f">Your identity</label><div class="cmd">'+esc(m.principal)+'<button data-copy="'+esc(m.principal)+'">copy</button></div>'+
+  '<label class="f">Your agent’s identity</label><div class="cmd">'+esc(a.principal||"")+'<button data-copy="'+esc(a.principal||"")+'">copy</button></div>'+
   '<label class="f">This node</label><div class="cmd">'+esc(origin)+'<button data-copy="'+esc(origin)+'">copy</button></div>'+
   '<p class="hint">Someone running their own Lamdis can pair with you: <span class="mono">lamdis peer add &lt;name&gt; '+esc(origin)+'</span></p>'+
   '<label class="f">Pair with another node</label><div style="display:grid;grid-template-columns:1fr 2fr auto;gap:.5rem"><input id="p-name" placeholder="Name"><input id="p-url" placeholder="https://their-node"><button class="btn" id="p-add">Pair</button></div><div id="p-status"></div>'+
   '<div class="list" id="peers"></div>'+
   (cur?'<label class="f">Grant a paired person or agent access to this thread</label><div style="display:grid;grid-template-columns:2fr 1fr auto;gap:.5rem"><input id="g-to" placeholder="Paired name or identity"><input id="g-scope" value="summary" placeholder="summary | read | contribute"><button class="btn" id="g-go">Grant</button></div><div id="g-status"></div><div class="list" id="grants"></div>':'')+
+  '<label class="f">Revoke the agent</label><button class="btn danger" id="c-revoke">Revoke its key everywhere</button><p class="hint">Severs it in every thread it acted in and removes its key. Restarting the node mints a fresh one.</p>'+
   '</details></section><footer><span class="spacer"></span><button class="btn" data-x>Done</button></footer>');
   s.querySelector("[data-x]").onclick=closeSheet;
   Array.prototype.forEach.call(s.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="copied"}});
   s.querySelector("#c-save").onclick=function(){api("/app/api/me",{name:s.querySelector("#c-name").value}).then(loadMe)};
+  s.querySelector("#c-domsave").onclick=function(){var b=s.querySelector("#c-domsave");api("/app/api/agent/config",{allow_domains:s.querySelector("#c-dom").value.split(",")}).then(function(r){b.textContent=r.error?"Failed":"Saved"})};
+  var rv=s.querySelector("#c-revoke");rv.onclick=function(){if(rv.getAttribute("data-armed")){api("/app/api/agent/revoke").then(function(r){rv.textContent=r.error?r.error:"Revoked in "+r.revoked_in+" threads";loadMe()})}else{rv.setAttribute("data-armed","1");rv.textContent="Click again to confirm"}};
   function peers(){var l=(me&&me.peers)||[];s.querySelector("#peers").innerHTML=l.map(function(p){return '<div class="row"><div class="t"><b>'+esc(p.name)+'</b><span>'+esc(p.url)+'</span></div></div>'}).join("")}
   peers();
   s.querySelector("#p-add").onclick=function(){var st=s.querySelector("#p-status");st.innerHTML='<div class="status">Reaching their node…</div>';
@@ -287,12 +375,12 @@ function settings(){var m=me||{};var origin=location.origin;
       Array.prototype.forEach.call(s.querySelectorAll("[data-rv]"),function(b){b.onclick=function(){api("/app/api/thread/"+tid()+"/revoke",{principal:b.getAttribute("data-rv")}).then(grants)}})})};
     grants();s.querySelector("#g-go").onclick=function(){var st=s.querySelector("#g-status");
       api("/app/api/thread/"+tid()+"/grant",{to:s.querySelector("#g-to").value,scopes:[s.querySelector("#g-scope").value.trim()||"summary"]}).then(function(r){
-        st.innerHTML='<div class="status '+(r.error?"bad":"ok")+'">'+esc(r.error||("Granted to "+r.name))+'</div>';grants()})}}}
+        st.innerHTML='<div class="status '+(r.error?"bad":"ok")+'">'+esc(r.error||("Granted to "+r.name))+'</div>';grants()})}}})}
 
-$("post").onclick=post;$("ask").onclick=ask;$("scope").onclick=function(){setScope(scope==="all"?"thread":"all")};$("share").onclick=shareSheet;$("new").onclick=newThread;$("gear").onclick=settings;
-$("text").oninput=grow;$("text").onkeydown=function(e){if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();post()}};
+$("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("new").onclick=newThread;$("gear").onclick=settings;
+$("text").oninput=grow;$("text").onkeydown=function(e){if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();post()}if(e.key==="Enter"&&!e.shiftKey&&!e.metaKey&&!e.ctrlKey&&$("text").value.trim().slice(-1)==="?"&&!$("ask").hidden){e.preventDefault();ask()}};
 document.onkeydown=function(e){if(e.key==="Escape")closeSheet()};
-loadMe().then(threads);setInterval(function(){if(!sheetEl){cur?open(cur):threads()}},15000);
+loadMe().then(threads);setInterval(function(){if(!sheetEl&&!busy){cur?open(cur):threads()}},15000);
 `
 
 // appHTML is the owner's view.
@@ -308,12 +396,12 @@ func appHTML(model string, canAsk bool) string {
     <div class="me"><div class="avatar" id="me-av">·</div><b id="me-name">you</b><button class="icon" id="gear" title="Settings">⚙</button></div>
   </aside>
   <main class="main">
-    <header class="head"><h1 id="title">Lamdis</h1><button class="btn solid" id="share" disabled>Share</button></header>
+    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="btn solid" id="share" disabled>Share</button></header>
     <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
     <div class="composer"><div class="box">
       <div class="field">
-        <textarea id="text" rows="1" placeholder="Write something down, or ask a question…"></textarea>
-        <div class="tools"><span class="hint">Private until you share it. [[Thread title]] points at another thread.</span><button class="btn sm" id="scope" hidden>Everything ▾</button><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
+        <textarea id="text" rows="1" placeholder="Write a note, or ask your agent…"></textarea>
+        <div class="tools"><span class="hint">Private until you share it. Enter after a “?” asks; ⌘Enter saves. [[Thread title]] links a thread.</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
       </div>
       <div class="note" id="note"></div>
     </div></div>

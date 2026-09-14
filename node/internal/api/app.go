@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/perm"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/store"
@@ -53,6 +54,13 @@ type App struct {
 	// the same files the CLI reads, so both surfaces agree on who is who.
 	DataDir string
 	Now     func() time.Time
+	// Runner is the built-in agent; Scheduler makes it autonomous. AgentSelf
+	// is the agent's own principal, which acts for Self under a delegation.
+	Runner    *agent.Runner
+	Scheduler *agent.Scheduler
+	AgentSelf string
+
+	agentRevoked bool
 }
 
 func (a *App) now() time.Time {
@@ -81,7 +89,14 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /app/api/threads", a.owner(a.handleThreads))
 	mux.HandleFunc("GET /app/api/thread/{id}", a.owner(a.handleThread))
 	mux.HandleFunc("POST /app/api/post", a.owner(a.handlePost))
-	mux.HandleFunc("POST /app/api/ask", a.owner(a.handleAsk))
+	mux.HandleFunc("POST /app/api/chat", a.owner(a.handleChat))
+	mux.HandleFunc("GET /app/api/thread/{id}/brief", a.owner(a.handleBriefGet))
+	mux.HandleFunc("POST /app/api/thread/{id}/brief", a.owner(a.handleBriefSet))
+	mux.HandleFunc("POST /app/api/thread/{id}/run", a.owner(a.handleRunNow))
+	mux.HandleFunc("POST /app/api/decision", a.owner(a.handleDecision))
+	mux.HandleFunc("GET /app/api/agent", a.owner(a.handleAgent))
+	mux.HandleFunc("POST /app/api/agent/revoke", a.owner(a.handleAgentRevoke))
+	mux.HandleFunc("POST /app/api/agent/config", a.owner(a.handleAgentConfig))
 	mux.HandleFunc("POST /app/api/summarize", a.owner(a.handleSummarize))
 	mux.HandleFunc("POST /app/api/share", a.owner(a.handleShare))
 	mux.HandleFunc("GET /app/api/me", a.owner(a.handleMe))
@@ -161,6 +176,10 @@ type appThread struct {
 	LastShared  string `json:"last_shared,omitempty"`
 	SinceShared int    `json:"since_shared"`
 	EverShared  bool   `json:"ever_shared"`
+	// Auto says the agent works here on its own; Waiting counts questions
+	// the agent has asked and the person has not answered.
+	Auto    bool `json:"auto"`
+	Waiting int  `json:"waiting"`
 }
 
 func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
@@ -180,14 +199,27 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 		st := perm.Fold(id, entries)
 		t := appThread{ID: id, Title: st.Title, Mine: st.Stewards[a.Self], Pending: len(st.PendingRequests())}
 		seen := map[string]bool{}
+		if b, has := agent.LoadBrief(tl, a.Self); has && (b.OnNewEntry != "off" || b.Every != "") {
+			t.Auto = true
+		}
+		answered := map[string]bool{}
 		for _, e := range entries {
-			if e.Lane != protolog.LaneControl {
+			if e.Kind == agent.KindDecisionReply && e.Refs != nil {
+				answered[e.Refs.RepliesTo] = true
+			}
+		}
+		for _, e := range entries {
+			bookkeeping := e.Kind == agent.KindRun || e.Kind == agent.KindBrief
+			if e.Lane != protolog.LaneControl && !bookkeeping {
 				t.Entries++
 				t.Last = e.TS
 			}
+			if e.Kind == agent.KindDecision && !answered[e.ID] {
+				t.Waiting++
+			}
 			if e.Lane == protolog.LaneSummary {
 				t.LastShared, t.EverShared, t.SinceShared = e.TS, true, 0
-			} else if e.Lane == protolog.LaneContent && t.EverShared {
+			} else if e.Lane == protolog.LaneContent && t.EverShared && !bookkeeping {
 				t.SinceShared++
 			}
 			if e.Kind == protolog.KindGrant {
@@ -219,7 +251,13 @@ type appEntry struct {
 	Mine   bool   `json:"mine"`
 	TS     string `json:"ts"`
 	Text   string `json:"text"`
-	Agent  string `json:"agent,omitempty"` // MCP client name when an agent wrote it
+	Agent  string `json:"agent,omitempty"` // "agent" for the built-in one, else the MCP client name
+	// OnBehalf is set when a delegated key wrote this for someone.
+	OnBehalf  string          `json:"on_behalf_of,omitempty"`
+	RepliesTo string          `json:"replies_to,omitempty"`
+	Options   []string        `json:"options,omitempty"`
+	Resolved  bool            `json:"resolved,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
 }
 
 // entriesFor reads a thread through one principal's eyes.
@@ -237,29 +275,60 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 	for _, l := range lanes {
 		allow[l] = true
 	}
+	answered := map[string]bool{}
+	for _, e := range tl.Entries() {
+		if e.Kind == agent.KindDecisionReply && e.Refs != nil {
+			answered[e.Refs.RepliesTo] = true
+		}
+	}
 	out := []appEntry{}
 	for _, e := range tl.Entries() {
 		if !allow[e.Lane] {
 			continue
 		}
 		var b struct {
-			Text  string `json:"text"`
-			Title string `json:"title"`
-			Agent string `json:"agent"`
+			Text    string   `json:"text"`
+			Title   string   `json:"title"`
+			Agent   string   `json:"agent"`
+			Summary string   `json:"summary"`
+			Options []string `json:"options"`
+			Choice  string   `json:"choice"`
 		}
 		json.Unmarshal(e.Body, &b)
 		txt := b.Text
 		if txt == "" {
 			txt = b.Title
 		}
+		if txt == "" && e.Kind == agent.KindRun {
+			txt = b.Summary
+		}
+		if txt == "" && e.Kind == agent.KindDecisionReply {
+			txt = b.Choice
+		}
 		if txt == "" && e.Lane == protolog.LaneControl {
 			txt = "(" + e.Kind + ")"
 		}
-		out = append(out, appEntry{
+		ae := appEntry{
 			ID: e.ID, Lane: string(e.Lane), Kind: e.Kind, Author: e.Author,
-			Who: a.displayName(e.Author), Mine: e.Author == a.Self,
-			TS: e.TS, Text: txt, Agent: b.Agent,
-		})
+			Who: a.displayName(e.Author), Mine: e.Author == a.Self || e.OnBehalfOf == a.Self,
+			TS: e.TS, Text: txt, Agent: b.Agent, OnBehalf: e.OnBehalfOf, Options: b.Options,
+		}
+		if e.OnBehalfOf != "" {
+			ae.Agent = "agent"
+		}
+		if e.Lane == protolog.LaneControl {
+			ae.Agent = "" // a delegation's "agent" field is a principal, not a label
+		}
+		if e.Refs != nil {
+			ae.RepliesTo = e.Refs.RepliesTo
+		}
+		switch e.Kind {
+		case agent.KindDecision:
+			ae.Resolved = answered[e.ID]
+		case agent.KindRun, agent.KindBrief, agent.KindDecisionReply:
+			ae.Data = e.Body
+		}
+		out = append(out, ae)
 	}
 	return st.Title, out, nil
 }
@@ -318,88 +387,6 @@ func (a *App) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"id": e.ID, "lane": string(lane)})
-}
-
-// handleAsk answers from one thread or from every thread the owner has.
-//
-// A thread is the unit of sharing, not the unit of thinking. The edge around
-// a thread exists so a counterparty can be given exactly that much; the owner
-// is on the inside of every edge, and a question like "what did we tell the
-// lender about the roof" should find its answer wherever it lives. So the
-// default scope is everything, each line carries its thread's title, and the
-// model is told to say which thread a fact came from.
-func (a *App) handleAsk(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Thread   string `json:"thread"`
-		Question string `json:"question"`
-		Scope    string `json:"scope"` // "thread" or "all"; all when empty
-	}
-	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in) != nil || strings.TrimSpace(in.Question) == "" {
-		http.Error(w, "a question is required", http.StatusBadRequest)
-		return
-	}
-	if in.Scope == "" || in.Thread == "" {
-		in.Scope = "all"
-	}
-	if a.Ask == nil {
-		// Said plainly, with the fix, because a dead button teaches nobody.
-		writeJSON(w, map[string]any{"error": "No model is configured, so I cannot answer yet. " +
-			"Set LAMDIS_OPENROUTER_KEY (get one at openrouter.ai/keys) and restart the node. " +
-			"Everything else here works without it."})
-		return
-	}
-	ctx := r.Context()
-	ids := []string{in.Thread}
-	if in.Scope == "all" {
-		all, err := a.Store.Threads(ctx)
-		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		ids = all
-	}
-	lanes := []protolog.Lane{protolog.LaneSummary, protolog.LaneContent}
-	var lines []string
-	threads := 0
-	for _, id := range ids {
-		title, entries, err := a.entriesFor(ctx, id, lanes)
-		if err != nil {
-			continue
-		}
-		n := 0
-		for _, e := range entries {
-			if strings.TrimSpace(e.Text) == "" {
-				continue
-			}
-			prefix := ""
-			if in.Scope == "all" {
-				prefix = "[" + title + "] "
-			}
-			lines = append(lines, prefix+e.TS[:10]+" "+e.Who+": "+e.Text)
-			n++
-		}
-		if n > 0 {
-			threads++
-		}
-	}
-	if in.Scope != "all" && threads == 0 && len(ids) == 1 {
-		if _, err := a.Store.Thread(ctx, in.Thread); err != nil {
-			http.Error(w, "no such thread", http.StatusNotFound)
-			return
-		}
-	}
-	q := in.Question
-	if in.Scope == "all" {
-		q = "Entries are prefixed with the thread they come from in square brackets. " +
-			"When you rely on one, name the thread. Question: " + in.Question
-	}
-	answer, err := a.Ask(ctx, q, lines)
-	if err != nil {
-		writeJSON(w, map[string]any{"error": err.Error()})
-		return
-	}
-	writeJSON(w, map[string]any{"answer": answer, "grounded_in": len(lines),
-		"threads": threads, "scope": in.Scope, "model": a.Model})
 }
 
 // --- sharing ------------------------------------------------------------
@@ -592,7 +579,8 @@ func (a *App) handleSummarize(w http.ResponseWriter, r *http.Request) {
 	}
 	lines := make([]string, 0, len(entries))
 	for i, e := range entries {
-		if strings.TrimSpace(e.Text) == "" || e.Lane == string(protolog.LaneSummary) {
+		if strings.TrimSpace(e.Text) == "" || e.Lane == string(protolog.LaneSummary) ||
+			e.Kind == agent.KindRun || e.Kind == agent.KindBrief {
 			continue
 		}
 		if lastIdx >= 0 && i < lastIdx {

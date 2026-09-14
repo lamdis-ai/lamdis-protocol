@@ -165,28 +165,51 @@ func (s *Server) Push(ctx context.Context, principal string, req PushRequest) (*
 	} else if lanes, _ := s.visibleLanes(ctx, req.Thread, principal); len(lanes) == 0 {
 		return nil, fmt.Errorf("thread %s not found", req.Thread)
 	}
+	// Two passes: control first, then the rest against the fold that
+	// includes it. A person may push their own delegation or access request
+	// into a thread they do not steward — that is how a collaborator's agent
+	// becomes verifiable here — but never a grant.
 	st := perm.Fold(req.Thread, tl.Entries())
+	var control, rest []*protolog.Entry
 	for _, e := range ordered {
 		if e.Thread != req.Thread {
 			return nil, fmt.Errorf("entry %s belongs to another thread", e.ID)
 		}
-		if !st.ActsFor(e.Author, principal) {
+		if !st.ActsFor(e.Author, principal) && !(e.Lane == protolog.LaneControl && e.Author == principal) {
 			return nil, fmt.Errorf("entry %s: author is not the authenticated principal", e.ID)
 		}
 		switch e.Lane {
 		case protolog.LaneControl:
-			if !st.Stewards[e.Author] {
+			selfBinding := e.Author == principal && e.OnBehalfOf == "" &&
+				(e.Kind == protolog.KindDelegation || e.Kind == protolog.KindAccessRequest)
+			if !st.Stewards[e.Author] && !selfBinding {
 				return nil, fmt.Errorf("entry %s: control lane requires stewardship", e.ID)
 			}
+			control = append(control, e)
 		case protolog.LaneSummary, protolog.LaneContent:
-			if !st.MayContribute(e.Author, e.Lamport) {
-				return nil, fmt.Errorf("entry %s: author lacks contribute on this thread", e.ID)
-			}
+			rest = append(rest, e)
 		default:
 			return nil, fmt.Errorf("entry %s: unknown lane", e.ID)
 		}
 	}
-	if err := s.Store.AppendEntries(ctx, ordered); err != nil {
+	if len(control) > 0 {
+		if err := s.Store.AppendEntries(ctx, control); err != nil {
+			return nil, err
+		}
+		if tl, err = s.Store.Thread(ctx, req.Thread); err != nil {
+			return nil, err
+		}
+		st = perm.Fold(req.Thread, tl.Entries())
+	}
+	for _, e := range rest {
+		if !st.ActsFor(e.Author, principal) {
+			return nil, fmt.Errorf("entry %s: author is not the authenticated principal", e.ID)
+		}
+		if !st.MayContribute(e.Author, e.Lamport) {
+			return nil, fmt.Errorf("entry %s: author lacks contribute on this thread", e.ID)
+		}
+	}
+	if err := s.Store.AppendEntries(ctx, rest); err != nil {
 		return nil, err
 	}
 	return &PushResponse{Accepted: total}, nil
@@ -420,14 +443,22 @@ func (c *Client) pushBack(ctx context.Context, threadID string, peerHeads []Head
 		if !c.actsAsSelf(key.Author) {
 			continue
 		}
-		// Our control chain travels too when we steward the thread — that's
-		// how grants and revocations reach a hub without it asking.
-		if key.Lane == protolog.LaneControl && !st.Stewards[key.Author] {
+		if seq <= peerSeq[key] {
 			continue
 		}
-		if seq > peerSeq[key] {
-			offer = append(offer, tl.After(key, peerSeq[key])...)
+		// Our control chain travels too when we steward the thread — that's
+		// how grants and revocations reach a hub without it asking. When we
+		// do not, only our own delegations and access requests go, so a peer
+		// can verify our agent's writes.
+		if key.Lane == protolog.LaneControl && !st.Stewards[key.Author] {
+			for _, e := range tl.After(key, peerSeq[key]) {
+				if e.Kind == protolog.KindDelegation || e.Kind == protolog.KindAccessRequest {
+					offer = append(offer, e)
+				}
+			}
+			continue
 		}
+		offer = append(offer, tl.After(key, peerSeq[key])...)
 	}
 	if len(offer) == 0 {
 		return 0, nil
