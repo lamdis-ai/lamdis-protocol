@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -48,7 +49,10 @@ type App struct {
 	Ask func(ctx context.Context, question string, context []string) (string, error)
 	// Model is shown in the interface so nobody has to guess what answered.
 	Model string
-	Now   func() time.Time
+	// DataDir holds peers.json, shares.json and the owner's display name —
+	// the same files the CLI reads, so both surfaces agree on who is who.
+	DataDir string
+	Now     func() time.Time
 }
 
 func (a *App) now() time.Time {
@@ -79,6 +83,15 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/post", a.owner(a.handlePost))
 	mux.HandleFunc("POST /app/api/ask", a.owner(a.handleAsk))
 	mux.HandleFunc("POST /app/api/share", a.owner(a.handleShare))
+	mux.HandleFunc("GET /app/api/me", a.owner(a.handleMe))
+	mux.HandleFunc("POST /app/api/me", a.owner(a.handleSetName))
+	mux.HandleFunc("POST /app/api/threads", a.owner(a.handleCreateThread))
+	mux.HandleFunc("GET /app/api/thread/{id}/access", a.owner(a.handleAccess))
+	mux.HandleFunc("POST /app/api/thread/{id}/grant", a.owner(a.handleGrant))
+	mux.HandleFunc("POST /app/api/thread/{id}/revoke", a.owner(a.handleRevoke))
+	mux.HandleFunc("POST /app/api/thread/{id}/decide", a.owner(a.handleDecide))
+	mux.HandleFunc("POST /app/api/share/revoke", a.owner(a.handleRevokeLink))
+	mux.HandleFunc("POST /app/api/peers", a.owner(a.handleAddPeer))
 	// The shared view. Deliberately a different path with its own auth: a
 	// capability must never be able to reach an owner route by accident.
 	mux.HandleFunc("GET /s/{cap}", a.sharedPage)
@@ -343,6 +356,7 @@ func (a *App) handleAsk(w http.ResponseWriter, r *http.Request) {
 // makes the protocol checkable by somebody else's node would quietly die.
 
 type shareClaim struct {
+	ID     string   `json:"i,omitempty"`
 	Thread string   `json:"t"`
 	Lanes  []string `json:"l"`
 	Exp    int64    `json:"e"`
@@ -385,6 +399,9 @@ func (a *App) readShare(tok string) (shareClaim, bool) {
 	if c.Exp > 0 && a.now().Unix() > c.Exp {
 		return c, false
 	}
+	if c.ID != "" && a.shareRevoked(c.ID) {
+		return c, false
+	}
 	return c, true
 }
 
@@ -393,6 +410,7 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request) {
 		Thread string `json:"thread"`
 		Scope  string `json:"scope"` // "summary" or "read"
 		Days   int    `json:"days"`
+		Label  string `json:"label"` // who it is for, for the owner's own list
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in) != nil || in.Thread == "" {
 		http.Error(w, "thread is required", http.StatusBadRequest)
@@ -406,15 +424,33 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request) {
 	if days <= 0 {
 		days = 30
 	}
-	tok, err := a.mintShare(shareClaim{
-		Thread: in.Thread, Lanes: lanes,
-		Exp: a.now().AddDate(0, 0, days).Unix(),
-	})
+	now := a.now()
+	rec := shareRecord{
+		ID: newShareID(), Thread: in.Thread, Lanes: lanes,
+		Exp: now.AddDate(0, 0, days).Unix(), Created: now.Unix(),
+		Label: strings.TrimSpace(in.Label),
+	}
+	tok, err := a.mintShare(shareClaim{ID: rec.ID, Thread: rec.Thread, Lanes: rec.Lanes, Exp: rec.Exp})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"path": "/s/" + tok, "lanes": lanes, "days": days})
+	// Recorded so "who can see this" can list it and the owner can withdraw
+	// it. If the record cannot be written the link still works until expiry;
+	// say so rather than fail the whole action.
+	shares := append(a.loadShares(), rec)
+	saveErr := a.saveShares(shares)
+	out := map[string]any{"id": rec.ID, "path": "/s/" + tok, "lanes": lanes, "days": days}
+	if saveErr != nil {
+		out["note"] = "the link works but could not be recorded, so it cannot be revoked early"
+	}
+	writeJSON(w, out)
+}
+
+func newShareID() string {
+	var b [9]byte
+	rand.Read(b[:])
+	return base64.RawURLEncoding.EncodeToString(b[:])
 }
 
 func (a *App) sharedPage(w http.ResponseWriter, r *http.Request) {

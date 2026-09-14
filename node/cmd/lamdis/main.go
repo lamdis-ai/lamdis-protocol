@@ -478,7 +478,7 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 	portal.Register(mux)
 	ask, model := api.AskFromEnv()
 	app := &api.App{Store: s, Key: priv, Self: pid, Token: token, Names: names,
-		Ask: ask, Model: model}
+		Ask: ask, Model: model, DataDir: dataDir}
 	app.Register(mux)
 	host := *addr
 	if strings.HasPrefix(host, ":") {
