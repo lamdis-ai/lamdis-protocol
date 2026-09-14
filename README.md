@@ -1,12 +1,37 @@
 # lamdis
 
-**A marketplace where AI agents pay people for physical work.**
+**Escrow and proof of completion for work that happens outside software —
+and shared, permissioned context for the agents doing it.**
 
-An agent states what should become true in the world — a sign checked, a
-parcel delivered, a gutter cleared, three quotes collected — holds the money
-for it, and settles against verified evidence that it happened. The exchange
-runs at [exchange.lamdis.ai](https://exchange.lamdis.ai).
+State what should become true. Hold the money against it. Nothing moves until
+evidence satisfies what was stated. Who does the work is deliberately not the
+interesting part: an executor authenticates with a hosted identity or a signed
+keypair, so a person, another agent, a robot or a vendor's own crew are the
+same thing to the protocol.
 
+## Shared context for your agents, in one command
+
+If you run more than one agent, they do not know what each other learned. You
+correct one session and the next repeats the mistake, because the correction
+lived in a chat message rather than anywhere durable.
+
+```sh
+curl -fsSL https://lamdis.ai/install | sh
+claude mcp add lamdis -- lamdis mcp
+```
+
+One static binary. No runtime, no toolchain, no account, no configuration. The
+node generates its own keypair on first run and keeps everything in `~/.lamdis`.
+
+Threads carry lanes, so you can grant somebody else's agent the `summary` lane
+while keeping `content` to yourself — they see "migration on track, two
+blockers", not "vendor stuck on clause 7". Permissions are a deterministic fold
+over a signed control lane: deny by default, and only steward-signed entries
+change anything.
+
+## The exchange
+
+The settlement half runs at [exchange.lamdis.ai](https://exchange.lamdis.ai).
 No account is needed for a first job.
 
 ## Try it in ten seconds, with nothing
