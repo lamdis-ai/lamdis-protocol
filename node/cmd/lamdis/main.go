@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -117,6 +118,13 @@ func run(args []string) error {
 	if len(rest) == 0 {
 		return usage()
 	}
+	// Secrets live beside the data they belong to, not in the shell.
+	//
+	// Asking somebody to export an environment variable before every run is
+	// how a one-command install becomes a four-command install, and how a key
+	// ends up in shell history. A real environment variable still wins, so
+	// containers and CI are unaffected.
+	loadDotEnv(*dataDir)
 	ctx := context.Background()
 	cmd, rest := rest[0], rest[1:]
 
@@ -1074,4 +1082,40 @@ func cmdShare(ctx context.Context, dataDir string, s store.Store, threadRef, pee
 	}
 	fmt.Printf("✓ %s now hosts the thread (%d entries seeded) — keep `lamdis sync -watch` running and grants decide who can pull it there\n", peer, n)
 	return nil
+}
+
+// loadDotEnv reads KEY=VALUE lines from <dataDir>/.env into the process
+// environment, without overriding anything already set.
+//
+// Deliberately small: no interpolation, no export keyword, no multi-line
+// values. A configuration format that can surprise you is the wrong thing to
+// put a credential in.
+func loadDotEnv(dataDir string) {
+	f, err := os.Open(filepath.Join(dataDir, ".env"))
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		// Quotes are stripped because every example on the internet has them.
+		if len(val) >= 2 && (val[0] == '"' && val[len(val)-1] == '"' ||
+			val[0] == '\'' && val[len(val)-1] == '\'') {
+			val = val[1 : len(val)-1]
+		}
+		if key == "" || os.Getenv(key) != "" {
+			continue
+		}
+		os.Setenv(key, val)
+	}
 }
