@@ -130,6 +130,7 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/agent/config", a.owner(a.handleAgentConfig))
 	mux.HandleFunc("POST /app/api/thread/{id}/delete", a.owner(a.handleDeleteThread))
 	mux.HandleFunc("GET /app/api/models", a.owner(a.handleModels))
+	mux.HandleFunc("GET /app/api/thread/{id}/links", a.owner(a.handleLinks))
 	mux.HandleFunc("POST /app/api/summarize", a.owner(a.handleSummarize))
 	mux.HandleFunc("POST /app/api/share", a.owner(a.handleShare))
 	mux.HandleFunc("GET /app/api/me", a.owner(a.handleMe))

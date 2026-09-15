@@ -64,12 +64,12 @@ func hostedAppHTML(cfg SignIn) string {
     <div class="who"><b id="who-email"></b><button id="signout">Sign out</button></div>
   </aside>
   <main class="main">
-    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
+    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="pill" id="linksbtn" hidden>Connected</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
     <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
     <div class="composer"><div class="box">
       <div class="field">
         <textarea id="text" rows="1" placeholder="Write a note, or ask your agent…"></textarea>
-        <div class="tools"><span class="hint">Private until you share it. Enter after a “?” asks; ⌘Enter saves. [[Thread title]] links a thread.</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
+        <div class="tools"><span class="hint">Enter asks · Shift+Enter for a new line · ⌘Enter saves it as a note</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
       </div>
       <div class="note" id="note"></div>
     </div></div>

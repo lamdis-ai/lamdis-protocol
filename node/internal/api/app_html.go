@@ -75,6 +75,8 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .pill:hover{border-color:var(--ink4);color:var(--ink)}
 .pill i{width:7px;height:7px;border-radius:50%;background:var(--ink4)}
 .pill.on i{background:#7DD3FC;box-shadow:0 0 8px #7DD3FC}
+.pill.off{border-style:dashed;color:var(--ink3)}
+.pill.off:hover{border-style:solid;color:var(--ink);border-color:var(--gold)}
 .pill.wait i{background:var(--gold);box-shadow:0 0 8px var(--gold)}
 .pip.wait{background:var(--gold-glow);color:var(--gold)}
 .pip.auto{background:rgba(125,211,252,.12);color:#7DD3FC}
@@ -219,7 +221,7 @@ function threads(){return api("/app/api/threads").then(function(d){var el=$("thr
   if(!cur&&d.threads.length){open(d.threads[0].id);return}
   if(!cur)empty()})}
 
-function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("agentbtn").hidden=true;$("more").hidden=true;
+function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("agentbtn").hidden=true;$("linksbtn").hidden=true;$("more").hidden=true;
   $("stream").innerHTML='<div class="void"><h2>A thread is a workspace for you, your agent, and whoever you choose.</h2>'+
   '<p>Write notes. Ask your agent; its answers stay in the thread. Give it standing instructions and it keeps working while you are away. Share a summary, or everything, by link.</p>'+
   '<button class="btn solid" id="e-new">Start a thread</button></div>';$("e-new").onclick=newThread}
@@ -256,14 +258,23 @@ function wire(){Array.prototype.forEach.call(document.querySelectorAll("[data-go
 function thinking(t){var el=document.createElement("div");el.className="thinking";el.id="thinking";el.textContent=t||"Your agent is reading…";$("stream").appendChild(el);$("feed").scrollTop=$("feed").scrollHeight}
 
 function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.waiting>0;
-  b.className="pill"+(wait?" wait":(on?" on":""));b.innerHTML="<i></i>"+(wait?"Agent needs you":(on?"Agent on":"Agent"))}
+  b.className="pill"+(wait?" wait":(on?" on":" off"));
+  b.title=on?"What your agent does here on its own":"Your agent only answers when asked. Click to let it work on its own.";
+  b.innerHTML="<i></i>"+(wait?"Agent needs you":(on?"Agent on":"Agent off"))}
 
 function open(id){cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(d.error){note(d.error,"bad");return}entries=d.entries;$("title").textContent=d.title||"Untitled";
     var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"});
     var t=(window._threads||[]).filter(function(x){return x.id===id})[0]||{};agentPill(t);$("more").hidden=!t.mine;
+    api("/app/api/thread/"+encodeURIComponent(id)+"/links").then(function(l){
+      if(cur!==id)return;
+      var b=$("linksbtn");b.hidden=!l.total;
+      if(l.total){b.textContent=l.total+(l.total===1?" connection":" connections");window._links=l}});
     var nudge=t.since_shared?'<div class="nudge"><span>'+t.since_shared+(t.since_shared===1?" entry":" entries")+' since you last shared '+esc(when(t.last_shared))+'.</span><button class="btn sm solid" id="nudge-go">Send an update</button></div>':'';
-    $("stream").innerHTML=nudge+(vis.length?render(d.entries):'<div class="void"><h2>'+esc(d.title)+'</h2><p>Nothing here yet. Write the first thing below, or ask your agent something.</p></div>');
+    $("stream").innerHTML=nudge+(vis.length?render(d.entries):'<div class="void"><h2>'+esc(d.title)+'</h2>'+
+      '<p>Write the first thing below, or ask your agent something. It answers from whatever is in here.</p>'+
+      '<button class="btn" id="void-agent">Or let it work while you are away</button></div>');
+    if(!vis.length&&$("void-agent"))$("void-agent").onclick=agentSheet;
     if(t.since_shared)$("nudge-go").onclick=shareSheet;
     wire();$("feed").scrollTop=$("feed").scrollHeight;if(!busy)$("text").focus()})}
 
@@ -292,7 +303,7 @@ function newThread(){var s=sheet('<header><h2>Start a thread</h2><p>One topic pe
 function agentSheet(){if(!cur)return;
   Promise.all([api("/app/api/thread/"+tid()+"/brief"),loadAgent()]).then(function(r){var d=r[0],a=r[1]||{},b=d.brief||{},reach=d.reach||{};var st=a.status||{};
     var tools=[];(reach.tools||[]).forEach(function(srv){(srv.tools||[]).forEach(function(t){tools.push({id:srv.name+"."+t,confirm:(srv.confirm||[]).indexOf(t)>=0})})});
-    var s=sheet('<header><h2>Your agent in this thread</h2><p>It answers when you ask. Give it standing instructions and it can also act on its own: when something new arrives, or on a schedule. Everything it does is written here for you to read.</p></header><section>'+
+    var s=sheet('<header><h2>What your agent does here</h2><p>Out of the box it only answers when you ask. Everything below is how it works without you: reacting when something arrives, and stopping to think at hours you choose. Everything it does gets written into this thread for you to read.</p></header><section>'+
     '<label class="f" for="brief">Standing instructions</label><textarea id="brief" rows="4" placeholder="Example: When the other side posts a price, compare it with our position in [[Q3 payments migration]] and note the gap. Ask me before agreeing to anything.">'+esc(b.text||"")+'</textarea>'+
     '<div class="grid2"><div><label class="f">Act when a new entry arrives</label><select id="b-on"><option value="off">No</option><option value="others">From other people</option><option value="all">From anyone, including me</option></select></div>'+
     '<div><label class="f">Also run on a schedule</label><select id="b-every"><option value="">No</option><option value="1h">Every hour</option><option value="6h">Every 6 hours</option><option value="24h">Once a day</option></select></div></div>'+
@@ -334,6 +345,17 @@ function agentSheet(){if(!cur)return;
     s.querySelector("#b-save").onclick=function(){api("/app/api/thread/"+tid()+"/brief",read()).then(function(r){if(r.error){alert(r.error);return}closeSheet();open(cur)})};
     s.querySelector("#b-run").onclick=function(){var btn=s.querySelector("#b-run");btn.disabled=true;btn.textContent="Running…";
       api("/app/api/thread/"+tid()+"/brief",read()).then(function(){return api("/app/api/thread/"+tid()+"/run")}).then(function(r){closeSheet();if(r.error)note(r.error,"bad");open(cur)})}})}
+
+/* What this thread is tied to, and how it got tied. */
+function linksSheet(){var l=window._links;if(!l)return;
+  var row=function(x){return '<div class="row"><div class="t"><b>'+esc(x.title)+'</b><span>'+esc(x.why)+(x.count>1?" · "+x.count+" times":"")+'</span></div><button class="btn sm" data-go="'+esc(x.id)+'">Open</button></div>'};
+  var block=function(title,items){return items.length?'<label class="f">'+title+'</label><div class="list">'+items.map(row).join("")+'</div>':''};
+  var s=sheet('<header><h2>'+esc(l.title)+'</h2><p>What this thread is tied to. Links come from writing [[a thread title]] in a note, and from your agent actually opening another thread to answer something here.</p></header>'+
+  '<section>'+block("This thread points at",l.out)+block("Pointed at by",l.in)+block("Your agent read, working here",l.read)+
+  (l.total?'':'<p class="hint">Nothing yet. Write [[a thread title]] in a note to tie two together.</p>')+
+  '</section><footer><span class="spacer"></span><button class="btn" data-x>Done</button></footer>');
+  s.querySelector("[data-x]").onclick=closeSheet;
+  Array.prototype.forEach.call(s.querySelectorAll("[data-go]"),function(b){b.onclick=function(){closeSheet();open(b.getAttribute("data-go"))}})}
 
 /* Delete: only a steward can, and only from this node. */
 function moreSheet(){if(!cur)return;var t=(window._threads||[]).filter(function(x){return x.id===cur})[0]||{};
@@ -432,8 +454,17 @@ function settings(){var m=me||{};var origin=location.origin;
       api("/app/api/thread/"+tid()+"/grant",{to:s.querySelector("#g-to").value,scopes:[s.querySelector("#g-scope").value.trim()||"summary"]}).then(function(r){
         st.innerHTML='<div class="status '+(r.error?"bad":"ok")+'">'+esc(r.error||("Granted to "+r.name))+'</div>';grants()})}}})}
 
-$("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("more").onclick=moreSheet;$("new").onclick=newThread;$("gear").onclick=settings;
-$("text").oninput=grow;$("text").onkeydown=function(e){if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();post()}if(e.key==="Enter"&&!e.shiftKey&&!e.metaKey&&!e.ctrlKey&&$("text").value.trim().slice(-1)==="?"&&!$("ask").hidden){e.preventDefault();ask()}};
+$("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("linksbtn").onclick=linksSheet;$("more").onclick=moreSheet;$("new").onclick=newThread;$("gear").onclick=settings;
+$("text").oninput=grow;
+/* Enter sends, Shift+Enter is a new line, and Command or Control Enter
+   keeps it as a note instead of asking. What every chat box does. */
+$("text").onkeydown=function(e){
+  if(e.key!=="Enter"||e.isComposing)return;
+  if(e.shiftKey)return;
+  e.preventDefault();
+  if(e.metaKey||e.ctrlKey){post();return}
+  if(!$("ask").hidden)ask(); else post();
+};
 document.onkeydown=function(e){if(e.key==="Escape")closeSheet()};
 loadMe().then(threads);loadModels().then(function(){if(cur)open(cur)});setInterval(function(){if(!sheetEl&&!busy){cur?open(cur):threads()}},15000);
 `
@@ -451,12 +482,12 @@ func appHTML(model string, canAsk bool) string {
     <div class="me"><div class="avatar" id="me-av">·</div><b id="me-name">you</b><button class="icon" id="gear" title="Settings">⚙</button></div>
   </aside>
   <main class="main">
-    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
+    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="pill" id="linksbtn" hidden>Connected</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
     <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
     <div class="composer"><div class="box">
       <div class="field">
         <textarea id="text" rows="1" placeholder="Write a note, or ask your agent…"></textarea>
-        <div class="tools"><span class="hint">Private until you share it. Enter after a “?” asks; ⌘Enter saves. [[Thread title]] links a thread.</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
+        <div class="tools"><span class="hint">Enter asks · Shift+Enter for a new line · ⌘Enter saves it as a note</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
       </div>
       <div class="note" id="note"></div>
     </div></div>
