@@ -37,8 +37,38 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 ::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:99px;border:3px solid transparent;background-clip:content-box}
 .mono{font-family:var(--mono)}.dim{color:var(--ink4)}.muted{color:var(--ink3)}.small{font-size:.82rem}
 
-.shell{display:grid;grid-template-columns:300px minmax(0,1fr);height:100vh}
-@media(max-width:860px){.shell{grid-template-columns:1fr}.rail{display:none}}
+.shell{display:grid;grid-template-columns:300px minmax(0,1fr);height:100vh;height:100dvh}
+.menu{display:none}
+.scrim{display:none}
+@media(max-width:860px){
+  .shell{grid-template-columns:1fr}
+  /* The rail slides over rather than vanishing: hiding it took the thread
+     list, settings and sign-in with it. */
+  .rail{position:fixed;inset:0 auto 0 0;width:min(84vw,320px);z-index:40;
+        transform:translateX(-100%);transition:transform .22s cubic-bezier(.2,.8,.3,1);
+        box-shadow:0 0 60px rgba(0,0,0,.7)}
+  .shell.open .rail{transform:none}
+  .scrim{display:block;position:fixed;inset:0;z-index:35;background:rgba(4,5,7,.6);
+         opacity:0;pointer-events:none;transition:opacity .22s}
+  .shell.open .scrim{opacity:1;pointer-events:auto}
+  .menu{display:inline-grid;place-items:center;width:34px;height:34px;flex:none;
+        border:1px solid var(--line2);border-radius:9px;color:var(--ink2)}
+  .menu:hover{color:var(--ink)}
+  .head{padding:.8rem 1rem;gap:.5rem}
+  .head h1{font-size:.98rem}
+  .feed{padding:1.2rem 1rem .5rem}
+  .composer{padding:.7rem 1rem calc(.8rem + env(safe-area-inset-bottom))}
+  .tools .hint{display:none}
+  .tools{padding:.35rem .5rem .5rem .9rem}
+  .entry .body{font-size:.94rem}
+  .sheet{width:100%;max-height:92dvh;border-radius:18px 18px 0 0}
+  .veil{padding:0;place-items:end center}
+  .sheet header{padding:1.1rem 1.15rem .4rem}
+  .sheet section{padding:.4rem 1.15rem 1rem}
+  .sheet footer{padding:.8rem 1.15rem calc(1rem + env(safe-area-inset-bottom))}
+  .choices{grid-template-columns:1fr}
+  .void{margin:8vh auto}
+}
 .rail{background:var(--bg2);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .mark{display:flex;align-items:center;gap:.6rem;padding:1.3rem 1.4rem 1rem;font-size:1.02rem;font-weight:640;letter-spacing:-.012em}
 .glyph{width:22px;height:22px;border-radius:7px;flex:none;background:linear-gradient(145deg,var(--gold),#C2820E);box-shadow:0 0 0 1px rgba(255,192,67,.25),0 4px 14px -4px rgba(255,192,67,.5)}
@@ -149,7 +179,7 @@ select{background:var(--bg);border:1px solid var(--line2);border-radius:10px;pad
 .void h2{font-size:1.25rem;font-weight:640;letter-spacing:-.02em;margin-bottom:.5rem}
 .void p{color:var(--ink3);font-size:.95rem;line-height:1.65;margin-bottom:1.2rem}
 
-.veil{position:fixed;inset:0;background:rgba(4,5,7,.72);backdrop-filter:blur(6px);display:grid;place-items:center;padding:1.5rem;z-index:40;animation:fade .18s both}
+.veil{position:fixed;inset:0;background:rgba(4,5,7,.72);backdrop-filter:blur(6px);display:grid;place-items:center;padding:1.5rem;z-index:50;animation:fade .18s both}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 .sheet{width:min(640px,100%);max-height:88vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:20px;box-shadow:0 40px 90px -30px rgba(0,0,0,.9);animation:pop .22s cubic-bezier(.2,.8,.3,1) both}
 @keyframes pop{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
@@ -273,7 +303,7 @@ function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.
   b.title=on?"What your agent does here on its own":"Your agent only answers when asked. Click to let it work on its own.";
   b.innerHTML="<i></i>"+(wait?"Agent needs you":(on?"Agent on":"Agent off"))}
 
-function open(id){cur=id;$("share").disabled=false;threads();
+function open(id){cur=id;$("share").disabled=false;drawer(false);threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(d.error){note(d.error,"bad");return}entries=d.entries;$("title").textContent=d.title||"Untitled";
     var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"});
     var t=(window._threads||[]).filter(function(x){return x.id===id})[0]||{};agentPill(t);$("more").hidden=!t.mine;
@@ -547,6 +577,9 @@ function settings(){var m=me||{};var origin=location.origin;
       api("/app/api/thread/"+tid()+"/grant",{to:s.querySelector("#g-to").value,scopes:[s.querySelector("#g-scope").value.trim()||"summary"]}).then(function(r){
         st.innerHTML='<div class="status '+(r.error?"bad":"ok")+'">'+esc(r.error||("Granted to "+r.name))+'</div>';grants()})}}})}
 
+function drawer(open){var sh=document.getElementById("shell");if(sh)sh.classList.toggle("open",open!==false?open:false)}
+if($("menu"))$("menu").onclick=function(){var sh=document.getElementById("shell");sh.classList.toggle("open")};
+if($("scrim"))$("scrim").onclick=function(){drawer(false)};
 $("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("linksbtn").onclick=linksSheet;$("more").onclick=moreSheet;$("new").onclick=newThread;$("gear").onclick=settings;
 $("text").oninput=grow;
 /* Enter sends, Shift+Enter is a new line, and Command or Control Enter
@@ -567,7 +600,8 @@ func appHTML(model string, canAsk bool) string {
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="dark">
 <title>Lamdis</title><style>` + appCSS + `</style></head><body>
-<div class="shell">
+<div class="shell" id="shell">
+  <div class="scrim" id="scrim"></div>
   <aside class="rail">
     <div class="mark"><svg class="cube" style="width:22px;height:24px;color:var(--gold);flex:none" viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg> Lamdis</div>
     <button class="newbtn" id="new">+ New thread</button>
@@ -575,7 +609,7 @@ func appHTML(model string, canAsk bool) string {
     <div class="me"><div class="avatar" id="me-av">·</div><b id="me-name">you</b><button class="icon" id="gear" title="Settings">⚙</button></div>
   </aside>
   <main class="main">
-    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="pill" id="linksbtn" hidden>Connected</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
+    <header class="head"><button class="menu" id="menu" aria-label="Threads">☰</button><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="pill" id="linksbtn" hidden>Connected</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
     <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
     <div class="composer"><div class="box">
       <div class="field">

@@ -18,6 +18,7 @@ const hostCSS = `
 [hidden]{display:none!important}
 .gate{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);padding:1.5rem}
 .gate .box{max-width:23rem;text-align:center;animation:rise .4s both}
+@media(max-width:520px){.gate{padding:1.1rem}.gate h1{font-size:1.25rem}}
 .gate .glyphwrap{display:flex;justify-content:center;margin-bottom:1.4rem}
 .gate h1{font-size:1.45rem;font-weight:660;letter-spacing:-.025em;margin-bottom:.5rem}
 .gate p{color:var(--ink3);font-size:.95rem;line-height:1.6;margin-bottom:1.5rem}
@@ -56,6 +57,7 @@ func hostedAppHTML(cfg SignIn) string {
 <div class="booting" id="booting">opening your record…</div>
 
 <div class="shell" id="shell" hidden>
+  <div class="scrim" id="scrim"></div>
   <aside class="rail">
     <div class="mark">` + hostMark + ` Lamdis</div>
     <button class="newbtn" id="new">+ New thread</button>
@@ -64,7 +66,7 @@ func hostedAppHTML(cfg SignIn) string {
     <div class="who"><b id="who-email"></b><button id="signout">Sign out</button></div>
   </aside>
   <main class="main">
-    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="pill" id="linksbtn" hidden>Connected</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
+    <header class="head"><button class="menu" id="menu" aria-label="Threads">☰</button><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="pill" id="linksbtn" hidden>Connected</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
     <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
     <div class="composer"><div class="box">
       <div class="field">
@@ -81,6 +83,7 @@ func hostedAppHTML(cfg SignIn) string {
 var CFG = ` + string(c) + `;
 var KEY = "lamdis.session";
 var sess = null;
+var retriedStart = false;
 
 function saveSession(s){ sess = s; try{ localStorage.setItem(KEY, JSON.stringify(s)) }catch(e){} }
 function loadSession(){ try{ return JSON.parse(localStorage.getItem(KEY) || "null") }catch(e){ return null } }
@@ -160,7 +163,16 @@ window.fetch = function(p, o){
     opts.headers = h;
     return rawFetch(p, opts);
   };
-  if(!sess || sess.guest) return send();
+  // A visitor token the server no longer recognises should start a new
+  // node rather than leave somebody staring at a broken page. It happens
+  // if the host is restored from a backup, or its signing key is rotated.
+  if(!sess || sess.guest){
+    return send().then(function(r){
+      if(r.status !== 401 || retriedStart) return r;
+      retriedStart = true;
+      return startAsGuest().then(function(){ return send() }, function(){ return r });
+    });
+  }
   return fresh().then(send, send).then(function(r){
     if(r.status !== 401) return r;
     return refresh().then(send, function(){ return r });
@@ -178,6 +190,7 @@ function show(what){
 // Starting is the whole point: no question is asked before the first one
 // the person wants to ask.
 function startAsGuest(){
+  try{ localStorage.removeItem("lamdis.guest") }catch(e){}
   return rawFetch("/app/api/start", {method:"POST"}).then(function(r){ return r.json() }).then(function(d){
     if(d.error) throw new Error(d.error);
     try{ localStorage.setItem("lamdis.guest", d.token) }catch(e){}
