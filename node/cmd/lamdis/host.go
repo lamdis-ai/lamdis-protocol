@@ -56,6 +56,7 @@ func cmdHost(ctx context.Context, args []string) error {
 			Redirect: envOr("LAMDIS_SIGNIN_REDIRECT", "http://localhost"+*addr+"/app"),
 		},
 		MaxAccounts: *maxAccounts,
+		PublicBase:  strings.TrimSuffix(envOr("LAMDIS_SIGNIN_REDIRECT", ""), "/app"),
 		Guests:      *guests,
 		// Somebody spending a credential they did not supply gets a short
 		// menu of cheap models and a small daily allowance. Bring your own

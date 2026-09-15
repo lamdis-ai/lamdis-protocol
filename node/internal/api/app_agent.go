@@ -124,8 +124,8 @@ func (a *App) reach() map[string]any {
 		"budget":           map[string]any{"runs": cfg.MaxRunsPerDay, "tokens": cfg.MaxTokensPerDay, "fetches": cfg.MaxFetchesPerDay},
 		"max_runs_per_day": cfg.MaxRunsPerDay, "max_fetches_per_day": cfg.MaxFetchesPerDay,
 		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json",
-		"auto_web": cfg.AutoWeb,
-		"model":    modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
+		"auto_web": cfg.AutoWeb, "may_hold_secrets": a.mayHoldSecrets(),
+		"model": modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
 		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != "", "has_url_key": cfg.ModelURLKey != ""}
 }
 
@@ -348,6 +348,10 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.Model = want
 	}
 	if in.OpenRouterKey != nil && strings.TrimSpace(*in.OpenRouterKey) != "" {
+		if !a.mayHoldSecrets() {
+			writeJSON(w, map[string]any{"error": "Add your email first. This node will not keep a key for an account nobody can recover."})
+			return
+		}
 		cfg.OpenRouterKey = strings.TrimSpace(*in.OpenRouterKey)
 	}
 	if in.ModelURL != nil {
@@ -363,6 +367,10 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.ModelURL = u
 	}
 	if in.ModelURLKey != nil && strings.TrimSpace(*in.ModelURLKey) != "" {
+		if !a.mayHoldSecrets() {
+			writeJSON(w, map[string]any{"error": "Add your email first before storing a credential."})
+			return
+		}
 		cfg.ModelURLKey = strings.TrimSpace(*in.ModelURLKey)
 	}
 	if err := agent.SaveConfig(a.DataDir, cfg); err != nil {

@@ -433,7 +433,7 @@ function settings(){var m=me||{};var origin=location.origin;
   '<select id="c-autoweb"><option value="listed">Only the sites I list below</option><option value="any">Any public page, same as when I ask</option><option value="off">None at all unless I ask</option></select>'+
   '<div id="c-domwrap" style="display:flex;gap:.5rem;margin-top:.5rem"><input id="c-dom" value="'+esc((reach.allow_domains||[]).join(", "))+'" placeholder="*.sec.gov, docs.stripe.com"><button class="btn" id="c-domsave">Save</button></div>'+
   '<p class="hint">When you ask it something yourself it may always fetch any public page, and every fetch is written into the thread. This is only about what it does while you are away. Private and local addresses are refused either way, and a thread can narrow this further but never widen it.</p>'+
-  '<label class="f">Connections</label><p class="hint" style="margin-top:0">Anything that speaks MCP: your issue tracker, your calendar, your own service. Paste the address and a token, see what it offers, and tick what your agent may use.</p>'+
+  '<label class="f">Connections</label><p class="hint" style="margin-top:0">Anything that speaks MCP: your issue tracker, your calendar, your own service. Paste the address, then press Sign in and approve it in the window. Services that hand out plain tokens take one in the field instead. Press Test to see what a server offers, and tick what your agent may use.</p>'+
   '<div id="conns"></div>'+
   '<button class="btn" id="conn-add" style="margin-top:.6rem">+ Add a connection</button>'+
   '<label class="f">Use with Claude</label><div class="cmd">claude mcp add lamdis -- lamdis mcp<button data-copy="claude mcp add lamdis -- lamdis mcp">copy</button></div>'+
@@ -459,11 +459,15 @@ function settings(){var m=me||{};var origin=location.origin;
       return '<button class="pick'+(ask?' ask':'')+'" aria-pressed="'+(on?"true":"false")+'" data-tool="'+esc(t)+'" data-i="'+i+'">'+esc(t)+(ask?' · asks first':'')+'</button>'}).join("");
     return '<div class="conn" data-conn="'+i+'">'+
       '<div class="top"><b>'+esc(c.name||"New connection")+'</b>'+
+      (c.signed_in?'<span class="pip">signed in</span>':'')+
+      '<button class="btn sm" data-signin="'+i+'">'+(c.signed_in?"Sign in again":"Sign in")+'</button>'+
       '<button class="btn sm" data-test="'+i+'">Test</button>'+
       '<button class="btn sm danger" data-del="'+i+'">Remove</button></div>'+
       (c._new?'<input placeholder="A short name, like github" value="'+esc(c.name||"")+'" data-f="name" data-i="'+i+'" style="margin-top:.5rem">':'')+
       '<input placeholder="https://mcp.example.com/mcp" value="'+esc(c.url||"")+'" data-f="url" data-i="'+i+'" style="margin-top:.4rem">'+
-      '<input type="password" placeholder="'+(c.has_auth?"a token is saved; type to replace it":"Token, if it needs one")+'" data-f="auth" data-i="'+i+'" style="margin-top:.4rem">'+
+      (canHold
+        ? '<input type="password" placeholder="'+(c.has_auth?"a credential is saved; type to replace it":"Or paste a token, if the service uses one")+'" data-f="auth" data-i="'+i+'" style="margin-top:.4rem">'
+        : '<p class="hint" style="margin-top:.4rem">Add your email to this account before storing a credential here. Servers that need nothing still work.</p>')+
       (c.command?'<div class="addr">runs locally: '+esc(c.command)+'</div>':'')+
       '<div class="picks">'+picks+'</div>'+
       '<div class="probe" data-probe="'+i+'"></div></div>';
@@ -473,6 +477,7 @@ function settings(){var m=me||{};var origin=location.origin;
     el.innerHTML=conns.length?conns.map(connRow).join(""):'<p class="hint">Nothing connected yet.</p>';
     Array.prototype.forEach.call(el.querySelectorAll("[data-f]"),function(n){n.oninput=function(){conns[+n.getAttribute("data-i")][n.getAttribute("data-f")]=n.value}});
     Array.prototype.forEach.call(el.querySelectorAll("[data-test]"),function(b){b.onclick=function(){testConn(+b.getAttribute("data-test"))}});
+    Array.prototype.forEach.call(el.querySelectorAll("[data-signin]"),function(b){b.onclick=function(){signInConn(+b.getAttribute("data-signin"))}});
     Array.prototype.forEach.call(el.querySelectorAll("[data-del]"),function(b){b.onclick=function(){var i=+b.getAttribute("data-del");
       var c=conns[i];conns.splice(i,1);drawConns();if(c.name&&!c._new)api("/app/api/tools/remove",{name:c.name})}});
     Array.prototype.forEach.call(el.querySelectorAll("[data-tool]"),function(b){b.onclick=function(){
@@ -485,6 +490,25 @@ function settings(){var m=me||{};var origin=location.origin;
       else {c.allow.splice(c.allow.indexOf(t),1);c.confirm.splice(c.confirm.indexOf(t),1)}
       drawConns();saveConn(i)}});
   }
+  // Sign in the way the protocol actually specifies: ask the server who
+  // guards it, introduce ourselves, and let the person approve in a window.
+  // Nobody types a secret.
+  function signInConn(i){
+    var c=conns[i],p=s.querySelector('[data-probe="'+i+'"]');
+    if(!c.name||!c.url){p.className="probe bad";p.textContent="Give it a name and an address first.";return}
+    p.className="probe";p.textContent="Asking the server how it wants to be signed in to…";
+    saveConn(i);
+    api("/app/api/tools/auth/start",{name:c.name,url:c.url}).then(function(r){
+      if(r.error){p.className="probe bad";p.textContent=r.error;return}
+      p.textContent="Approve it in the window that just opened.";
+      var win=window.open(r.authorize,"lamdis-connect","width=520,height=680");
+      if(!win){p.className="probe bad";p.textContent="Your browser blocked the window. Allow pop-ups for this site and try again.";return}
+      var done=function(e){ if(e.origin!==location.origin||!e.data||e.data.lamdis!=="tools-auth")return;
+        window.removeEventListener("message",done);
+        api("/app/api/tools").then(function(d){conns=(d.servers||[]).map(function(x){x._tools=x.allow;return x});drawConns();
+          var q=s.querySelector('[data-probe="'+i+'"]');if(q){q.className="probe ok";q.textContent="Connected. Press Test to see what it offers."}})};
+      window.addEventListener("message",done)})}
+
   function testConn(i){
     var c=conns[i],p=s.querySelector('[data-probe="'+i+'"]');
     p.className="probe";p.textContent="Connecting…";
@@ -498,7 +522,9 @@ function settings(){var m=me||{};var origin=location.origin;
     api("/app/api/tools",{name:c.name,url:c.url,auth:c.auth||"",header:c.header||"",allow:c.allow||[],confirm:c.confirm||[]}).then(function(r){
       if(r.error){var p=s.querySelector('[data-probe="'+i+'"]');p.className="probe bad";p.textContent=r.error;return}
       c._new=false;c.auth="";c.has_auth=true})}
-  api("/app/api/tools").then(function(d){conns=(d.servers||[]).map(function(x){x._tools=x.allow;return x});drawConns()});
+  var canHold=true;
+  api("/app/api/tools").then(function(d){canHold=d.may_hold_secrets!==false;
+    conns=(d.servers||[]).map(function(x){x._tools=x.allow;return x});drawConns()});
   s.querySelector("#conn-add").onclick=function(){conns.push({_new:true,name:"",url:"",allow:[],confirm:[]});drawConns()};
 
   var sel=s.querySelector("#c-model"),cust=s.querySelector("#c-model-custom");sel.onchange=function(){cust.hidden=sel.value!=="__custom";if(!cust.hidden)cust.focus()};

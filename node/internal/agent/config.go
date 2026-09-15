@@ -62,11 +62,18 @@ type ToolServer struct {
 	Auth string `json:"auth,omitempty"`
 	// Header names a header other than Authorization, for services that
 	// want their own (e.g. X-Api-Key).
-	Header   string   `json:"header,omitempty"`
-	Allow    []string `json:"allow"`
-	Confirm  []string `json:"confirm,omitempty"`
-	Disabled bool     `json:"disabled,omitempty"`
+	Header string `json:"header,omitempty"`
+	// OAuth is what the server told us about signing in, and whatever it
+	// has granted. Present means nobody has to type a secret.
+	OAuth    *OAuthConfig `json:"oauth,omitempty"`
+	Allow    []string     `json:"allow"`
+	Confirm  []string     `json:"confirm,omitempty"`
+	Disabled bool         `json:"disabled,omitempty"`
 }
+
+// Credentialed reports whether this server has something to authenticate
+// with, by either route.
+func (t ToolServer) Credentialed() bool { return t.Auth != "" || t.OAuth.Connected() }
 
 // Reachable reports whether this server can be used at all here.
 func (t ToolServer) Reachable(allowCommands bool) bool {

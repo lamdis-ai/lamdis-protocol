@@ -41,6 +41,9 @@ type Host struct {
 	Cognito *Cognito
 	// Model is the default model id for new accounts.
 	Model string
+	// PublicBase is the address people reach this host at, used to build
+	// the one place an authorization server is allowed to send them back.
+	PublicBase string
 	// SharedKey is a model credential every account falls back to when it
 	// has none of its own. Cap it: everyone on this host spends it.
 	SharedKey string
@@ -239,6 +242,13 @@ func (h *Host) load(id, email string) (*Account, error) {
 		Runner: runner, Scheduler: sched, AgentSelf: agentPID,
 		SharePrefix: "/s/" + id,
 		NoCommands:  true,
+		// An account with an email behind it may keep credentials; one that
+		// is only a token in somebody's browser may not.
+		PublicBase: h.PublicBase,
+		Identified: func() bool {
+			_, err := os.Stat(filepath.Join(dir, "subject"))
+			return err == nil
+		},
 		// Identity was established at the front door.
 		Auth: func(r *http.Request) bool { return true },
 	}

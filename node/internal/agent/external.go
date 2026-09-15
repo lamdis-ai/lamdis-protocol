@@ -113,6 +113,16 @@ func transportFor(ctx context.Context, srv ToolServer, allowCommands bool) (sdk.
 			return nil, fmt.Errorf("a hosted agent cannot reach an address on your own machine")
 		}
 		t := &sdk.StreamableClientTransport{Endpoint: srv.URL}
+		// A connection made through the browser renews itself; a pasted
+		// token is used as it is.
+		if srv.OAuth.Connected() {
+			if err := srv.OAuth.EnsureFresh(ctx); err != nil {
+				return nil, err
+			}
+			t.HTTPClient = &http.Client{Timeout: 60 * time.Second,
+				Transport: headerRoundTripper{name: "Authorization", value: "Bearer " + srv.OAuth.Access}}
+			return t, nil
+		}
 		if srv.Auth != "" {
 			name := srv.Header
 			if name == "" {

@@ -15,10 +15,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"html/template"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
@@ -32,6 +34,7 @@ type serverOut struct {
 	Confirm  []string `json:"confirm"`
 	Disabled bool     `json:"disabled"`
 	HasAuth  bool     `json:"has_auth"`
+	SignedIn bool     `json:"signed_in"`
 	Header   string   `json:"header,omitempty"`
 }
 
@@ -41,10 +44,11 @@ func (a *App) handleToolsGet(w http.ResponseWriter, r *http.Request) {
 	for _, t := range cfg.Tools {
 		out = append(out, serverOut{Name: t.Name, URL: t.URL, Command: t.Command,
 			Allow: nonNil(t.Allow), Confirm: nonNil(t.Confirm), Disabled: t.Disabled,
-			HasAuth: t.Auth != "", Header: t.Header})
+			HasAuth: t.Credentialed(), Header: t.Header, SignedIn: t.OAuth.Connected()})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	writeJSON(w, map[string]any{"servers": out, "allow_commands": !a.NoCommands})
+	writeJSON(w, map[string]any{"servers": out, "allow_commands": !a.NoCommands,
+		"may_hold_secrets": a.mayHoldSecrets()})
 }
 
 func nonNil(s []string) []string {
@@ -85,15 +89,25 @@ func (a *App) server(in toolIn, existing *agent.ToolServer) (agent.ToolServer, e
 		return s, errText("this node connects to tools by address only. Run Lamdis on your own machine to use a local command.")
 	}
 	if s.URL != "" {
-		if !strings.HasPrefix(s.URL, "https://") && !strings.HasPrefix(s.URL, "http://localhost") && !strings.HasPrefix(s.URL, "http://127.0.0.1") {
+		local := strings.HasPrefix(s.URL, "http://localhost") || strings.HasPrefix(s.URL, "http://127.0.0.1")
+		if local && a.NoCommands {
+			return s, errText("this node cannot reach an address on its own machine; give it one on the internet")
+		}
+		if !strings.HasPrefix(s.URL, "https://") && !local {
 			return s, errText("the address must start with https://")
 		}
 	}
 	switch {
 	case strings.TrimSpace(in.Auth) != "":
+		if !a.mayHoldSecrets() {
+			return s, errText("Add your email first. A credential stored against a browser tab is one nobody could revoke if that tab were lost, so this node will not keep one until there is an account behind it.")
+		}
 		s.Auth = strings.TrimSpace(in.Auth)
 	case existing != nil:
 		s.Auth = existing.Auth
+	}
+	if existing != nil {
+		s.OAuth = existing.OAuth
 	}
 	return s, nil
 }
@@ -205,4 +219,159 @@ func (a *App) handleToolsRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// --- signing in to a server, rather than pasting its secret -------------
+//
+// The browser does the approving, this only carries the paperwork: discover
+// how the server wants to be asked, introduce ourselves, send the person
+// over, and keep what comes back. The person never sees a token.
+
+type pendingAuth struct {
+	account  string
+	name     string
+	verifier string
+	at       time.Time
+}
+
+var authWaiting sync.Map // state -> pendingAuth
+
+// redirectURI is where the authorization server sends people back. It has
+// to match what we registered, so it is derived the same way every time.
+func (a *App) redirectURI(r *http.Request) string {
+	if a.PublicBase != "" {
+		return strings.TrimRight(a.PublicBase, "/") + "/app/api/tools/auth/done"
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host + "/app/api/tools/auth/done"
+}
+
+// handleToolsAuthStart discovers how a server wants to be signed in to and
+// returns the address to send the person to.
+func (a *App) handleToolsAuthStart(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil || strings.TrimSpace(in.Name) == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if !a.mayHoldSecrets() {
+		writeJSON(w, map[string]any{"error": "Add your email first. Signing in to a service leaves a credential here, and this node will not keep one for an account nobody can recover."})
+		return
+	}
+	cfg, _ := agent.LoadConfig(a.DataDir)
+	idx := -1
+	for i := range cfg.Tools {
+		if cfg.Tools[i].Name == strings.TrimSpace(in.Name) {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		writeJSON(w, map[string]any{"error": "save the connection first"})
+		return
+	}
+	url := cfg.Tools[idx].URL
+	if strings.TrimSpace(in.URL) != "" {
+		url = strings.TrimSpace(in.URL)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	oc, err := agent.DiscoverOAuth(ctx, url, !a.NoCommands)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	if oc == nil {
+		writeJSON(w, map[string]any{"none": true,
+			"error": "That server did not ask anyone to sign in. Either it needs nothing, or it wants a token pasted in the field above."})
+		return
+	}
+	redirect := a.redirectURI(r)
+	if err := oc.Register(ctx, redirect, "Lamdis"); err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	verifier := agent.Verifier()
+	state := agent.Verifier()[:32]
+	authWaiting.Store(state, pendingAuth{account: a.DataDir, name: cfg.Tools[idx].Name, verifier: verifier, at: time.Now()})
+	cfg.Tools[idx].OAuth = oc
+	if err := agent.SaveConfig(a.DataDir, cfg); err != nil {
+		http.Error(w, "could not save", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"authorize": oc.Authorize(redirect, verifier, state), "issuer": oc.Issuer})
+}
+
+// handleToolsAuthDone is where the browser comes back.
+func (a *App) handleToolsAuthDone(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	fail := func(msg string) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(authClosePage(false, msg)))
+	}
+	if e := q.Get("error"); e != "" {
+		fail(firstNonEmpty(q.Get("error_description"), e))
+		return
+	}
+	code, state := q.Get("code"), q.Get("state")
+	v, ok := authWaiting.Load(state)
+	if !ok || code == "" {
+		fail("That sign-in has expired. Try connecting again.")
+		return
+	}
+	authWaiting.Delete(state)
+	p := v.(pendingAuth)
+	if time.Since(p.at) > 15*time.Minute {
+		fail("That sign-in took too long. Try again.")
+		return
+	}
+	cfg, _ := agent.LoadConfig(p.account)
+	idx := -1
+	for i := range cfg.Tools {
+		if cfg.Tools[i].Name == p.name {
+			idx = i
+		}
+	}
+	if idx < 0 || cfg.Tools[idx].OAuth == nil {
+		fail("That connection is no longer here.")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	if err := cfg.Tools[idx].OAuth.ExchangeCode(ctx, code, p.verifier, a.redirectURI(r)); err != nil {
+		fail(err.Error())
+		return
+	}
+	if err := agent.SaveConfig(p.account, cfg); err != nil {
+		fail("could not save the connection")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(authClosePage(true, cfg.Tools[idx].Name)))
+}
+
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
+}
+
+// authClosePage is the last thing the person sees before the window shuts.
+func authClosePage(ok bool, detail string) string {
+	title, body := "Connected", template.HTMLEscapeString(detail)+" is connected. You can close this window."
+	if !ok {
+		title, body = "Not connected", template.HTMLEscapeString(detail)
+	}
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>` + title + `</title><style>` + appCSS + `</style></head>
+<body><div class="notice"><h1>` + title + `</h1><p>` + body + `</p></div>
+<script>try{ if(window.opener){ window.opener.postMessage({lamdis:"tools-auth"}, location.origin); setTimeout(function(){window.close()}, 1200) } }catch(e){}</script>
+</body></html>`
 }

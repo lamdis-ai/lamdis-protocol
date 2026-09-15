@@ -74,6 +74,16 @@ type App struct {
 	// NoCommands refuses tool servers that run a local command. A hosted
 	// node sets it: running a stranger's command is not a connection.
 	NoCommands bool
+	// Identified reports whether this account has an identity behind it.
+	// Somebody who has not said who they are may use the place, but may not
+	// leave a credential on it: a secret stored against a browser token
+	// nobody can recover is a secret nobody can revoke. Nil means yes,
+	// which is right when the node is the person's own machine.
+	Identified func() bool
+	// PublicBase is the address people reach this node at, when it is not
+	// the one in the request. A sign-in has to come back to exactly what
+	// was registered, so it cannot be guessed per request.
+	PublicBase string
 
 	agentRevoked bool
 }
@@ -97,6 +107,12 @@ func (a *App) now() time.Time {
 }
 
 // sharePrefix is where this node's share links live.
+// mayHoldSecrets reports whether this node will store a credential for
+// whoever is asking.
+func (a *App) mayHoldSecrets() bool {
+	return a.Identified == nil || a.Identified()
+}
+
 func (a *App) sharePrefix() string {
 	if a.SharePrefix != "" {
 		return strings.TrimRight(a.SharePrefix, "/")
@@ -138,6 +154,11 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/tools", a.owner(a.handleToolsSet))
 	mux.HandleFunc("POST /app/api/tools/probe", a.owner(a.handleToolsProbe))
 	mux.HandleFunc("POST /app/api/tools/remove", a.owner(a.handleToolsRemove))
+	mux.HandleFunc("POST /app/api/tools/auth/start", a.owner(a.handleToolsAuthStart))
+	// The way back from an authorization server carries its own one-time
+	// state, so it is not behind the owner check: the browser arriving here
+	// is coming from somebody else's site.
+	mux.HandleFunc("GET /app/api/tools/auth/done", a.handleToolsAuthDone)
 	mux.HandleFunc("POST /app/api/summarize", a.owner(a.handleSummarize))
 	mux.HandleFunc("POST /app/api/share", a.owner(a.handleShare))
 	mux.HandleFunc("GET /app/api/me", a.owner(a.handleMe))
