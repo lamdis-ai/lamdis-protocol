@@ -11,9 +11,14 @@ import (
 // how much it may do in a day. Edited by hand or from Settings.
 type Config struct {
 	// AllowDomains are hosts the agent may fetch on its own (globs such as
-	// "*.sec.gov"). Empty means autonomous runs have no web at all. A person
-	// chatting can ask it to fetch any public page; that fetch is recorded.
+	// "*.sec.gov").
 	AllowDomains []string `json:"allow_domains"`
+	// AutoWeb says how far the agent may reach when nobody asked it to:
+	// "listed" (only AllowDomains, the default), "any" (any public page,
+	// same as when you ask it yourself), or "off" (no web unless asked).
+	// Asking it something yourself is always "any": the reach it has on its
+	// own is the only part that needs a policy.
+	AutoWeb string `json:"auto_web,omitempty"`
 	// Tools are external MCP servers. Only the tools listed under allow are
 	// shown to the model; tools listed under confirm need the person's yes
 	// each time, which the agent asks for as a decision.
@@ -41,14 +46,37 @@ type Config struct {
 }
 
 // ToolServer is one external MCP server the agent may call.
+//
+// A server is reached either by running a command on this machine or by
+// calling a URL. The first is only sensible where the person owns the
+// machine; a hosted node refuses it, because "run this command" from a
+// stranger is not a connection, it is a shell.
 type ToolServer struct {
 	Name    string   `json:"name"`
 	Command string   `json:"command,omitempty"`
 	Args    []string `json:"args,omitempty"`
 	Env     []string `json:"env,omitempty"`
 	URL     string   `json:"url,omitempty"`
-	Allow   []string `json:"allow"`
-	Confirm []string `json:"confirm,omitempty"`
+	// Auth is the credential this server needs, sent as a bearer token on
+	// every call. It is never returned by the interface, only replaced.
+	Auth string `json:"auth,omitempty"`
+	// Header names a header other than Authorization, for services that
+	// want their own (e.g. X-Api-Key).
+	Header   string   `json:"header,omitempty"`
+	Allow    []string `json:"allow"`
+	Confirm  []string `json:"confirm,omitempty"`
+	Disabled bool     `json:"disabled,omitempty"`
+}
+
+// Reachable reports whether this server can be used at all here.
+func (t ToolServer) Reachable(allowCommands bool) bool {
+	if t.Disabled {
+		return false
+	}
+	if t.URL != "" {
+		return true
+	}
+	return t.Command != "" && allowCommands
 }
 
 func configPath(dataDir string) string { return filepath.Join(dataDir, "agent.json") }
@@ -82,6 +110,11 @@ func LoadConfig(dataDir string) (Config, error) {
 	}
 	if c.AllowDomains == nil {
 		c.AllowDomains = []string{}
+	}
+	switch c.AutoWeb {
+	case "listed", "any", "off":
+	default:
+		c.AutoWeb = "listed"
 	}
 	if c.Tools == nil {
 		c.Tools = []ToolServer{}

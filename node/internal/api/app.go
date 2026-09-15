@@ -71,6 +71,9 @@ type App struct {
 	// Off by default: exposing the node so peers can sync must not also
 	// put your own threads on the network behind a single bearer token.
 	ExposeApp bool
+	// NoCommands refuses tool servers that run a local command. A hosted
+	// node sets it: running a stranger's command is not a connection.
+	NoCommands bool
 
 	agentRevoked bool
 }
@@ -131,6 +134,10 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/thread/{id}/delete", a.owner(a.handleDeleteThread))
 	mux.HandleFunc("GET /app/api/models", a.owner(a.handleModels))
 	mux.HandleFunc("GET /app/api/thread/{id}/links", a.owner(a.handleLinks))
+	mux.HandleFunc("GET /app/api/tools", a.owner(a.handleToolsGet))
+	mux.HandleFunc("POST /app/api/tools", a.owner(a.handleToolsSet))
+	mux.HandleFunc("POST /app/api/tools/probe", a.owner(a.handleToolsProbe))
+	mux.HandleFunc("POST /app/api/tools/remove", a.owner(a.handleToolsRemove))
 	mux.HandleFunc("POST /app/api/summarize", a.owner(a.handleSummarize))
 	mux.HandleFunc("POST /app/api/share", a.owner(a.handleShare))
 	mux.HandleFunc("GET /app/api/me", a.owner(a.handleMe))

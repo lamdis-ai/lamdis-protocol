@@ -165,3 +165,33 @@ func TestCeilingStopsMintingAndFailsClosed(t *testing.T) {
 		t.Fatalf("a disabled key still counted: $%.2f", committed)
 	}
 }
+
+// Somebody spending a credential they did not supply gets a short menu.
+// The interface is not the enforcement point: a request that never touched
+// a form still lands in ModelFor.
+func TestSomeoneElsesKeyBuysAShortMenu(t *testing.T) {
+	dir := t.TempDir()
+	r := &Runner{DataDir: dir, Model: &OpenRouter{Key: "host-key", Model: "openai/gpt-5.6-luna"},
+		AllowedModels: []string{"openai/gpt-5.6-luna", "openai/gpt-5.6-mini"}}
+
+	// An expensive model asked for on the host's key falls back.
+	_, name := r.ModelFor(Config{Model: "anthropic/claude-opus-5"})
+	if name != "openai/gpt-5.6-luna" {
+		t.Fatalf("a visitor spent the host's key on %s", name)
+	}
+	if r.MayChoose(Config{Model: "anthropic/claude-opus-5"}, "anthropic/claude-opus-5") {
+		t.Fatal("the interface would have offered it")
+	}
+	// One on the menu is honoured.
+	if _, name = r.ModelFor(Config{Model: "openai/gpt-5.6-mini"}); name != "openai/gpt-5.6-mini" {
+		t.Fatalf("an allowed model was overridden: %s", name)
+	}
+	// Bringing your own key lifts the restriction entirely.
+	own := Config{Model: "anthropic/claude-opus-5", OpenRouterKey: "sk-or-mine"}
+	if _, name = r.ModelFor(own); name != "anthropic/claude-opus-5" {
+		t.Fatalf("somebody's own key was still restricted: %s", name)
+	}
+	if !r.MayChoose(own, "anthropic/claude-opus-5") || len(r.Choices(own)) != 0 {
+		t.Fatal("their own key should carry no menu")
+	}
+}

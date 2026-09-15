@@ -44,6 +44,13 @@ type Host struct {
 	// SharedKey is a model credential every account falls back to when it
 	// has none of its own. Cap it: everyone on this host spends it.
 	SharedKey string
+	// AllowedModels is the menu offered to somebody spending SharedKey.
+	AllowedModels []string
+	// Per-account daily limits, applied when an account is created. They
+	// bound what one visitor can spend of a credential that is not theirs.
+	AccountRunsPerDay    int
+	AccountTokensPerDay  int
+	AccountFetchesPerDay int
 	// SignIn tells the page where to send people to prove who they are.
 	SignIn SignIn
 	// Starter mints a capped key for each new account while the ceiling
@@ -220,9 +227,10 @@ func (h *Host) load(id, email string) (*Account, error) {
 	}
 	state := agent.LoadState(dir)
 	runner := &agent.Runner{Store: st, PersonKey: key, Person: self, AgentKey: agentKey, Agent: agentPID,
-		Model: h.sharedModel(), ModelName: h.Model, DataDir: dir, State: state,
-		Names: func(p string) string { return "" },
-		Logf:  func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
+		Model: h.sharedModel(), ModelName: h.Model, DataDir: dir, State: state, NoCommands: true,
+		AllowedModels: h.AllowedModels,
+		Names:         func(p string) string { return "" },
+		Logf:          func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched := &agent.Scheduler{Runner: runner, State: state,
 		Logf: func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched.Sync = func(ctx context.Context) error { return hostSync(ctx, dir, st, key, self, agentPID) }
@@ -230,6 +238,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	app := &App{Store: st, Key: key, Self: self, DataDir: dir, Model: h.Model,
 		Runner: runner, Scheduler: sched, AgentSelf: agentPID,
 		SharePrefix: "/s/" + id,
+		NoCommands:  true,
 		// Identity was established at the front door.
 		Auth: func(r *http.Request) bool { return true },
 	}
@@ -259,12 +268,33 @@ func (h *Host) load(id, email string) (*Account, error) {
 	h.mu.Unlock()
 
 	if fresh {
+		h.budget(dir)
 		h.welcome(acct)
 	}
 	if h.ctx != nil {
 		go sched.Start(h.ctx)
 	}
 	return acct, nil
+}
+
+// budget writes the limits a new account lives within. They are in the
+// account's own config so the agent enforces them exactly as it does on
+// somebody's laptop, and the interface never offers to raise them.
+func (h *Host) budget(dir string) {
+	cfg, _ := agent.LoadConfig(dir)
+	if h.AccountRunsPerDay > 0 {
+		cfg.MaxRunsPerDay = h.AccountRunsPerDay
+	}
+	if h.AccountTokensPerDay > 0 {
+		cfg.MaxTokensPerDay = h.AccountTokensPerDay
+	}
+	if h.AccountFetchesPerDay > 0 {
+		cfg.MaxFetchesPerDay = h.AccountFetchesPerDay
+	}
+	if cfg.Model == "" {
+		cfg.Model = h.Model
+	}
+	agent.SaveConfig(dir, cfg)
 }
 
 // welcome opens an empty thread and, while the ceiling allows, gives the

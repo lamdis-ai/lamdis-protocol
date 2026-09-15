@@ -118,10 +118,14 @@ func (a *App) reach() map[string]any {
 		tools = append(tools, toolOut{Name: t.Name, Tools: t.Allow, Confirm: t.Confirm})
 	}
 	_, modelName := a.Runner.ModelFor(cfg)
+	choices := a.Runner.Choices(cfg)
 	return map[string]any{"allow_domains": cfg.AllowDomains, "tools": tools,
+		"model_choices": choices, "own_key": cfg.OpenRouterKey != "" || cfg.ModelURLKey != "",
+		"budget":           map[string]any{"runs": cfg.MaxRunsPerDay, "tokens": cfg.MaxTokensPerDay, "fetches": cfg.MaxFetchesPerDay},
 		"max_runs_per_day": cfg.MaxRunsPerDay, "max_fetches_per_day": cfg.MaxFetchesPerDay,
 		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json",
-		"model": modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
+		"auto_web": cfg.AutoWeb,
+		"model":    modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
 		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != "", "has_url_key": cfg.ModelURLKey != ""}
 }
 
@@ -301,6 +305,7 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		AllowDomains  []string `json:"allow_domains"`
 		Brief         *string  `json:"brief"`
+		AutoWeb       *string  `json:"auto_web"`
 		Model         *string  `json:"model"`
 		OpenRouterKey *string  `json:"openrouter_key"`
 		ModelURL      *string  `json:"model_url"`
@@ -324,8 +329,23 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	if in.Brief != nil {
 		cfg.Brief = strings.TrimSpace(*in.Brief)
 	}
+	if in.AutoWeb != nil {
+		switch v := strings.TrimSpace(*in.AutoWeb); v {
+		case "listed", "any", "off":
+			cfg.AutoWeb = v
+		default:
+			http.Error(w, "that is not one of the choices", http.StatusBadRequest)
+			return
+		}
+	}
 	if in.Model != nil {
-		cfg.Model = strings.TrimSpace(*in.Model)
+		want := strings.TrimSpace(*in.Model)
+		if want != "" && a.Runner != nil && !a.Runner.MayChoose(cfg, want) {
+			writeJSON(w, map[string]any{"error": "This node pays for the thinking, so the choice of model is limited. " +
+				"Add an OpenRouter key of your own above and every model is yours."})
+			return
+		}
+		cfg.Model = want
 	}
 	if in.OpenRouterKey != nil && strings.TrimSpace(*in.OpenRouterKey) != "" {
 		cfg.OpenRouterKey = strings.TrimSpace(*in.OpenRouterKey)
@@ -401,6 +421,16 @@ var modelCache struct {
 var modelVendors = []string{"openai/", "anthropic/", "google/", "moonshotai/", "deepseek/", "x-ai/", "qwen/", "meta-llama/", "mistralai/", "z-ai/", "minimax/"}
 
 func (a *App) handleModels(w http.ResponseWriter, r *http.Request) {
+	// A node that pays for the thinking offers a short menu, and says why.
+	if a.Runner != nil {
+		cfg, _ := agent.LoadConfig(a.DataDir)
+		if choices := a.Runner.Choices(cfg); len(choices) > 0 {
+			writeJSON(w, map[string]any{"models": pricedSubset(choices), "default": choices[0],
+				"limited": true,
+				"note":    "This node pays for the thinking, so the choice is limited. Add your own OpenRouter key and every model is yours."})
+			return
+		}
+	}
 	modelCache.Lock()
 	defer modelCache.Unlock()
 	if time.Since(modelCache.at) < time.Hour && modelCache.body != nil {
@@ -470,4 +500,21 @@ func (a *App) handleModels(w http.ResponseWriter, r *http.Request) {
 	modelCache.at, modelCache.body = time.Now(), body
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(body)
+}
+
+// pricedSubset describes a short menu without calling out to the provider,
+// so a restricted node answers instantly and works offline.
+func pricedSubset(ids []string) []map[string]any {
+	known := map[string][2]float64{
+		"openai/gpt-5.6-luna":        {0.20, 1.20},
+		"openai/gpt-5.6-mini":        {0.25, 2.00},
+		"anthropic/claude-haiku-4.5": {1.00, 5.00},
+		"google/gemini-2.5-flash":    {0.30, 2.50},
+	}
+	out := []map[string]any{}
+	for _, id := range ids {
+		p := known[id]
+		out = append(out, map[string]any{"id": id, "name": id, "in_per_m": p[0], "out_per_m": p[1], "context": 0})
+	}
+	return out
 }

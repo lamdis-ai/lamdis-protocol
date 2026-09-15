@@ -59,6 +59,17 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .ref.dead{color:var(--ink3);cursor:default;border-bottom-style:dashed}
 .tag.ai{background:rgba(125,211,252,.12);color:#7DD3FC}
 .entry.agent .auth{color:#7DD3FC}
+.conn{border:1px solid var(--line);border-radius:12px;padding:.8rem .9rem;margin-top:.5rem;background:var(--bg)}
+.conn .top{display:flex;align-items:center;gap:.6rem}
+.conn .top b{flex:1;font-size:.9rem;font-weight:560}
+.conn .addr{font:.72rem var(--mono);color:var(--ink4);margin-top:.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conn .picks{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.6rem}
+.pick{border:1px solid var(--line2);border-radius:99px;padding:.22rem .6rem;font-size:.76rem;color:var(--ink3);cursor:pointer;background:none}
+.pick[aria-pressed=true]{border-color:var(--gold);color:var(--gold);background:var(--gold-glow)}
+.pick.ask[aria-pressed=true]{border-color:var(--blue);color:var(--blue);background:rgba(125,211,252,.1)}
+.conn .probe{font-size:.78rem;color:var(--ink4);margin-top:.5rem;min-height:1.1rem}
+.conn .probe.bad{color:var(--red)}
+.conn .probe.ok{color:var(--green)}
 .entry.q .body{color:var(--ink2);font-style:normal;padding-left:.9rem;border-left:2px solid var(--line2)}
 .decision{border:1px solid rgba(125,211,252,.35);border-radius:14px;padding:.9rem 1.05rem;background:rgba(125,211,252,.05)}
 .decision .ask{font-size:.95rem;line-height:1.6;margin-bottom:.7rem}
@@ -314,7 +325,7 @@ function agentSheet(){if(!cur)return;
     '<label class="f">On its own, it may also use</label>'+
     '<label class="check"><input type="checkbox" id="b-web"> The web, on these domains: <input id="b-dom" placeholder="*.sec.gov, docs.stripe.com" style="flex:1"></label>'+
     (reach.allow_domains&&reach.allow_domains.length?'<p class="hint">Always allowed (from settings): '+esc(reach.allow_domains.join(", "))+'</p>':'')+
-    (tools.length?tools.map(function(t){return '<label class="check"><input type="checkbox" data-tool="'+esc(t.id)+'"> '+esc(t.id)+(t.confirm?' <span class="dim">(asks you first)</span>':'')+'</label>'}).join(""):'<p class="hint">No external tools connected. Add MCP servers in <span class="mono">'+esc(reach.config_path||"agent.json")+'</span>.</p>')+
+    (tools.length?tools.map(function(t){return '<label class="check"><input type="checkbox" data-tool="'+esc(t.id)+'"> '+esc(t.id)+(t.confirm?' <span class="dim">(asks you first)</span>':'')+'</label>'}).join(""):'<p class="hint">Nothing connected yet. Settings, then Connections, adds one in about a minute.</p>')+
     '<p class="hint">When you ask it something yourself, it can use everything you have connected and any public page, and every fetch is recorded in the thread.</p>'+
     '<p class="hint" style="margin-top:.8rem">Last run '+esc(ago(st.last_run))+' · '+esc(String(st.runs_today||0))+' runs today'+(st.last_error?' · <span style="color:var(--red)">'+esc(st.last_error)+'</span>':'')+(a.problem?' · <span style="color:var(--gold)">'+esc(a.problem)+'</span>':'')+'</p>'+
     '</section><footer><button class="btn" id="b-run">Run now</button><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" id="b-save">Save</button></footer>');
@@ -412,16 +423,19 @@ function settings(){var m=me||{};var origin=location.origin;
   '<div class="grid2" style="margin-top:.5rem"><div><label class="f" style="margin-top:.3rem">OpenRouter key</label><input id="c-key" type="password" placeholder="'+(reach.has_key?(reach.key_from_env?"set in the environment":"saved on this machine"):"sk-or-…")+'"></div>'+
   '<div><label class="f" style="margin-top:.3rem">Or a local model server</label><input id="c-url" value="'+esc(reach.model_url||"")+'" placeholder="http://localhost:11434/v1"></div></div>'+
   '<label class="f">Key for that server, if it needs one</label><input id="c-urlkey" type="password" placeholder="'+(reach.has_url_key?"saved for this endpoint":"usually none — Ollama and vLLM need no key")+'">'+
-  '<p class="hint">Keys are written to <span class="mono">agent.json</span> in your data directory, readable only by you, and are never sent anywhere but the service they belong to. Your OpenRouter key goes to OpenRouter alone: point the agent at another server and that key stays behind.</p>'+
+  '<p class="hint">Credentials are kept on the node, readable only by it, and are never sent anywhere but the service they belong to. Your OpenRouter key goes to OpenRouter alone: point the agent at another server and that key stays behind.</p>'+
   '<button class="btn" id="c-modelsave" style="margin-top:.5rem">Save model settings</button>'+
   '<label class="f">Your agent</label>'+
   (a.problem?'<p class="hint" style="color:var(--gold)">'+esc(a.problem)+'</p>':'<p class="hint">Runs on '+esc(a.model||"")+'. Acting for you in '+esc(String(a.delegated_threads||0))+' thread'+(a.delegated_threads===1?"":"s")+'. Today: '+esc(String(st.runs_today||0))+' runs, '+esc(String(st.fetches_today||0))+' fetches, '+esc(String(st.tokens_today||0))+' tokens.'+(st.last_sync?' Synced with peers '+esc(ago(st.last_sync))+'.':'')+(st.last_sync_error?' <span style="color:var(--red)">Sync: '+esc(st.last_sync_error)+'</span>':'')+'</p>')+
   '<p class="hint">It has its own key, signed by yours, so anyone reading a thread can tell you from your agent. Anything it writes says so. It can never share or grant access.</p>'+
   '<p class="hint">Everything lives in <span class="mono">'+esc(reach.config_path||"").replace(/\/agent\.json$/,"")+'</span> on this machine. This page answers only on this machine; peers reach the node by signature, never by this token.</p>'+
-  '<label class="f">Domains it may read on its own</label><div style="display:flex;gap:.5rem"><input id="c-dom" value="'+esc((reach.allow_domains||[]).join(", "))+'" placeholder="*.sec.gov, docs.stripe.com"><button class="btn" id="c-domsave">Save</button></div>'+
-  '<p class="hint">When you ask it something yourself it may fetch any public page. On its own it is limited to these plus whatever a thread allows. Private and local addresses are always refused.</p>'+
-  '<label class="f">External tools</label>'+((reach.tools||[]).length?'<div class="list">'+reach.tools.map(function(t){return '<div class="row"><div class="t"><b>'+esc(t.name)+'</b><span>'+esc((t.tools||[]).join(", "))+(t.confirm&&t.confirm.length?' · asks first: '+esc(t.confirm.join(", ")):'')+'</span></div></div>'}).join("")+'</div>':'<p class="hint">None yet.</p>')+
-  '<p class="hint">Connect MCP servers in <span class="mono">'+esc(reach.config_path||"agent.json")+'</span>: <span class="mono">{"tools":[{"name":"gh","command":"gh-mcp","allow":["get_issue"],"confirm":["create_issue"]}]}</span>. Only allowlisted tools are visible to it; confirm tools wait for your yes each time.</p>'+
+  '<label class="f">The web, when nobody asked</label>'+
+  '<select id="c-autoweb"><option value="listed">Only the sites I list below</option><option value="any">Any public page, same as when I ask</option><option value="off">None at all unless I ask</option></select>'+
+  '<div id="c-domwrap" style="display:flex;gap:.5rem;margin-top:.5rem"><input id="c-dom" value="'+esc((reach.allow_domains||[]).join(", "))+'" placeholder="*.sec.gov, docs.stripe.com"><button class="btn" id="c-domsave">Save</button></div>'+
+  '<p class="hint">When you ask it something yourself it may always fetch any public page, and every fetch is written into the thread. This is only about what it does while you are away. Private and local addresses are refused either way, and a thread can narrow this further but never widen it.</p>'+
+  '<label class="f">Connections</label><p class="hint" style="margin-top:0">Anything that speaks MCP: your issue tracker, your calendar, your own service. Paste the address and a token, see what it offers, and tick what your agent may use.</p>'+
+  '<div id="conns"></div>'+
+  '<button class="btn" id="conn-add" style="margin-top:.6rem">+ Add a connection</button>'+
   '<label class="f">Use with Claude</label><div class="cmd">claude mcp add lamdis -- lamdis mcp<button data-copy="claude mcp add lamdis -- lamdis mcp">copy</button></div>'+
   '<p class="hint">Run that once. Claude Code can then read your threads and write into them; its entries are labelled. Any other AI that speaks MCP works the same way.</p>'+
   (m.can_ask?'':'<p class="hint">Your agent is off. Three ways on: an OpenRouter key of your own (openrouter.ai/keys), a model on this machine (Ollama, vLLM), or <a href="mailto:support@lamdis.ai?subject=Lamdis%20key%20request" style="color:var(--gold)">ask us for a starter key</a> and we will send you one with a small fixed credit.</p>')+
@@ -438,9 +452,62 @@ function settings(){var m=me||{};var origin=location.origin;
   s.querySelector("[data-x]").onclick=closeSheet;
   Array.prototype.forEach.call(s.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="copied"}});
   s.querySelector("#c-save").onclick=function(){api("/app/api/me",{name:s.querySelector("#c-name").value}).then(loadMe)};
+  var conns=[];
+  function connRow(c,i){
+    var picks=(c._tools||c.allow||[]).map(function(t){
+      var on=(c.allow||[]).indexOf(t)>=0, ask=(c.confirm||[]).indexOf(t)>=0;
+      return '<button class="pick'+(ask?' ask':'')+'" aria-pressed="'+(on?"true":"false")+'" data-tool="'+esc(t)+'" data-i="'+i+'">'+esc(t)+(ask?' · asks first':'')+'</button>'}).join("");
+    return '<div class="conn" data-conn="'+i+'">'+
+      '<div class="top"><b>'+esc(c.name||"New connection")+'</b>'+
+      '<button class="btn sm" data-test="'+i+'">Test</button>'+
+      '<button class="btn sm danger" data-del="'+i+'">Remove</button></div>'+
+      (c._new?'<input placeholder="A short name, like github" value="'+esc(c.name||"")+'" data-f="name" data-i="'+i+'" style="margin-top:.5rem">':'')+
+      '<input placeholder="https://mcp.example.com/mcp" value="'+esc(c.url||"")+'" data-f="url" data-i="'+i+'" style="margin-top:.4rem">'+
+      '<input type="password" placeholder="'+(c.has_auth?"a token is saved; type to replace it":"Token, if it needs one")+'" data-f="auth" data-i="'+i+'" style="margin-top:.4rem">'+
+      (c.command?'<div class="addr">runs locally: '+esc(c.command)+'</div>':'')+
+      '<div class="picks">'+picks+'</div>'+
+      '<div class="probe" data-probe="'+i+'"></div></div>';
+  }
+  function drawConns(){
+    var el=s.querySelector("#conns");
+    el.innerHTML=conns.length?conns.map(connRow).join(""):'<p class="hint">Nothing connected yet.</p>';
+    Array.prototype.forEach.call(el.querySelectorAll("[data-f]"),function(n){n.oninput=function(){conns[+n.getAttribute("data-i")][n.getAttribute("data-f")]=n.value}});
+    Array.prototype.forEach.call(el.querySelectorAll("[data-test]"),function(b){b.onclick=function(){testConn(+b.getAttribute("data-test"))}});
+    Array.prototype.forEach.call(el.querySelectorAll("[data-del]"),function(b){b.onclick=function(){var i=+b.getAttribute("data-del");
+      var c=conns[i];conns.splice(i,1);drawConns();if(c.name&&!c._new)api("/app/api/tools/remove",{name:c.name})}});
+    Array.prototype.forEach.call(el.querySelectorAll("[data-tool]"),function(b){b.onclick=function(){
+      var i=+b.getAttribute("data-i"),t=b.getAttribute("data-tool"),c=conns[i];
+      c.allow=c.allow||[];c.confirm=c.confirm||[];
+      var on=c.allow.indexOf(t)>=0, ask=c.confirm.indexOf(t)>=0;
+      /* off -> allowed -> allowed but asks first -> off */
+      if(!on){c.allow.push(t)}
+      else if(!ask){c.confirm.push(t)}
+      else {c.allow.splice(c.allow.indexOf(t),1);c.confirm.splice(c.confirm.indexOf(t),1)}
+      drawConns();saveConn(i)}});
+  }
+  function testConn(i){
+    var c=conns[i],p=s.querySelector('[data-probe="'+i+'"]');
+    p.className="probe";p.textContent="Connecting…";
+    api("/app/api/tools/probe",{name:c.name,url:c.url,auth:c.auth||"",header:c.header||""}).then(function(r){
+      if(r.error){p.className="probe bad";p.textContent=r.error;return}
+      c._tools=r.tools||[];c.auth="";
+      p.className="probe ok";p.textContent=(c._tools.length||0)+" tools. Tick the ones it may use; tick again to make it ask first.";
+      drawConns();saveConn(i)})}
+  function saveConn(i){
+    var c=conns[i];if(!c.name||!c.url)return;
+    api("/app/api/tools",{name:c.name,url:c.url,auth:c.auth||"",header:c.header||"",allow:c.allow||[],confirm:c.confirm||[]}).then(function(r){
+      if(r.error){var p=s.querySelector('[data-probe="'+i+'"]');p.className="probe bad";p.textContent=r.error;return}
+      c._new=false;c.auth="";c.has_auth=true})}
+  api("/app/api/tools").then(function(d){conns=(d.servers||[]).map(function(x){x._tools=x.allow;return x});drawConns()});
+  s.querySelector("#conn-add").onclick=function(){conns.push({_new:true,name:"",url:"",allow:[],confirm:[]});drawConns()};
+
   var sel=s.querySelector("#c-model"),cust=s.querySelector("#c-model-custom");sel.onchange=function(){cust.hidden=sel.value!=="__custom";if(!cust.hidden)cust.focus()};
   s.querySelector("#c-modelsave").onclick=function(){var b=s.querySelector("#c-modelsave");var id=sel.value==="__custom"?cust.value.trim():sel.value;var body={model:id,model_url:s.querySelector("#c-url").value};var k=s.querySelector("#c-key").value.trim();if(k)body.openrouter_key=k;var uk=s.querySelector("#c-urlkey").value.trim();if(uk)body.model_url_key=uk;
     api("/app/api/agent/config",body).then(function(r){b.textContent=r.error?"Failed: "+r.error:"Saved";loadMe()})};
+  var aw=s.querySelector("#c-autoweb");aw.value=reach.auto_web||"listed";
+  function drawWeb(){s.querySelector("#c-domwrap").hidden=(aw.value!=="listed")}
+  drawWeb();
+  aw.onchange=function(){drawWeb();api("/app/api/agent/config",{auto_web:aw.value})};
   s.querySelector("#c-domsave").onclick=function(){var b=s.querySelector("#c-domsave");api("/app/api/agent/config",{allow_domains:s.querySelector("#c-dom").value.split(",")}).then(function(r){b.textContent=r.error?"Failed":"Saved"})};
   var rv=s.querySelector("#c-revoke");rv.onclick=function(){if(rv.getAttribute("data-armed")){api("/app/api/agent/revoke").then(function(r){rv.textContent=r.error?r.error:"Revoked in "+r.revoked_in+" threads";loadMe()})}else{rv.setAttribute("data-armed","1");rv.textContent="Click again to confirm"}};
   function peers(){var l=(me&&me.peers)||[];s.querySelector("#peers").innerHTML=l.map(function(p){return '<div class="row"><div class="t"><b>'+esc(p.name)+'</b><span>'+esc(p.url)+'</span></div></div>'}).join("")}

@@ -54,6 +54,14 @@ type Runner struct {
 	// OnTool is told about every tool call as it completes, for a terminal
 	// to show progress. Optional.
 	OnTool func(name string, args map[string]any, out string, took time.Duration)
+	// NoCommands refuses tool servers that run a local command, which is
+	// what a hosted node wants.
+	NoCommands bool
+	// AllowedModels restricts what somebody may pick when they are spending
+	// a credential they did not supply. Offering a free stranger the choice
+	// of the most expensive model on the market is not a feature. Empty
+	// means no restriction, which is right when the key is their own.
+	AllowedModels []string
 
 	mu      sync.Mutex
 	mapOnce string // the workspace map, computed once so the prefix is stable
@@ -172,6 +180,13 @@ func (r *Runner) ModelFor(cfg Config) (Model, string) {
 	if name == "" {
 		name = DefaultModel
 	}
+	// Spending somebody else's credential comes with a shorter menu, and
+	// this is the enforcement point rather than the interface: a request
+	// that never touched a form still lands here.
+	own := cfg.OpenRouterKey != "" || cfg.ModelURLKey != ""
+	if !own && len(r.AllowedModels) > 0 && !allowedModel(name, r.AllowedModels) {
+		name = r.AllowedModels[0]
+	}
 	if r.Model != nil && base == nil {
 		return r.Model, name // a test double or another backend
 	}
@@ -180,6 +195,32 @@ func (r *Runner) ModelFor(cfg Config) (Model, string) {
 	}
 	return &OpenRouter{Key: key, Model: name, BaseURL: url, KeyIsForBaseURL: forBase,
 		HTTP: &http.Client{Timeout: 120 * time.Second}}, name
+}
+
+// allowedModel reports whether a model id is on a list.
+func allowedModel(id string, list []string) bool {
+	for _, m := range list {
+		if m == id {
+			return true
+		}
+	}
+	return false
+}
+
+// MayChoose reports whether this node lets the person pick that model.
+func (r *Runner) MayChoose(cfg Config, id string) bool {
+	if cfg.OpenRouterKey != "" || cfg.ModelURLKey != "" || len(r.AllowedModels) == 0 {
+		return true
+	}
+	return allowedModel(id, r.AllowedModels)
+}
+
+// Choices is the menu this node offers, empty when anything goes.
+func (r *Runner) Choices(cfg Config) []string {
+	if cfg.OpenRouterKey != "" || cfg.ModelURLKey != "" {
+		return nil
+	}
+	return r.AllowedModels
 }
 
 // Ready reports whether a model can answer right now.
@@ -281,7 +322,7 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	}
 
 	// External tools for this run.
-	ex, problems := connectExternals(ctx, cfg, func(name string) bool { return g.allTools || g.tools[name] })
+	ex, problems := connectTools(ctx, cfg, func(name string) bool { return g.allTools || g.tools[name] }, !r.NoCommands)
 	defer ex.close()
 	rec.Problems = problems
 
@@ -403,8 +444,17 @@ func (r *Runner) gateFor(t Trigger, b Brief, cfg Config) gate {
 	case TriggerChat, TriggerManual, TriggerDecision, TriggerCode:
 		g.web, g.anyHost, g.allTools, g.postOther = true, true, true, true
 	default:
+		// On its own the agent reaches as far as the person said it may,
+		// and no further. A thread can narrow that, never widen it.
 		g.domains = append(append([]string{}, cfg.AllowDomains...), b.AllowDomains...)
-		g.web = b.Web && len(g.domains) > 0
+		switch cfg.AutoWeb {
+		case "any":
+			g.web, g.anyHost = b.Web, true
+		case "off":
+			g.web = false
+		default:
+			g.web = b.Web && len(g.domains) > 0
+		}
 		for _, n := range b.Tools {
 			g.tools[n] = true
 		}
@@ -432,6 +482,8 @@ func (r *Runner) systemPrompt(b Brief, g gate, canWrite bool, st *perm.State) st
 		} else {
 			sb.WriteString("You may fetch pages only from: " + strings.Join(g.domains, ", ") + ".\n")
 		}
+	} else {
+		sb.WriteString("You have no web access on this run. Answer from the record, and say so if that is not enough.\n")
 	}
 	if r.Workspace != nil {
 		sb.WriteString("\nYou are working in a code repository with file and shell tools. Read before you edit. Make the smallest change that does the job, with edit_file. After changing anything, run the project's own tests or build with run and say what you ran and what it printed; never claim something is verified unless a command showed it. If the task is unclear or would touch something outside it, ask_person first. The final message is a short report: what changed, what was run, anything left open.\n")

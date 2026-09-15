@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -43,10 +45,15 @@ type externals struct {
 // tools. A server that fails to start is reported, not fatal: the run goes
 // on with what connected, and the run record says what was missing.
 func connectExternals(ctx context.Context, cfg Config, wanted func(name string) bool) (*externals, []string) {
+	return connectTools(ctx, cfg, wanted, true)
+}
+
+// connectTools is the same, with a say in whether local commands may run.
+func connectTools(ctx context.Context, cfg Config, wanted func(name string) bool, allowCommands bool) (*externals, []string) {
 	ex := &externals{tools: map[string]*externalTool{}}
 	var problems []string
 	for _, srv := range cfg.Tools {
-		if srv.Name == "" || (srv.Command == "" && srv.URL == "") || len(srv.Allow) == 0 {
+		if srv.Name == "" || len(srv.Allow) == 0 || !srv.Reachable(allowCommands) {
 			continue
 		}
 		anyWanted := false
@@ -59,17 +66,10 @@ func connectExternals(ctx context.Context, cfg Config, wanted func(name string) 
 		if !anyWanted {
 			continue
 		}
-		var transport sdk.Transport
-		if srv.Command != "" {
-			cmd := exec.CommandContext(ctx, srv.Command, srv.Args...)
-			cmd.Env = append(os.Environ(), srv.Env...)
-			transport = &sdk.CommandTransport{Command: cmd}
-		} else {
-			if _, err := PublicHost(srv.URL); err != nil && !strings.HasPrefix(srv.URL, "http://localhost") && !strings.HasPrefix(srv.URL, "http://127.0.0.1") {
-				problems = append(problems, srv.Name+": "+err.Error())
-				continue
-			}
-			transport = &sdk.StreamableClientTransport{Endpoint: srv.URL}
+		transport, err := transportFor(ctx, srv, allowCommands)
+		if err != nil {
+			problems = append(problems, srv.Name+": "+err.Error())
+			continue
 		}
 		client := sdk.NewClient(&sdk.Implementation{Name: "lamdis-agent", Version: "1"}, nil)
 		sess, err := client.Connect(ctx, transport, nil)
@@ -99,6 +99,73 @@ func connectExternals(ctx context.Context, cfg Config, wanted func(name string) 
 		}
 	}
 	return ex, problems
+}
+
+// transportFor opens the connection to one server.
+func transportFor(ctx context.Context, srv ToolServer, allowCommands bool) (sdk.Transport, error) {
+	if srv.URL != "" {
+		local := strings.HasPrefix(srv.URL, "http://localhost") || strings.HasPrefix(srv.URL, "http://127.0.0.1")
+		if !local {
+			if _, err := PublicHost(srv.URL); err != nil {
+				return nil, err
+			}
+		} else if !allowCommands {
+			return nil, fmt.Errorf("a hosted agent cannot reach an address on your own machine")
+		}
+		t := &sdk.StreamableClientTransport{Endpoint: srv.URL}
+		if srv.Auth != "" {
+			name := srv.Header
+			if name == "" {
+				name = "Authorization"
+			}
+			value := srv.Auth
+			if name == "Authorization" && !strings.Contains(value, " ") {
+				value = "Bearer " + value
+			}
+			t.HTTPClient = &http.Client{Timeout: 60 * time.Second,
+				Transport: headerRoundTripper{name: name, value: value}}
+		}
+		return t, nil
+	}
+	if !allowCommands {
+		return nil, fmt.Errorf("this node only connects to tools by URL")
+	}
+	cmd := exec.CommandContext(ctx, srv.Command, srv.Args...)
+	cmd.Env = append(os.Environ(), srv.Env...)
+	return &sdk.CommandTransport{Command: cmd}, nil
+}
+
+// headerRoundTripper attaches one credential and nothing else.
+type headerRoundTripper struct{ name, value string }
+
+func (h headerRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set(h.name, h.value)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// Probe connects to one server and reports the tools it offers, so a person
+// can see what they just wired up before allowing any of it.
+func Probe(ctx context.Context, srv ToolServer, allowCommands bool) ([]string, error) {
+	transport, err := transportFor(ctx, srv, allowCommands)
+	if err != nil {
+		return nil, err
+	}
+	client := sdk.NewClient(&sdk.Implementation{Name: "lamdis-agent", Version: "1"}, nil)
+	sess, err := client.Connect(ctx, transport, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer sess.Close()
+	list, err := sess.ListTools(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, t := range list.Tools {
+		names = append(names, t.Name)
+	}
+	return names, nil
 }
 
 func (ex *externals) close() {
