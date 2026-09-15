@@ -1,0 +1,200 @@
+package api
+
+import (
+	"encoding/json"
+	"html/template"
+	"strings"
+)
+
+// The hosted page is the same application, with a sign-in step in front of
+// it. The script proves who you are against the user pool, then hands the
+// resulting token to every call the application makes. The application below
+// is unchanged and does not know a front door exists.
+
+const hostMark = `<svg viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true" style="width:26px;height:28px;color:var(--gold)"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg>`
+
+const hostCSS = `
+.gate{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);padding:1.5rem}
+.gate .box{max-width:23rem;text-align:center;animation:rise .4s both}
+.gate .glyphwrap{display:flex;justify-content:center;margin-bottom:1.4rem}
+.gate h1{font-size:1.45rem;font-weight:660;letter-spacing:-.025em;margin-bottom:.5rem}
+.gate p{color:var(--ink3);font-size:.95rem;line-height:1.6;margin-bottom:1.5rem}
+.gate .btn{width:100%;justify-content:center;padding:.7rem 1rem}
+.gate .err{color:var(--red);font-size:.84rem;margin-top:.9rem;min-height:1.2rem}
+.gate .fine{color:var(--ink4);font-size:.78rem;margin-top:1.6rem;line-height:1.6}
+.booting{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);color:var(--ink4);font:.8rem var(--mono)}
+.who{border-top:1px solid var(--line);padding:.55rem 1.4rem;font-size:.78rem;color:var(--ink4);display:flex;gap:.6rem;align-items:center}
+.who b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.who button{color:var(--ink4);font-size:.78rem}
+.who button:hover{color:var(--ink2)}
+`
+
+// hostedAppHTML renders the signed-in application shell.
+func hostedAppHTML(cfg SignIn) string {
+	c, _ := json.Marshal(map[string]string{
+		"domain":   strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(cfg.Domain, "https://"), "http://"), "/"),
+		"clientId": cfg.ClientID,
+		"redirect": cfg.Redirect,
+	})
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="dark">
+<title>Lamdis</title><link rel="icon" href="/favicon.ico"><style>` + appCSS + hostCSS + `</style></head><body>
+
+<div class="gate" id="gate" hidden>
+  <div class="box">
+    <div class="glyphwrap">` + hostMark + `</div>
+    <h1>Your agent, your record</h1>
+    <p>Write things down, ask your agent, and let it keep working when you close the tab. Sign in with your email to begin.</p>
+    <button class="btn solid" id="go">Continue with email</button>
+    <div class="err" id="err"></div>
+    <div class="fine">Your threads are yours. You can take them with you at any time, and run the same thing on your own machine.</div>
+  </div>
+</div>
+<div class="booting" id="booting">opening your record…</div>
+
+<div class="shell" id="shell" hidden>
+  <aside class="rail">
+    <div class="mark">` + hostMark + ` Lamdis</div>
+    <button class="newbtn" id="new">+ New thread</button>
+    <div class="threads" id="threads"></div>
+    <div class="me"><div class="avatar" id="me-av">·</div><b id="me-name">you</b><button class="icon" id="gear" title="Settings">⚙</button></div>
+    <div class="who"><b id="who-email"></b><button id="signout">Sign out</button></div>
+  </aside>
+  <main class="main">
+    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
+    <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
+    <div class="composer"><div class="box">
+      <div class="field">
+        <textarea id="text" rows="1" placeholder="Write a note, or ask your agent…"></textarea>
+        <div class="tools"><span class="hint">Private until you share it. Enter after a “?” asks; ⌘Enter saves. [[Thread title]] links a thread.</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
+      </div>
+      <div class="note" id="note"></div>
+    </div></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+var CFG = ` + string(c) + `;
+var KEY = "lamdis.session";
+var sess = null;
+
+function saveSession(s){ sess = s; try{ localStorage.setItem(KEY, JSON.stringify(s)) }catch(e){} }
+function loadSession(){ try{ return JSON.parse(localStorage.getItem(KEY) || "null") }catch(e){ return null } }
+function clearSession(){ sess = null; try{ localStorage.removeItem(KEY) }catch(e){} }
+
+function b64url(buf){
+  var bin = "", b = new Uint8Array(buf);
+  for (var i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function randHex(n){
+  var a = new Uint8Array(n); crypto.getRandomValues(a);
+  return Array.prototype.map.call(a, function(x){ return ("0"+x.toString(16)).slice(-2) }).join("");
+}
+function challenge(v){
+  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)).then(b64url);
+}
+
+function signIn(){
+  if(!CFG.domain || !CFG.clientId){ document.getElementById("err").textContent = "This host has no sign-in configured yet."; return }
+  var v = randHex(48);
+  try{ sessionStorage.setItem("lamdis.pkce", v) }catch(e){}
+  challenge(v).then(function(c){
+    location.href = "https://" + CFG.domain + "/oauth2/authorize"
+      + "?response_type=code&client_id=" + encodeURIComponent(CFG.clientId)
+      + "&redirect_uri=" + encodeURIComponent(CFG.redirect)
+      + "&scope=" + encodeURIComponent("openid email")
+      + "&code_challenge=" + c + "&code_challenge_method=S256";
+  });
+}
+function signOut(){
+  clearSession();
+  if(CFG.domain && CFG.clientId){
+    location.href = "https://" + CFG.domain + "/logout?client_id=" + encodeURIComponent(CFG.clientId)
+      + "&logout_uri=" + encodeURIComponent(CFG.redirect);
+    return;
+  }
+  location.reload();
+}
+
+function tokenCall(body){
+  return fetch("https://" + CFG.domain + "/oauth2/token", {
+    method: "POST", headers: {"content-type": "application/x-www-form-urlencoded"}, body: new URLSearchParams(body)
+  }).then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error_description || d.error || ("HTTP "+r.status)); return d }) });
+}
+function store(d){
+  var claims = {};
+  try{ claims = JSON.parse(atob(d.id_token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))) }catch(e){}
+  saveSession({ id: d.id_token, refresh: d.refresh_token || (sess && sess.refresh),
+    exp: Date.now() + ((d.expires_in || 3600) - 60) * 1000, email: claims.email || "" });
+}
+function exchangeCode(code){
+  var v = "";
+  try{ v = sessionStorage.getItem("lamdis.pkce") || "" }catch(e){}
+  return tokenCall({ grant_type: "authorization_code", client_id: CFG.clientId, code: code,
+    redirect_uri: CFG.redirect, code_verifier: v }).then(store);
+}
+function refresh(){
+  if(!sess || !sess.refresh) return Promise.reject(new Error("no session"));
+  return tokenCall({ grant_type: "refresh_token", client_id: CFG.clientId, refresh_token: sess.refresh }).then(store);
+}
+function fresh(){
+  if(sess && Date.now() < sess.exp) return Promise.resolve();
+  return refresh();
+}
+
+// Every call the application makes carries the session. It does not know.
+var rawFetch = window.fetch.bind(window);
+window.fetch = function(p, o){
+  if(typeof p !== "string" || p.indexOf("/app/api") !== 0) return rawFetch(p, o);
+  var send = function(){
+    var opts = Object.assign({}, o || {});
+    opts.headers = Object.assign({}, opts.headers || {}, { Authorization: "Bearer " + (sess ? sess.id : "") });
+    return rawFetch(p, opts);
+  };
+  return fresh().then(send, send).then(function(r){
+    if(r.status !== 401) return r;
+    return refresh().then(send, function(){ signOutSoft(); return r });
+  });
+};
+function signOutSoft(){ clearSession(); location.reload() }
+
+function show(what){
+  document.getElementById("booting").hidden = what !== "booting";
+  document.getElementById("gate").hidden = what !== "gate";
+  document.getElementById("shell").hidden = what !== "app";
+}
+function boot(){
+  show("app");
+  document.getElementById("who-email").textContent = (sess && sess.email) || "";
+  document.getElementById("signout").onclick = signOut;
+  var s = document.createElement("script");
+  s.src = "/app/app.js";
+  document.body.appendChild(s);
+}
+
+document.getElementById("go").onclick = signIn;
+sess = loadSession();
+(function start(){
+  var q = new URLSearchParams(location.search);
+  if(q.get("error")){ show("gate"); document.getElementById("err").textContent = q.get("error_description") || q.get("error"); return }
+  if(q.get("code")){
+    exchangeCode(q.get("code")).then(function(){
+      history.replaceState({}, "", location.pathname);
+      boot();
+    }).catch(function(e){ show("gate"); document.getElementById("err").textContent = e.message });
+    return;
+  }
+  if(sess){ fresh().then(boot, function(){ clearSession(); show("gate") }); return }
+  show("gate");
+})();
+</script></body></html>`
+}
+
+// hostNotice is the plain page for a host that is not configured yet.
+func hostNotice(title, body string) string {
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>` + template.HTMLEscapeString(title) + `</title><style>` + appCSS + `</style></head>
+<body><div class="notice"><h1>` + template.HTMLEscapeString(title) + `</h1><p>` + template.HTMLEscapeString(body) + `</p></div></body></html>`
+}

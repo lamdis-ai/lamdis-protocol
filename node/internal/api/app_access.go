@@ -268,7 +268,7 @@ func (a *App) handleAccess(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		links = append(links, accessLink{
-			ID: s.ID, Lanes: s.Lanes, Label: s.Label, Path: "/s/" + tok,
+			ID: s.ID, Lanes: s.Lanes, Label: s.Label, Path: a.sharePrefix() + "/" + tok,
 			Expires: time.Unix(s.Exp, 0).Format(time.RFC3339),
 			Created: time.Unix(s.Created, 0).Format(time.RFC3339),
 		})

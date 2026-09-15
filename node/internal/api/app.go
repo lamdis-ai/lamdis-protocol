@@ -60,6 +60,13 @@ type App struct {
 	Runner    *agent.Runner
 	Scheduler *agent.Scheduler
 	AgentSelf string
+	// Auth, when set, replaces the local-token check entirely: whoever calls
+	// has already been identified upstream. The hosted front door uses this
+	// after verifying an account token and routing to that person's node.
+	Auth func(*http.Request) bool
+	// SharePrefix is where share links live. "/s" when you run your own
+	// node; hosted nodes add the account so one address serves many people.
+	SharePrefix string
 	// ExposeApp lets the interface answer requests from other machines.
 	// Off by default: exposing the node so peers can sync must not also
 	// put your own threads on the network behind a single bearer token.
@@ -84,6 +91,14 @@ func (a *App) now() time.Time {
 		return a.Now()
 	}
 	return time.Now()
+}
+
+// sharePrefix is where this node's share links live.
+func (a *App) sharePrefix() string {
+	if a.SharePrefix != "" {
+		return strings.TrimRight(a.SharePrefix, "/")
+	}
+	return "/s"
 }
 
 func (a *App) name(principal string) string {
@@ -139,6 +154,14 @@ func (a *App) Register(mux *http.ServeMux) {
 // through a timing difference is not a token.
 func (a *App) owner(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if a.Auth != nil {
+			if !a.Auth(r) {
+				http.Error(w, "not authorised", http.StatusUnauthorized)
+				return
+			}
+			next(w, r)
+			return
+		}
 		if !a.ExposeApp && !fromThisMachine(r) {
 			http.Error(w, "this interface answers only on this machine", http.StatusForbidden)
 			return
@@ -516,7 +539,7 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request) {
 	// say so rather than fail the whole action.
 	shares := append(a.loadShares(), rec)
 	saveErr := a.saveShares(shares)
-	out := map[string]any{"id": rec.ID, "path": "/s/" + tok, "lanes": lanes, "days": days}
+	out := map[string]any{"id": rec.ID, "path": a.sharePrefix() + "/" + tok, "lanes": lanes, "days": days}
 	if saveErr != nil {
 		out["note"] = "the link works but could not be recorded, so it cannot be revoked early"
 	}

@@ -283,10 +283,11 @@ func banner(repo, model string) string {
 	g := "\033[38;5;214m"
 	d := "\033[2m"
 	z := "\033[0m"
-	return g + "  ▛▀▜▛▀▜" + z + "\n" +
-		g + "  ▙▄▟▙▄▟" + z + "   \033[1mlamdis\033[0m " + d + "· " + repo + " · " + model + z + "\n" +
-		g + "  ▛▀▜" + z + "\n" +
-		g + "  ▙▄▟" + z + "      " + d + "everything here is recorded · `lamdis app` to read it" + z + "\n"
+	// An L, the right way up: a stem, then a foot to the right.
+	return g + "  ▛▀▜" + z + "\n" +
+		g + "  ▙▄▟" + z + "         \033[1mlamdis\033[0m " + d + "· " + repo + " · " + model + z + "\n" +
+		g + "  ▛▀▜▛▀▜" + z + "\n" +
+		g + "  ▙▄▟▙▄▟" + z + "      " + d + "everything here is recorded · `lamdis app` to read it" + z + "\n"
 }
 
 // cmdApp opens the interface in a browser, starting the node if it is not

@@ -38,7 +38,7 @@ func main() {
 	}
 }
 
-var commandNames = []string{"help", "-h", "--help", "app", "keys", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
+var commandNames = []string{"help", "-h", "--help", "app", "keys", "host", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
 	"whoami", "thread", "threads", "post", "read", "search", "mcp", "serve", "peer", "peers", "sync", "share",
 	"discover", "request", "requests", "approve", "deny", "grant", "revoke", "access"}
 
@@ -99,6 +99,9 @@ commands:
 
   app                         open your threads in a browser (starts the node
                               if it isn't running already)
+  host [-addr :8080]          run many people's nodes from one process, signed
+       [-root DIR]            in against a hosted user pool. One directory per
+                              account, each a normal node anyone can take away.
   keys mint <who> [-limit 2]  let someone else use your inference without
   keys list | revoke <hash>   being able to drain you: each key carries a hard
                               credit cap that never refills. Needs
@@ -198,6 +201,9 @@ func run(args []string) error {
 	case "keys":
 		// Operator side: no store, no keys of ours, just OpenRouter.
 		return cmdKeys(ctx, rest)
+	case "host":
+		// Many people's nodes in one process. Opens its own stores.
+		return cmdHost(ctx, rest)
 	case "whoami":
 		_, pid, err := loadKey(*dataDir)
 		if err != nil {
