@@ -116,3 +116,52 @@ func TestProviderErrorsAreReadable(t *testing.T) {
 		t.Fatalf("error not surfaced: %v", err)
 	}
 }
+
+// A ceiling you cannot check is not a ceiling, so minting fails closed.
+func TestCeilingStopsMintingAndFailsClosed(t *testing.T) {
+	existing := []map[string]any{
+		{"hash": "h1", "name": "a", "limit": 2.0, "usage": 0.0},
+		{"hash": "h2", "name": "b", "limit": 46.0, "usage": 12.0},
+	}
+	fail := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if fail {
+				w.WriteHeader(500)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"data": existing})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"key": "sk-or-new",
+			"data": map[string]any{"hash": "h3", "name": "c", "limit": 2.0}})
+	}))
+	defer srv.Close()
+	p := &Provisioner{ManagementKey: "mgmt", BaseURL: srv.URL}
+	ctx := context.Background()
+
+	committed, n, err := p.Committed(ctx)
+	if err != nil || committed != 48 || n != 2 {
+		t.Fatalf("committed: %v %v %v", committed, n, err)
+	}
+	// $48 committed, a $2 key fits under $50; a $3 one does not.
+	if _, err := p.MintWithin(ctx, "c", 3, 50); err == nil {
+		t.Fatal("minting past the ceiling was allowed")
+	} else if !strings.Contains(err.Error(), "ceiling") {
+		t.Fatalf("unhelpful ceiling error: %v", err)
+	}
+	if _, err := p.MintWithin(ctx, "c", 2, 50); err != nil {
+		t.Fatalf("a key that fits was refused: %v", err)
+	}
+	// If the existing keys cannot be counted, nothing is minted.
+	fail = true
+	if _, err := p.MintWithin(ctx, "c", 1, 50); err == nil {
+		t.Fatal("minted without being able to check the ceiling")
+	}
+	// A disabled key no longer counts against the ceiling.
+	fail = false
+	existing[1]["disabled"] = true
+	if committed, _, _ = p.Committed(ctx); committed != 2 {
+		t.Fatalf("a disabled key still counted: $%.2f", committed)
+	}
+}

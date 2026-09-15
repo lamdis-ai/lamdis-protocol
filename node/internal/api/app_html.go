@@ -372,7 +372,7 @@ function settings(){var m=me||{};var origin=location.origin;
   '<p class="hint">Connect MCP servers in <span class="mono">'+esc(reach.config_path||"agent.json")+'</span>: <span class="mono">{"tools":[{"name":"gh","command":"gh-mcp","allow":["get_issue"],"confirm":["create_issue"]}]}</span>. Only allowlisted tools are visible to it; confirm tools wait for your yes each time.</p>'+
   '<label class="f">Use with Claude</label><div class="cmd">claude mcp add lamdis -- lamdis mcp<button data-copy="claude mcp add lamdis -- lamdis mcp">copy</button></div>'+
   '<p class="hint">Run that once. Claude Code can then read your threads and write into them; its entries are labelled. Any other AI that speaks MCP works the same way.</p>'+
-  (m.can_ask?'':'<p class="hint">Your agent is off: add an OpenRouter key above (keys are at openrouter.ai/keys) or point at a local model server.</p>')+
+  (m.can_ask?'':'<p class="hint">Your agent is off. Three ways on: an OpenRouter key of your own (openrouter.ai/keys), a model on this machine (Ollama, vLLM), or <a href="mailto:support@lamdis.ai?subject=Lamdis%20key%20request" style="color:var(--gold)">ask us for a starter key</a> and we will send you one with a small fixed credit.</p>')+
   '<details><summary>Advanced: identity, other nodes, direct grants, revoke the agent</summary>'+
   '<label class="f">Your identity</label><div class="cmd">'+esc(m.principal)+'<button data-copy="'+esc(m.principal)+'">copy</button></div>'+
   '<label class="f">Your agent’s identity</label><div class="cmd">'+esc(a.principal||"")+'<button data-copy="'+esc(a.principal||"")+'">copy</button></div>'+

@@ -41,7 +41,7 @@ func cmdKeys(ctx context.Context, args []string) error {
 		if label == "" {
 			return fmt.Errorf("say who it is for: lamdis keys mint sam@example.com -limit 2")
 		}
-		k, err := p.Mint(ctx, label, *limit)
+		k, err := p.MintWithin(ctx, label, *limit, ceiling())
 		if err != nil {
 			return err
 		}
@@ -49,6 +49,9 @@ func cmdKeys(ctx context.Context, args []string) error {
 		fmt.Fprintf(os.Stderr, "\nminted for %s · cap $%.2f · hash %s\n", k.Name, k.Limit, k.Hash)
 		fmt.Fprintf(os.Stderr, "The cap does not refill. Revoke with: lamdis keys revoke %s\n", k.Hash)
 		fmt.Fprintf(os.Stderr, "Send them the line above and tell them to paste it into Settings → OpenRouter key.\n")
+		if committed, n, err := p.Committed(ctx); err == nil {
+			fmt.Fprintf(os.Stderr, "committed  $%.2f across %d keys · ceiling $%.2f\n", committed, n, ceiling())
+		}
 		return nil
 	case "list":
 		keys, err := p.List(ctx)
@@ -75,7 +78,11 @@ func cmdKeys(ctx context.Context, args []string) error {
 			capped += k.Limit
 		}
 		w.Flush()
-		fmt.Printf("\n%d keys · $%.2f spent · $%.2f is the most they can ever cost you\n", len(keys), spent, capped)
+		fmt.Printf("\n%d keys · $%.2f spent · $%.2f is the most they can ever cost you · ceiling $%.2f\n",
+			len(keys), spent, capped, ceiling())
+		if capped > ceiling() {
+			fmt.Printf("You are over your ceiling. Revoke a key, or raise LAMDIS_KEY_CEILING deliberately.\n")
+		}
 		return nil
 	case "revoke":
 		if len(rest) != 1 {
@@ -104,6 +111,18 @@ func cmdKeys(ctx context.Context, args []string) error {
 	return keysUsage()
 }
 
+// ceiling is the most you are prepared to have committed at once, across
+// every key you have issued. Minting stops there rather than warning.
+func ceiling() float64 {
+	if v := strings.TrimSpace(os.Getenv("LAMDIS_KEY_CEILING")); v != "" {
+		var f float64
+		if _, err := fmt.Sscanf(v, "%g", &f); err == nil && f > 0 {
+			return f
+		}
+	}
+	return 50
+}
+
 func keysUsage() error {
 	fmt.Fprint(os.Stderr, `usage: lamdis keys <command>
 
@@ -112,6 +131,9 @@ func keysUsage() error {
   list                      every key, what it has spent, what is left
   limit <hash> -to 5        raise or lower a cap
   revoke <hash>             kill a key now
+
+Minting stops once the caps you have issued add up to LAMDIS_KEY_CEILING
+(default $50), so the total you can ever lose is a number you chose once.
 
 Set LAMDIS_OPENROUTER_MANAGEMENT_KEY first. Create one at
 openrouter.ai/settings/management-keys; it is not an ordinary API key and it

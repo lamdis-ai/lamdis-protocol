@@ -134,6 +134,41 @@ func (e keyEnvelope) key() ProvisionedKey {
 	return e.ProvisionedKey
 }
 
+// Committed sums every live key's cap: the most every key you have issued
+// could ever cost you, together. This is the number to watch, not the spend.
+func (p *Provisioner) Committed(ctx context.Context) (float64, int, error) {
+	keys, err := p.List(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	total, n := 0.0, 0
+	for _, k := range keys {
+		if k.Disabled {
+			continue
+		}
+		total += k.Limit
+		n++
+	}
+	return total, n, nil
+}
+
+// MintWithin mints a key only if doing so keeps the total committed under
+// ceiling. It fails closed: if the existing keys cannot be counted, nothing
+// is minted, because a ceiling you cannot check is not a ceiling.
+func (p *Provisioner) MintWithin(ctx context.Context, label string, limit, ceiling float64) (ProvisionedKey, error) {
+	if ceiling > 0 {
+		committed, _, err := p.Committed(ctx)
+		if err != nil {
+			return ProvisionedKey{}, fmt.Errorf("could not check what you have already committed, so nothing was minted: %w", err)
+		}
+		if committed+limit > ceiling {
+			return ProvisionedKey{}, fmt.Errorf("that would commit $%.2f in total, over your $%.2f ceiling ($%.2f already committed). Lower the cap, revoke a key, or raise the ceiling with LAMDIS_KEY_CEILING",
+				committed+limit, ceiling, committed)
+		}
+	}
+	return p.Mint(ctx, label, limit)
+}
+
 // Mint creates a key capped at limit dollars. The cap never refills: no
 // limit_reset is sent, which is the whole reason this is safe to hand out.
 func (p *Provisioner) Mint(ctx context.Context, label string, limit float64) (ProvisionedKey, error) {
