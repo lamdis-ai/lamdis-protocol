@@ -41,6 +41,9 @@ type ThreadState struct {
 	Pending string            `json:"pending,omitempty"` // triggering entry id
 	Runs    int               `json:"runs"`
 	Seen    bool              `json:"seen"`
+	// Rhythms maps a rhythm's name to the last date it ran, so a daily
+	// think happens once a day even across restarts.
+	Rhythms map[string]string `json:"rhythms,omitempty"`
 }
 
 func LoadState(dataDir string) *State {
@@ -62,6 +65,9 @@ func (s *State) thread(id string) *ThreadState {
 	}
 	if t.Heads == nil {
 		t.Heads = map[string]uint64{}
+	}
+	if t.Rhythms == nil {
+		t.Rhythms = map[string]string{}
 	}
 	return t
 }

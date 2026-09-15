@@ -143,6 +143,29 @@ func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	rhythms := []agent.Rhythm{}
+	for _, rh := range in.Rhythms {
+		rh.Name, rh.At = strings.TrimSpace(rh.Name), strings.TrimSpace(rh.At)
+		rh.Prompt, rh.Zone = strings.TrimSpace(rh.Prompt), strings.TrimSpace(rh.Zone)
+		if rh.At == "" {
+			continue
+		}
+		if ok, _ := rh.Due(time.Now(), "never"); !ok {
+			// Due says no for a bad clock as well as for "not yet", so
+			// check the format explicitly rather than by its answer.
+			if _, _, good := agent.ParseClock(rh.At); !good {
+				http.Error(w, "a time should look like 07:30", http.StatusBadRequest)
+				return
+			}
+		}
+		if rh.Name == "" {
+			rh.Name = rh.At
+		}
+		if len(rhythms) >= 6 {
+			break
+		}
+		rhythms = append(rhythms, rh)
+	}
 	ctx := r.Context()
 	tl, err := a.Store.Thread(ctx, id)
 	if err != nil {
@@ -155,7 +178,7 @@ func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
 		refs = &protolog.Refs{Supersedes: prev.ID}
 	}
 	body := map[string]any{"text": strings.TrimSpace(in.Text), "on_new_entry": in.OnNewEntry, "every": in.Every,
-		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools}
+		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools, "rhythms": rhythms}
 	e, err := a.personAppend(ctx, id, protolog.Draft{Kind: agent.KindBrief, Lane: protolog.LaneContent, Refs: refs, Body: body})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)

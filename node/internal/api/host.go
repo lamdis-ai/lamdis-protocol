@@ -50,6 +50,8 @@ type Host struct {
 	StarterCap  float64
 	KeyCeiling  float64
 	MaxAccounts int
+	// Try, when set, serves the public demo alongside the accounts.
+	Try *Try
 
 	Now  func() time.Time
 	Logf func(format string, args ...any)
@@ -133,6 +135,19 @@ func (h *Host) Start(ctx context.Context) error {
 	}
 	h.logf("host: %d accounts running", n)
 	return nil
+}
+
+// Close releases every account's database. Used by tests and by a shutdown
+// that wants to leave the files consistent.
+func (h *Host) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, a := range h.accounts {
+		if a.Store != nil {
+			a.Store.Close()
+		}
+	}
+	h.accounts = map[string]*Account{}
 }
 
 // Count is how many accounts exist.
@@ -392,6 +407,13 @@ func (h *Host) Handler() http.Handler {
 	// serves many nodes and a capability names a thread, not a person.
 	mux.HandleFunc("GET /s/{acct}/{cap}", h.shared)
 	mux.HandleFunc("GET /s/{acct}/{cap}/api/thread", h.shared)
+
+	// The public demo, if this host offers one, so the site and the app can
+	// live at one address.
+	if h.Try != nil {
+		demo := h.Try.Handler()
+		mux.Handle("/v1/try", demo)
+	}
 
 	// Peer sync, per account, so a laptop can pair with its hosted node.
 	mux.HandleFunc("/n/{acct}/", func(w http.ResponseWriter, r *http.Request) {

@@ -28,7 +28,8 @@ const (
 	TriggerSchedule = "schedule"
 	TriggerManual   = "manual"
 	TriggerDecision = "decision"
-	TriggerCode     = "code" // a task at the terminal, in a workspace
+	TriggerCode     = "code"    // a task at the terminal, in a workspace
+	TriggerReflect  = "reflect" // a time of day it stands back and thinks
 )
 
 // Runner is the agent. One instance per node; runs are serialised.
@@ -68,6 +69,10 @@ type Trigger struct {
 	// Chain is how many agent-caused entries led here; bounds ping-pong
 	// between two people's agents on a shared thread.
 	Chain int
+	// Rhythm is set on a reflecting run: the name and the question the
+	// person attached to this hour.
+	Rhythm string
+	Prompt string
 }
 
 // Result is what a run produced.
@@ -195,7 +200,11 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		return Result{Outcome: "error", Error: "No model is configured. Add an OpenRouter key in Settings, or point at a local model server."}
 	}
 
-	rec := runRec{Trigger: t.Kind, Entry: t.Entry, Chain: t.Chain, Model: modelName,
+	trigger := t.Kind
+	if t.Kind == TriggerReflect && t.Rhythm != "" {
+		trigger = "reflect:" + t.Rhythm
+	}
+	rec := runRec{Trigger: trigger, Entry: t.Entry, Chain: t.Chain, Model: modelName,
 		Threads: []string{}, ToolCalls: []string{}, Tokens: map[string]int{"prompt": 0, "completion": 0}}
 	res := Result{}
 	fail := func(msg string) Result {
@@ -538,6 +547,18 @@ func (r *Runner) contextFor(ctx context.Context, t Trigger, tl *protolog.ThreadL
 		sb.WriteString("A new entry arrived from " + who + " (entry " + t.Entry + "). Follow your standing instructions. If they do not apply, reply NOTHING.")
 	case TriggerSchedule:
 		sb.WriteString("This is a scheduled run. Follow your standing instructions. If there is nothing to do, reply NOTHING.")
+	case TriggerReflect:
+		name := t.Rhythm
+		if name == "" {
+			name = "quiet"
+		}
+		sb.WriteString("This is your " + name + " pass. Nothing has necessarily happened; the point is to stand back and look at the whole thing rather than react to the last entry.\n\n")
+		if t.Prompt != "" {
+			sb.WriteString(r.name(r.Person) + " asked you to think about this, at this hour:\n" + strings.TrimSpace(t.Prompt) + "\n\n")
+		}
+		sb.WriteString("Read across the threads you can see, use your tools if they help, and write one short note worth waking up to. " +
+			"Say something only if it is worth the interruption: something that changed, something that contradicts, something with a date coming, or something nobody has decided. " +
+			"If there is genuinely nothing, reply NOTHING.")
 	default:
 		sb.WriteString("The person asked you to run now. Follow your standing instructions; if there are none, review the thread and note anything open, or reply NOTHING.")
 	}

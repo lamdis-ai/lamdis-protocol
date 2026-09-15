@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/perm"
@@ -351,5 +352,72 @@ func TestRevokeSeversEverywhere(t *testing.T) {
 	}
 	if HasAgentKey(f.dir) {
 		t.Fatal("agent key still on disk")
+	}
+}
+
+// A rhythm is a time of day, once a day. The interesting cases are all
+// about not firing: too early, already done, and long past the hour.
+func TestRhythmFiresOnceADayInItsWindow(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/London")
+	if err != nil {
+		t.Skip("no tzdata")
+	}
+	r := Rhythm{Name: "morning", At: "07:30", Zone: "Europe/London", Prompt: "what needs me today?"}
+	day := func(h, m int) time.Time { return time.Date(2026, 9, 15, h, m, 0, 0, loc) }
+
+	if due, _ := r.Due(day(7, 29), ""); due {
+		t.Fatal("fired a minute early")
+	}
+	due, today := r.Due(day(7, 30), "")
+	if !due || today != "2026-09-15" {
+		t.Fatalf("did not fire on the hour: %v %q", due, today)
+	}
+	if due, _ := r.Due(day(9, 0), ""); !due {
+		t.Fatal("did not fire an hour and a half late")
+	}
+	if due, _ := r.Due(day(9, 0), "2026-09-15"); due {
+		t.Fatal("fired twice in one day")
+	}
+	if due, _ := r.Due(day(23, 0), ""); due {
+		t.Fatal("a morning rhythm went off at eleven at night")
+	}
+	if due, _ := r.Due(day(8, 0), "2026-09-14"); !due {
+		t.Fatal("yesterday's run blocked today's")
+	}
+	// The zone is the person's, not the server's.
+	utcMorning := time.Date(2026, 9, 15, 6, 40, 0, 0, time.UTC) // 07:40 in London
+	if due, _ := r.Due(utcMorning, ""); !due {
+		t.Fatal("the rhythm ignored its time zone")
+	}
+	for _, bad := range []string{"", "7:30pm", "25:00", "07:70", "noon"} {
+		if due, _ := (Rhythm{At: bad}).Due(day(12, 0), ""); due {
+			t.Fatalf("%q was accepted as a time", bad)
+		}
+	}
+}
+
+// A reflecting run is told to stand back, and is given the person's own
+// question for that hour.
+func TestReflectingRunCarriesItsQuestion(t *testing.T) {
+	m := &script{turns: []Message{say("Two things are open and the bank date is in three weeks.")}}
+	f := setup(t, m)
+	f.post(t, KindNote, map[string]any{"text": "Bank wants the drawdown paperwork by the 30th."}, nil)
+	res := f.r.Run(context.Background(), Trigger{Kind: TriggerReflect, Thread: f.thread,
+		Rhythm: "evening", Prompt: "anything I should sleep on?"})
+	if res.Outcome != "posted" {
+		t.Fatalf("a reflecting run should be able to post: %+v", res)
+	}
+	var run *protolog.Entry
+	for _, e := range f.entries(t) {
+		if e.Kind == KindRun {
+			run = e
+		}
+	}
+	var rb struct {
+		Trigger string `json:"trigger"`
+	}
+	json.Unmarshal(run.Body, &rb)
+	if rb.Trigger != "reflect:evening" {
+		t.Fatalf("the run record does not name the rhythm: %q", rb.Trigger)
 	}
 }

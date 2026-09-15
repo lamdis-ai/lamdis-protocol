@@ -83,6 +83,11 @@ select{background:var(--bg);border:1px solid var(--line2);border-radius:10px;pad
 @media(max-width:560px){.grid2{grid-template-columns:1fr}}
 .check{display:flex;align-items:center;gap:.5rem;font-size:.86rem;color:var(--ink2);padding:.3rem 0}
 .check input{width:auto}
+.rh{display:grid;grid-template-columns:7.5rem 1fr auto;gap:.5rem;align-items:center;margin-top:.45rem}
+.rh input[type=time]{font-family:var(--mono);font-size:.84rem}
+.rh .x{color:var(--ink4);font-size:1rem;padding:0 .4rem}
+.rh .x:hover{color:var(--red)}
+.presets{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.55rem}
 .thinking{font:.78rem/1.5 var(--mono);color:#7DD3FC;animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
 .me{border-top:1px solid var(--line);padding:.8rem 1.4rem;display:flex;align-items:center;gap:.7rem}
@@ -228,7 +233,7 @@ function runRow(e){var d=dataOf(e);
   if(d.tokens)more.push("tokens: "+(d.tokens.prompt||0)+" in, "+(d.tokens.completion||0)+" out · "+Math.round((d.duration_ms||0)/1000)+"s · "+esc(d.model||"")+(cost(d)?" · "+cost(d):""));
   if(d.problems&&d.problems.length)more.push("problems: "+d.problems.join("; "));
   if(d.error)more.push("error: "+d.error);
-  return '<div class="run'+(d.outcome==="error"?' bad':'')+'"><span>'+esc(when(e.ts))+'</span><details><summary>agent ran ('+esc(d.trigger||"")+') · '+esc(e.text)+(cost(d)?' · '+cost(d):'')+'</summary><div class="more">'+esc(more.join("\n"))+'</div></details></div>'}
+  return '<div class="run'+(d.outcome==="error"?' bad':'')+'"><span>'+esc(when(e.ts))+'</span><details><summary>'+(String(d.trigger||"").indexOf("reflect")===0?esc(String(d.trigger).replace("reflect:","")+" pass"):"agent ran ("+esc(d.trigger||"")+")")+' · '+esc(e.text)+(cost(d)?' · '+cost(d):'')+'</summary><div class="more">'+esc(more.join("\n"))+'</div></details></div>'}
 function decisionCard(e,all){var reply=all.filter(function(x){return x.kind==="agent.decision_reply"&&x.replies_to===e.id})[0];
   var h='<article class="entry agent">'+meta(e,'<span class="tag">needs your call</span>')+'<div class="decision"><div class="ask">'+body(e.text)+'</div>';
   if(reply){var r=dataOf(reply);h+='<div class="done">You answered: '+esc((r.choice||"")+(r.text?" "+r.text:""))+'</div>'}
@@ -288,6 +293,10 @@ function agentSheet(){if(!cur)return;
     '<label class="f" for="brief">Standing instructions</label><textarea id="brief" rows="4" placeholder="Example: When the other side posts a price, compare it with our position in [[Q3 payments migration]] and note the gap. Ask me before agreeing to anything.">'+esc(b.text||"")+'</textarea>'+
     '<div class="grid2"><div><label class="f">Act when a new entry arrives</label><select id="b-on"><option value="off">No</option><option value="others">From other people</option><option value="all">From anyone, including me</option></select></div>'+
     '<div><label class="f">Also run on a schedule</label><select id="b-every"><option value="">No</option><option value="1h">Every hour</option><option value="6h">Every 6 hours</option><option value="24h">Once a day</option></select></div></div>'+
+    '<label class="f">When it stops and thinks</label>'+
+    '<p class="hint" style="margin-top:0">Reacting to what arrives is not the same as standing back. Give it an hour and a question, like you would give yourself.</p>'+
+    '<div id="rhythms"></div>'+
+    '<div class="presets"><button class="btn sm" data-preset="morning">+ Morning review</button><button class="btn sm" data-preset="evening">+ Evening reflection</button><button class="btn sm" data-preset="blank">+ Another time</button></div>'+
     '<label class="f">On its own, it may also use</label>'+
     '<label class="check"><input type="checkbox" id="b-web"> The web, on these domains: <input id="b-dom" placeholder="*.sec.gov, docs.stripe.com" style="flex:1"></label>'+
     (reach.allow_domains&&reach.allow_domains.length?'<p class="hint">Always allowed (from settings): '+esc(reach.allow_domains.join(", "))+'</p>':'')+
@@ -297,9 +306,27 @@ function agentSheet(){if(!cur)return;
     '</section><footer><button class="btn" id="b-run">Run now</button><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" id="b-save">Save</button></footer>');
     s.querySelector("[data-x]").onclick=closeSheet;
     s.querySelector("#b-on").value=b.on_new_entry||"off";s.querySelector("#b-every").value=b.every||"";s.querySelector("#b-web").checked=!!b.web;s.querySelector("#b-dom").value=(b.allow_domains||[]).join(", ");
+    var zone="";try{zone=Intl.DateTimeFormat().resolvedOptions().timeZone||""}catch(e){}
+    var rhythms=(b.rhythms||[]).slice();
+    function drawRhythms(){var el=s.querySelector("#rhythms");
+      el.innerHTML=rhythms.map(function(r,i){return '<div class="rh"><input type="time" value="'+esc(r.at||"")+'" data-rh-at="'+i+'">'+
+        '<input value="'+esc(r.prompt||"")+'" placeholder="what should it think about?" data-rh-prompt="'+i+'">'+
+        '<button class="x" data-rh-x="'+i+'" title="Remove">×</button></div>'}).join("");
+      Array.prototype.forEach.call(el.querySelectorAll("[data-rh-at]"),function(n){n.oninput=function(){rhythms[+n.getAttribute("data-rh-at")].at=n.value}});
+      Array.prototype.forEach.call(el.querySelectorAll("[data-rh-prompt]"),function(n){n.oninput=function(){rhythms[+n.getAttribute("data-rh-prompt")].prompt=n.value}});
+      Array.prototype.forEach.call(el.querySelectorAll("[data-rh-x]"),function(n){n.onclick=function(){rhythms.splice(+n.getAttribute("data-rh-x"),1);drawRhythms()}});
+    }
+    drawRhythms();
+    Array.prototype.forEach.call(s.querySelectorAll("[data-preset]"),function(btn){btn.onclick=function(){
+      var k=btn.getAttribute("data-preset");
+      if(k==="morning")rhythms.push({name:"morning",at:"07:30",zone:zone,prompt:"What needs me today, and did anything slip?"});
+      else if(k==="evening")rhythms.push({name:"evening",at:"21:30",zone:zone,prompt:"Go back over today. Anything contradict what we agreed, or worth sleeping on?"});
+      else rhythms.push({name:"",at:"12:00",zone:zone,prompt:""});
+      drawRhythms()}});
     Array.prototype.forEach.call(s.querySelectorAll("[data-tool]"),function(c){c.checked=(b.tools||[]).indexOf(c.getAttribute("data-tool"))>=0});
     var read=function(){var doms=s.querySelector("#b-dom").value.split(",").map(function(x){return x.trim()}).filter(Boolean);
-      return {text:s.querySelector("#brief").value,on_new_entry:s.querySelector("#b-on").value,every:s.querySelector("#b-every").value,web:s.querySelector("#b-web").checked,allow_domains:doms,
+      var rl=rhythms.filter(function(r){return r.at}).map(function(r){return {name:r.name||"",at:r.at,zone:r.zone||zone,prompt:r.prompt||""}});
+      return {text:s.querySelector("#brief").value,on_new_entry:s.querySelector("#b-on").value,every:s.querySelector("#b-every").value,web:s.querySelector("#b-web").checked,allow_domains:doms,rhythms:rl,
         tools:Array.prototype.filter.call(s.querySelectorAll("[data-tool]"),function(c){return c.checked}).map(function(c){return c.getAttribute("data-tool")})}};
     s.querySelector("#b-save").onclick=function(){api("/app/api/thread/"+tid()+"/brief",read()).then(function(r){if(r.error){alert(r.error);return}closeSheet();open(cur)})};
     s.querySelector("#b-run").onclick=function(){var btn=s.querySelector("#b-run");btn.disabled=true;btn.textContent="Running…";

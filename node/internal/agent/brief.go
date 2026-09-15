@@ -2,6 +2,9 @@ package agent
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
 
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 )
@@ -32,9 +35,71 @@ type Brief struct {
 	AllowDomains []string `json:"allow_domains,omitempty"`
 	// Tools are "server.tool" names autonomous runs may call.
 	Tools []string `json:"tools,omitempty"`
+	// Rhythms are times of day this thread's agent stops and thinks, each
+	// with its own question. Reacting to what arrives is not the same as
+	// standing back and looking at the whole thing, and a person does both
+	// at different hours; this is how you say when and about what.
+	Rhythms []Rhythm `json:"rhythms,omitempty"`
 
 	ID string `json:"-"`
 	TS string `json:"-"`
+}
+
+// Rhythm is one time of day the agent thinks rather than reacts.
+type Rhythm struct {
+	Name   string `json:"name"`
+	At     string `json:"at"`             // "07:30", in Zone
+	Zone   string `json:"zone,omitempty"` // IANA name; empty means this machine's time
+	Prompt string `json:"prompt"`
+}
+
+// Due reports whether this rhythm should run now, given the date string of
+// the last time it did. It fires once a day, only after its hour, and only
+// within a window: a rhythm you slept through is a rhythm you missed, not
+// something to spring on somebody at midnight.
+func (r Rhythm) Due(now time.Time, lastRun string) (bool, string) {
+	hh, mm, ok := parseClock(r.At)
+	if !ok {
+		return false, ""
+	}
+	loc := time.Local
+	if r.Zone != "" {
+		if l, err := time.LoadLocation(r.Zone); err == nil {
+			loc = l
+		}
+	}
+	local := now.In(loc)
+	today := local.Format("2006-01-02")
+	if lastRun == today {
+		return false, today
+	}
+	at := time.Date(local.Year(), local.Month(), local.Day(), hh, mm, 0, 0, loc)
+	if local.Before(at) {
+		return false, today
+	}
+	if local.Sub(at) > rhythmWindow {
+		return false, today
+	}
+	return true, today
+}
+
+const rhythmWindow = 4 * time.Hour
+
+// ParseClock reads "07:30".
+func ParseClock(s string) (int, int, bool) { return parseClock(s) }
+
+func parseClock(s string) (int, int, bool) {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, ":")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	h, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	m, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, 0, false
+	}
+	return h, m, true
 }
 
 // LoadBrief returns the latest brief the person themselves wrote. Only the

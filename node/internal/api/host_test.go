@@ -21,6 +21,7 @@ func testHost(t *testing.T) (*Host, *rsa.PrivateKey, map[string]any, http.Handle
 	if err := h.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(h.Close)
 	return h, key, claims, h.Handler()
 }
 

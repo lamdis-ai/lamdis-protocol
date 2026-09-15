@@ -38,7 +38,7 @@ func main() {
 	}
 }
 
-var commandNames = []string{"help", "-h", "--help", "app", "keys", "host", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
+var commandNames = []string{"help", "-h", "--help", "app", "keys", "host", "try-server", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
 	"whoami", "thread", "threads", "post", "read", "search", "mcp", "serve", "peer", "peers", "sync", "share",
 	"discover", "request", "requests", "approve", "deny", "grant", "revoke", "access"}
 
@@ -99,6 +99,9 @@ commands:
 
   app                         open your threads in a browser (starts the node
                               if it isn't running already)
+  try-server [-addr :8090]    the public demo behind the website: one question,
+                              one answer, nothing stored. Hard rate limits.
+
   host [-addr :8080]          run many people's nodes from one process, signed
        [-root DIR]            in against a hosted user pool. One directory per
                               account, each a normal node anyone can take away.
@@ -204,6 +207,9 @@ func run(args []string) error {
 	case "host":
 		// Many people's nodes in one process. Opens its own stores.
 		return cmdHost(ctx, rest)
+	case "try-server":
+		// The public demo behind the website. Holds nothing.
+		return cmdTryServer(ctx, rest)
 	case "whoami":
 		_, pid, err := loadKey(*dataDir)
 		if err != nil {

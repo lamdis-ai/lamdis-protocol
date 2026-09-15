@@ -161,6 +161,27 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 			}
 			s.State.Update(now, func(state *State) { state.thread(id).Pending = "" })
 		}
+		// Rhythms: the hours this thread's agent stands back and thinks.
+		// Marked as run before the run happens, so a failure is a missed
+		// morning rather than a loop.
+		if has {
+			for _, rh := range brief.Rhythms {
+				if rh.At == "" {
+					continue
+				}
+				name := rh.Name
+				if name == "" {
+					name = rh.At
+				}
+				var last string
+				s.State.Update(now, func(st *State) { last = st.thread(id).Rhythms[name] })
+				if due, today := rh.Due(now, last); due {
+					s.State.Update(now, func(st *State) { st.thread(id).Rhythms[name] = today })
+					fire = append(fire, Trigger{Kind: TriggerReflect, Thread: id, Rhythm: name, Prompt: rh.Prompt})
+				}
+			}
+		}
+
 		// Schedule.
 		if has && brief.Every != "" {
 			if every, err := time.ParseDuration(brief.Every); err == nil && every >= 10*time.Minute {
