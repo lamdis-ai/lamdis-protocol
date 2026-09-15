@@ -214,6 +214,9 @@ function threads(){return api("/app/api/threads").then(function(d){var el=$("thr
     return '<button class="thread" data-id="'+esc(t.id)+'" aria-current="'+(t.id===cur)+'"><div class="name">'+esc(t.title)+'</div><div class="sub">'+esc(sub.join(" · "))+pips+'</div></button>'}).join("");
   window._threads=d.threads;
   Array.prototype.forEach.call(el.querySelectorAll(".thread"),function(n){n.onclick=function(){open(n.getAttribute("data-id"))}});
+  // Land in a thread rather than on a menu: somebody who has just arrived
+  // wants the cursor blinking, not another button to press.
+  if(!cur&&d.threads.length){open(d.threads[0].id);return}
   if(!cur)empty()})}
 
 function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("agentbtn").hidden=true;$("more").hidden=true;

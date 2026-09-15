@@ -132,10 +132,10 @@ func TestHostedAccountIsAPortableNode(t *testing.T) {
 	if info, err := os.Stat(filepath.Join(dir, "person.key")); err == nil && info.Mode().Perm() != 0o600 {
 		t.Fatalf("person key is %v, want 0600", info.Mode().Perm())
 	}
-	// The welcome thread is there so a new person has something to look at.
+	// A new account lands in an empty thread, ready to be typed into.
 	w := call(handler, "GET", "/app/api/threads", as(t, key, claims, "sam-subject", "sam@example.com"), "")
-	if !strings.Contains(w.Body.String(), "Getting started") {
-		t.Fatalf("no welcome thread: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), `"title":"Notes"`) {
+		t.Fatalf("no thread to start in: %s", w.Body.String())
 	}
 }
 
@@ -191,5 +191,87 @@ func TestHostServesThePageToAnyone(t *testing.T) {
 	}
 	if w := call(handler, "GET", "/", "", ""); w.Code != http.StatusFound {
 		t.Fatalf("/ should send people to the app: %d", w.Code)
+	}
+}
+
+// The first visit asks nothing. Somebody arrives, gets a node of their own,
+// and can write in it before anybody has asked who they are.
+func TestAnyoneCanStartWithoutSigningUp(t *testing.T) {
+	h, key, claims, handler := testHost(t)
+	h.Guests = true
+
+	w := call(handler, "POST", "/app/api/start", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("start: %d %s", w.Code, w.Body.String())
+	}
+	var started struct {
+		Token string `json:"token"`
+		Guest bool   `json:"guest"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &started)
+	if started.Token == "" || !started.Guest {
+		t.Fatalf("no visitor token: %s", w.Body.String())
+	}
+
+	// That token works straight away, on a node with something to type into.
+	w = call(handler, "GET", "/app/api/threads", started.Token, "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"title":"Notes"`) {
+		t.Fatalf("a visitor could not open their own node: %d %s", w.Code, w.Body.String())
+	}
+	guestThread := firstThread(t, handler, started.Token)
+	w = call(handler, "POST", "/app/api/post", started.Token,
+		`{"thread":"`+guestThread+`","text":"Roof quote came in at 4,800.","lane":"content"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("a visitor could not write: %d %s", w.Code, w.Body.String())
+	}
+
+	// A forged token is nothing.
+	bad := started.Token[:len(started.Token)-3] + "aaa"
+	if w := call(handler, "GET", "/app/api/threads", bad, ""); w.Code == http.StatusOK {
+		t.Fatal("a tampered visitor token was accepted")
+	}
+
+	// Signing in keeps the node rather than starting another one.
+	r := httptest.NewRequest("GET", "/app/api/threads", nil)
+	r.Header.Set("Authorization", "Bearer "+as(t, key, claims, "sam-subject", "sam@example.com"))
+	r.Header.Set("X-Lamdis-Guest", started.Token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), guestThread) {
+		t.Fatalf("signing in lost the node the visitor was using: %d %s", rec.Code, rec.Body.String())
+	}
+	if h.Count() != 1 {
+		t.Fatalf("signing in made a second node: %d accounts", h.Count())
+	}
+	// And on the next visit, without the visitor token, it is still theirs,
+	// with what they wrote still in it.
+	if got := firstThread(t, handler, as(t, key, claims, "sam-subject", "sam@example.com")); got != guestThread {
+		t.Fatalf("the attached node was not found again: %s vs %s", got, guestThread)
+	}
+	w = call(handler, "GET", "/app/api/thread/"+guestThread, as(t, key, claims, "sam-subject", "sam@example.com"), "")
+	if !strings.Contains(w.Body.String(), "Roof quote") {
+		t.Fatalf("what the visitor wrote did not survive signing in: %s", w.Body.String())
+	}
+}
+
+func firstThread(t *testing.T, h http.Handler, token string) string {
+	t.Helper()
+	w := call(h, "GET", "/app/api/threads", token, "")
+	var out struct {
+		Threads []struct {
+			ID string `json:"id"`
+		} `json:"threads"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &out)
+	if len(out.Threads) == 0 {
+		t.Fatal("no threads")
+	}
+	return out.Threads[0].ID
+}
+
+func TestGuestsCanBeTurnedOff(t *testing.T) {
+	_, _, _, handler := testHost(t) // Guests defaults to false
+	if w := call(handler, "POST", "/app/api/start", "", ""); w.Code != http.StatusForbidden {
+		t.Fatalf("a host with guests off still handed out nodes: %d", w.Code)
 	}
 }

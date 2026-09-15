@@ -41,6 +41,9 @@ type Host struct {
 	Cognito *Cognito
 	// Model is the default model id for new accounts.
 	Model string
+	// SharedKey is a model credential every account falls back to when it
+	// has none of its own. Cap it: everyone on this host spends it.
+	SharedKey string
 	// SignIn tells the page where to send people to prove who they are.
 	SignIn SignIn
 	// Starter mints a capped key for each new account while the ceiling
@@ -50,6 +53,10 @@ type Host struct {
 	StarterCap  float64
 	KeyCeiling  float64
 	MaxAccounts int
+	// Guests lets somebody start without saying who they are. The node is
+	// real from the first keystroke; signing in later attaches an identity
+	// to it rather than moving anything.
+	Guests bool
 	// Try, when set, serves the public demo alongside the accounts.
 	Try *Try
 
@@ -58,6 +65,7 @@ type Host struct {
 
 	mu       sync.Mutex
 	accounts map[string]*Account
+	secret   []byte
 	ctx      context.Context
 }
 
@@ -137,6 +145,18 @@ func (h *Host) Start(ctx context.Context) error {
 	return nil
 }
 
+// sharedModel is the fallback credential, or nil when each account brings
+// its own.
+func (h *Host) sharedModel() agent.Model {
+	if h.SharedKey == "" {
+		return nil
+	}
+	if m := agent.NewOpenRouter(h.SharedKey, h.Model); m != nil {
+		return m
+	}
+	return nil
+}
+
 // Close releases every account's database. Used by tests and by a shutdown
 // that wants to leave the files consistent.
 func (h *Host) Close() {
@@ -200,7 +220,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	}
 	state := agent.LoadState(dir)
 	runner := &agent.Runner{Store: st, PersonKey: key, Person: self, AgentKey: agentKey, Agent: agentPID,
-		ModelName: h.Model, DataDir: dir, State: state,
+		Model: h.sharedModel(), ModelName: h.Model, DataDir: dir, State: state,
 		Names: func(p string) string { return "" },
 		Logf:  func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched := &agent.Scheduler{Runner: runner, State: state,
@@ -247,23 +267,13 @@ func (h *Host) load(id, email string) (*Account, error) {
 	return acct, nil
 }
 
-// welcome gives a brand-new account something to look at and, while the
-// ceiling allows, a capped key so the agent works on the first question.
+// welcome opens an empty thread and, while the ceiling allows, gives the
+// account a capped key so the agent answers the very first question. No
+// explanatory note: somebody who has just arrived wants to type their own
+// thing, and the empty thread already says so.
 func (h *Host) welcome(a *Account) {
-	tl, genesis, err := protolog.NewThreadWith(a.Key, "Getting started", false, nil)
-	if err == nil {
-		_ = tl
-		if err := a.Store.AppendEntries(context.Background(), []*protolog.Entry{genesis}); err == nil {
-			if author, err := protolog.NewAuthor(mustThread(a.Store, genesis.ID), a.Key); err == nil {
-				e, err := author.Append(protolog.Draft{Kind: protolog.KindMessage, Lane: protolog.LaneContent,
-					Body: map[string]any{"text": "This is a thread. Write notes here, ask your agent questions, " +
-						"and give it standing instructions with the Agent button so it keeps working when you are not. " +
-						"Everything anyone writes here, your agent included, stays in this record, and you decide who sees it."}})
-				if err == nil {
-					a.Store.AppendEntries(context.Background(), []*protolog.Entry{e})
-				}
-			}
-		}
+	if _, genesis, err := protolog.NewThreadWith(a.Key, "Notes", false, nil); err == nil {
+		a.Store.AppendEntries(context.Background(), []*protolog.Entry{genesis})
 	}
 	h.grantStarterKey(a)
 }
@@ -299,11 +309,6 @@ func (h *Host) grantStarterKey(a *Account) {
 		return
 	}
 	h.logf("host: starter key for %s, cap $%.2f", a.ID, k.Limit)
-}
-
-func mustThread(s store.Store, id string) *protolog.ThreadLog {
-	tl, _ := s.Thread(context.Background(), id)
-	return tl
 }
 
 // loadOrMintPersonKey uses the same file a local node does, so an account
@@ -353,11 +358,16 @@ func hostSync(ctx context.Context, dir string, s store.Store, key ed25519.Privat
 	return first
 }
 
-// resolve turns a request's bearer token into that person's node.
+// resolve turns a request's bearer token into that person's node. A visitor
+// token names a node directly; an email token is looked up, following an
+// earlier attachment when there is one.
 func (h *Host) resolve(r *http.Request) (*Account, error) {
 	tok := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 	if tok == "" {
-		return nil, fmt.Errorf("sign in")
+		return nil, fmt.Errorf("start first")
+	}
+	if id, ok := h.readGuest(tok); ok {
+		return h.load(id, "")
 	}
 	claims, err := h.Cognito.Verify(tok)
 	if err != nil {
@@ -366,7 +376,16 @@ func (h *Host) resolve(r *http.Request) (*Account, error) {
 	if !claims.EmailVerified {
 		return nil, fmt.Errorf("confirm your email address first")
 	}
-	return h.load(accountID(claims.Subject), claims.Email)
+	// Somebody who started as a visitor and is now signing in keeps the node
+	// they have been using.
+	if g := strings.TrimSpace(r.Header.Get("X-Lamdis-Guest")); g != "" {
+		if id, ok := h.readGuest(g); ok {
+			if _, err := os.Stat(filepath.Join(h.Root, id, "subject")); os.IsNotExist(err) {
+				return h.attach(claims.Subject, claims.Email, id)
+			}
+		}
+	}
+	return h.accountFor(claims.Subject, claims.Email)
 }
 
 // Handler is the whole hosted surface.
@@ -387,6 +406,9 @@ func (h *Host) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /app", page)
 	mux.HandleFunc("GET /app/{$}", page)
+	// Starting is public: that is the whole point of it.
+	mux.HandleFunc("POST /app/api/start", h.handleStart)
+
 	mux.HandleFunc("GET /app/app.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")

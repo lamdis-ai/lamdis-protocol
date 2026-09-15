@@ -155,7 +155,9 @@ func (r *Runner) ModelFor(cfg Config) (Model, string) {
 	if base != nil {
 		key, name, url = base.Key, base.Model, base.BaseURL
 	}
-	if key == "" {
+	// What the person set in Settings wins over whatever the process was
+	// started with, so changing it takes effect without a restart.
+	if cfg.OpenRouterKey != "" {
 		key = cfg.OpenRouterKey
 	}
 	forBase := false

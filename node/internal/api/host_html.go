@@ -14,6 +14,8 @@ import (
 const hostMark = `<svg viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true" style="width:26px;height:28px;color:var(--gold)"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg>`
 
 const hostCSS = `
+/* A class that sets display beats the hidden attribute, so say it once. */
+[hidden]{display:none!important}
 .gate{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);padding:1.5rem}
 .gate .box{max-width:23rem;text-align:center;animation:rise .4s both}
 .gate .glyphwrap{display:flex;justify-content:center;margin-bottom:1.4rem}
@@ -43,11 +45,12 @@ func hostedAppHTML(cfg SignIn) string {
 <div class="gate" id="gate" hidden>
   <div class="box">
     <div class="glyphwrap">` + hostMark + `</div>
-    <h1>Your agent, your record</h1>
-    <p>Write things down, ask your agent, and let it keep working when you close the tab. Sign in with your email to begin.</p>
+    <h1>Keep this</h1>
+    <p>You have been using this without an account. Add your email and the same threads follow you to any browser, and stay yours.</p>
     <button class="btn solid" id="go">Continue with email</button>
+    <button class="btn" id="back" style="width:100%;justify-content:center;margin-top:.5rem">Not now</button>
     <div class="err" id="err"></div>
-    <div class="fine">Your threads are yours. You can take them with you at any time, and run the same thing on your own machine.</div>
+    <div class="fine">Nothing moves. The node you have been writing in simply gains a way back to it.</div>
   </div>
 </div>
 <div class="booting" id="booting">opening your record…</div>
@@ -144,37 +147,62 @@ function fresh(){
   return refresh();
 }
 
-// Every call the application makes carries the session. It does not know.
+// Every call the application makes carries whoever this is. It does not know.
 var rawFetch = window.fetch.bind(window);
 window.fetch = function(p, o){
   if(typeof p !== "string" || p.indexOf("/app/api") !== 0) return rawFetch(p, o);
   var send = function(){
     var opts = Object.assign({}, o || {});
-    opts.headers = Object.assign({}, opts.headers || {}, { Authorization: "Bearer " + (sess ? sess.id : "") });
+    var h = Object.assign({}, opts.headers || {});
+    h.Authorization = "Bearer " + bearer();
+    var g = guestToken();
+    if(g) h["X-Lamdis-Guest"] = g;
+    opts.headers = h;
     return rawFetch(p, opts);
   };
+  if(!sess || sess.guest) return send();
   return fresh().then(send, send).then(function(r){
     if(r.status !== 401) return r;
-    return refresh().then(send, function(){ signOutSoft(); return r });
+    return refresh().then(send, function(){ return r });
   });
 };
-function signOutSoft(){ clearSession(); location.reload() }
+function bearer(){ return sess ? (sess.id || sess.guest || "") : "" }
+function guestToken(){ try{ return localStorage.getItem("lamdis.guest") || "" }catch(e){ return "" } }
 
 function show(what){
   document.getElementById("booting").hidden = what !== "booting";
   document.getElementById("gate").hidden = what !== "gate";
   document.getElementById("shell").hidden = what !== "app";
 }
+
+// Starting is the whole point: no question is asked before the first one
+// the person wants to ask.
+function startAsGuest(){
+  return rawFetch("/app/api/start", {method:"POST"}).then(function(r){ return r.json() }).then(function(d){
+    if(d.error) throw new Error(d.error);
+    try{ localStorage.setItem("lamdis.guest", d.token) }catch(e){}
+    saveSession({ guest: d.token });
+  });
+}
+
 function boot(){
   show("app");
-  document.getElementById("who-email").textContent = (sess && sess.email) || "";
-  document.getElementById("signout").onclick = signOut;
-  var s = document.createElement("script");
-  s.src = "/app/app.js";
-  document.body.appendChild(s);
+  var signedIn = sess && sess.id;
+  document.getElementById("who-email").textContent = signedIn ? (sess.email || "signed in") : "Not saved to an account";
+  var b = document.getElementById("signout");
+  b.textContent = signedIn ? "Sign out" : "Keep this";
+  b.onclick = signedIn ? signOut : function(){ show("gate") };
+  if(!window._appLoaded){
+    window._appLoaded = true;
+    var el = document.createElement("script");
+    el.src = "/app/app.js";
+    document.body.appendChild(el);
+  }
 }
 
 document.getElementById("go").onclick = signIn;
+document.getElementById("back").onclick = function(){ show("app") };
+
 sess = loadSession();
 (function start(){
   var q = new URLSearchParams(location.search);
@@ -186,9 +214,17 @@ sess = loadSession();
     }).catch(function(e){ show("gate"); document.getElementById("err").textContent = e.message });
     return;
   }
-  if(sess){ fresh().then(boot, function(){ clearSession(); show("gate") }); return }
-  show("gate");
+  if(sess && sess.id){ fresh().then(boot, function(){ clearSession(); startAsGuest().then(boot, failed) }); return }
+  if(sess && sess.guest){ boot(); return }
+  var g = guestToken();
+  if(g){ saveSession({ guest: g }); boot(); return }
+  startAsGuest().then(boot, failed);
 })();
+
+function failed(e){
+  document.getElementById("booting").textContent =
+    (e && e.message) ? e.message : "could not start; try again in a moment";
+}
 </script></body></html>`
 }
 

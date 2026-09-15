@@ -27,18 +27,19 @@ func cmdHost(ctx context.Context, args []string) error {
 	root := fs.String("root", envOr("LAMDIS_ACCOUNTS", "/data/accounts"), "directory holding one folder per account")
 	maxAccounts := fs.Int("max-accounts", envInt("LAMDIS_MAX_ACCOUNTS", 25), "refuse new sign-ups past this many accounts")
 	starterCap := fs.Float64("starter", envFloat("LAMDIS_STARTER_CAP", 0.5), "credit to give each new account, in dollars; 0 for none")
+	guests := fs.Bool("guests", os.Getenv("LAMDIS_NO_GUESTS") == "", "let people start without signing up")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
+	// A user pool is how somebody keeps a node across browsers. It is not
+	// needed to start one, so a host without it still works; people simply
+	// cannot carry their threads to another machine yet.
 	cog := api.NewCognito(os.Getenv("LAMDIS_COGNITO_REGION"), os.Getenv("LAMDIS_COGNITO_POOL"), os.Getenv("LAMDIS_COGNITO_CLIENT"))
-	if !cog.Enabled() {
-		return fmt.Errorf("no user pool configured.\n" +
-			"  LAMDIS_COGNITO_REGION   e.g. us-east-1\n" +
-			"  LAMDIS_COGNITO_POOL     the user pool id\n" +
-			"  LAMDIS_COGNITO_CLIENT   the app client id\n" +
-			"  LAMDIS_SIGNIN_DOMAIN    the pool's hosted domain, e.g. auth.lamdis.ai\n" +
-			"  LAMDIS_SIGNIN_REDIRECT  where sign-in returns to, e.g. https://app.lamdis.ai/app")
+	if !cog.Enabled() && !*guests {
+		return fmt.Errorf("nothing lets anybody in: either allow guests, or set\n" +
+			"  LAMDIS_COGNITO_REGION, LAMDIS_COGNITO_POOL, LAMDIS_COGNITO_CLIENT,\n" +
+			"  LAMDIS_SIGNIN_DOMAIN and LAMDIS_SIGNIN_REDIRECT")
 	}
 
 	model := strings.TrimSpace(os.Getenv("LAMDIS_MODEL"))
@@ -55,6 +56,8 @@ func cmdHost(ctx context.Context, args []string) error {
 			Redirect: envOr("LAMDIS_SIGNIN_REDIRECT", "http://localhost"+*addr+"/app"),
 		},
 		MaxAccounts: *maxAccounts,
+		Guests:      *guests,
+		SharedKey:   strings.TrimSpace(os.Getenv("LAMDIS_HOST_MODEL_KEY")),
 		StarterCap:  *starterCap,
 		KeyCeiling:  ceiling(),
 		Logf:        func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
@@ -65,18 +68,40 @@ func cmdHost(ctx context.Context, args []string) error {
 		h.Starter = &agent.Provisioner{ManagementKey: mk}
 	}
 
+	if mk := strings.TrimSpace(os.Getenv("LAMDIS_TRY_KEY")); mk != "" {
+		t := &api.Try{ModelName: model, Origin: envOr("LAMDIS_TRY_ORIGIN", "https://lamdis.ai"),
+			Logf: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}
+		if m := agent.NewOpenRouter(mk, model); m != nil {
+			t.Model = m
+		}
+		h.Try = t
+	}
 	if err := h.Start(ctx); err != nil {
 		return err
 	}
-	fmt.Printf("host       http://localhost%s/app\n", *addr)
+	shown := *addr
+	if strings.HasPrefix(shown, ":") {
+		shown = "localhost" + shown
+	}
+	fmt.Printf("host       http://%s/app\n", shown)
 	fmt.Printf("accounts   %s · %d now · limit %d\n", *root, h.Count(), *maxAccounts)
 	fmt.Printf("model      %s\n", model)
-	if h.Starter != nil {
+	switch {
+	case h.Starter != nil:
 		fmt.Printf("starter    $%.2f each, stopping at a $%.2f ceiling\n", *starterCap, ceiling())
-	} else {
+	case os.Getenv("LAMDIS_HOST_MODEL_KEY") != "":
+		fmt.Printf("model key  one shared key for every account on this host; cap it\n")
+	default:
 		fmt.Printf("starter    off; new accounts bring their own key or write in\n")
 	}
-	fmt.Printf("sign-in    %s\n", h.SignIn.Domain)
+	if *guests {
+		fmt.Printf("starting   anybody can begin without signing up\n")
+	}
+	if cog.Enabled() {
+		fmt.Printf("sign-in    %s\n", h.SignIn.Domain)
+	} else {
+		fmt.Printf("sign-in    off; nobody can carry a node to another browser yet\n")
+	}
 
 	srv := &http.Server{
 		Addr:              *addr,
