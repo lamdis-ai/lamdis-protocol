@@ -11,6 +11,22 @@ same thing to the protocol.
 
 ## Your agent, in your threads, in one command
 
+```sh
+curl -fsSL https://lamdis.ai/install | sh
+cd your-project
+lamdis "add a zero guard to Div() and verify it"   # the agent, in this repo
+lamdis                                            # interactive
+lamdis serve                                      # the app, for your threads
+```
+
+At the terminal, `lamdis` is a coding agent: six bounded tools (read, list,
+search, edit, write, run), a repo map up front so the prompt prefix stays
+stable, distilled command output, and a verify step it is told to run. Every
+task is a thread named after the repository, and every run is recorded there:
+what it read, what it changed, what it ran, what it cost. Any model OpenRouter
+serves, or a local one with `-url http://localhost:11434/v1`.
+
+
 A thread is a workspace shared between you, your agent, and whoever you
 choose. Everything anyone writes there, the agent included, is the record. You
 decide who sees which part, and the agent keeps working there when you are not.

@@ -413,7 +413,7 @@ func appHTML(model string, canAsk bool) string {
 <title>Lamdis</title><style>` + appCSS + `</style></head><body>
 <div class="shell">
   <aside class="rail">
-    <div class="mark"><span class="glyph"></span> Lamdis</div>
+    <div class="mark"><svg class="cube" style="width:22px;height:24px;color:var(--gold);flex:none" viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg> Lamdis</div>
     <button class="newbtn" id="new">+ New thread</button>
     <div class="threads" id="threads"></div>
     <div class="me"><div class="avatar" id="me-av">·</div><b id="me-name">you</b><button class="icon" id="gear" title="Settings">⚙</button></div>
@@ -443,7 +443,7 @@ func sharedHTML(full bool) string {
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="dark">
 <title>Shared — Lamdis</title><style>` + appCSS + `</style></head><body>
-<div class="guest"><div class="crest"><span class="glyph" style="width:18px;height:18px;border-radius:6px"></span>Shared with you through Lamdis</div>
+<div class="guest"><div class="crest"><svg style="width:18px;height:20px;color:var(--gold)" viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg>Shared with you through Lamdis</div>
   <h1 id="title">Loading…</h1><div class="scope"><i></i>` + template.HTMLEscapeString(scope) + `</div>
   <div id="stream" style="display:flex;flex-direction:column;gap:1.4rem"></div>
   <div class="foot">Someone chose to show you this. It is read only, nothing you do here is recorded, and the link expires. No account was needed and none was created.</div></div>

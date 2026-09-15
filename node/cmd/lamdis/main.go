@@ -38,8 +38,29 @@ func main() {
 	}
 }
 
+var commandNames = []string{"help", "-h", "--help", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
+	"whoami", "thread", "threads", "post", "read", "search", "mcp", "serve", "peer", "peers", "sync", "share",
+	"discover", "request", "requests", "approve", "deny", "grant", "revoke", "access"}
+
+func knownCommand(s string) bool {
+	for _, c := range commandNames {
+		if s == c {
+			return true
+		}
+	}
+	return false
+}
+
 func usage() error {
-	fmt.Fprint(os.Stderr, `usage: lamdis [-data DIR] <command> [args]
+	fmt.Fprint(os.Stderr, `usage: lamdis [-data DIR] [task...]     the agent, in this directory
+       lamdis [-data DIR] <command> [args]
+
+agent:
+  lamdis                      interactive: type tasks, the agent works in the
+                              current repository and records every run
+  lamdis "add a test for X"   one task, then exit
+     [-model ID] [-url URL]   pick a model, or an OpenAI-compatible local server
+     [-dir PATH] [-q]         workspace (default: git root); -q prints only the answer
 
 commands:
   init                        create a person keypair and empty store
@@ -118,8 +139,15 @@ func run(args []string) error {
 		return err
 	}
 	rest := fs.Args()
-	if len(rest) == 0 {
-		return usage()
+	// No subcommand, or a first word that is not one: the agent, here, now.
+	if len(rest) == 0 || !knownCommand(rest[0]) {
+		loadDotEnv(*dataDir)
+		s, err := openStore(*dataDir)
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		return cmdCode(context.Background(), *dataDir, s, rest)
 	}
 	// Secrets live beside the data they belong to, not in the shell.
 	//
@@ -132,6 +160,8 @@ func run(args []string) error {
 	cmd, rest := rest[0], rest[1:]
 
 	switch cmd {
+	case "help", "-h", "--help":
+		return usage()
 	case "init":
 		return cmdInit(*dataDir)
 	case "demo":
