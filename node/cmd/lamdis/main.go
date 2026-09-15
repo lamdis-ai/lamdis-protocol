@@ -515,6 +515,18 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 		return firstErr
 	}
 	app.Runner, app.Scheduler, app.AgentSelf = runner, sched, agentPID
+	// Summaries use the same model the agent does, whatever Settings says.
+	app.Ask = func(ctx context.Context, question string, entries []string) (string, error) {
+		cfg, _ := agent.LoadConfig(dataDir)
+		m, _ := runner.ModelFor(cfg)
+		if m == nil {
+			return "", fmt.Errorf("no model is configured; add an OpenRouter key in Settings")
+		}
+		return api.AskWith(ctx, m, question, entries)
+	}
+	if ask == nil && runner.Ready() {
+		ask = app.Ask
+	}
 	go sched.Start(context.Background())
 	app.Register(mux)
 	host := *addr

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -130,19 +131,58 @@ type runRec struct {
 
 const maxTurns = 16
 
+// ModelFor resolves which model answers, from the environment and the
+// config, without a restart. Environment wins for the key; the config's
+// model id and URL win over the startup defaults so a person can switch
+// models from Settings and see the change on the next question.
+func (r *Runner) ModelFor(cfg Config) (Model, string) {
+	base, _ := r.Model.(*OpenRouter)
+	key, name, url := "", r.ModelName, ""
+	if base != nil {
+		key, name, url = base.Key, base.Model, base.BaseURL
+	}
+	if key == "" {
+		key = cfg.OpenRouterKey
+	}
+	if cfg.Model != "" {
+		name = cfg.Model
+	}
+	if cfg.ModelURL != "" {
+		url = cfg.ModelURL
+	}
+	if name == "" {
+		name = DefaultModel
+	}
+	if r.Model != nil && base == nil {
+		return r.Model, name // a test double or another backend
+	}
+	if key == "" && url == "" {
+		return nil, name
+	}
+	return &OpenRouter{Key: key, Model: name, BaseURL: url, HTTP: &http.Client{Timeout: 120 * time.Second}}, name
+}
+
+// Ready reports whether a model can answer right now.
+func (r *Runner) Ready() bool {
+	cfg, _ := LoadConfig(r.DataDir)
+	m, _ := r.ModelFor(cfg)
+	return m != nil
+}
+
 // Run executes one run and always leaves an agent.run entry behind.
 func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.Model == nil {
-		return Result{Outcome: "error", Error: "No model is configured. Set LAMDIS_OPENROUTER_KEY (openrouter.ai/keys) and restart the node."}
-	}
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
 	start := r.now()
 	cfg, _ := LoadConfig(r.DataDir)
+	model, modelName := r.ModelFor(cfg)
+	if model == nil {
+		return Result{Outcome: "error", Error: "No model is configured. Add an OpenRouter key in Settings, or point at a local model server."}
+	}
 
-	rec := runRec{Trigger: t.Kind, Entry: t.Entry, Chain: t.Chain, Model: r.ModelName,
+	rec := runRec{Trigger: t.Kind, Entry: t.Entry, Chain: t.Chain, Model: modelName,
 		Threads: []string{}, ToolCalls: []string{}, Tokens: map[string]int{"prompt": 0, "completion": 0}}
 	res := Result{}
 	fail := func(msg string) Result {
@@ -242,7 +282,7 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	var final string
 	outcome := ""
 	for turn := 0; turn < maxTurns; turn++ {
-		m, u, err := r.Model.Complete(ctx, msgs, tools)
+		m, u, err := model.Complete(ctx, msgs, tools)
 		rec.Tokens["prompt"] += u.Prompt
 		rec.Tokens["completion"] += u.Completion
 		if err != nil {
@@ -291,7 +331,7 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 			refs.RepliesTo = trig.ID
 		}
 		id, err := r.append(ctx, t.Thread, protolog.Draft{Kind: KindAnswer, Lane: protolog.LaneContent, Refs: refs,
-			Body: map[string]any{"text": final, "model": r.ModelName, "chain": t.Chain}})
+			Body: map[string]any{"text": final, "model": modelName, "chain": t.Chain}})
 		if err != nil {
 			return fail("could not write the answer: " + err.Error())
 		}

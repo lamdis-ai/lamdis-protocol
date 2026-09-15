@@ -9,9 +9,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
@@ -20,7 +24,7 @@ import (
 )
 
 const noModel = "No model is configured, so your agent cannot answer yet. " +
-	"Set LAMDIS_OPENROUTER_KEY (get one at openrouter.ai/keys) and restart the node. Everything else works without it."
+	"Add an OpenRouter key in Settings (keys are at openrouter.ai/keys), or point at a local model server. Everything else works without it."
 
 // runCtx detaches a run from the request so a closed tab does not abandon a
 // half-written run; the runner has its own deadline.
@@ -29,7 +33,7 @@ func runCtx() (context.Context, context.CancelFunc) {
 }
 
 func (a *App) agentReady() (string, bool) {
-	if a.Runner == nil || a.Runner.Model == nil {
+	if a.Runner == nil || !a.Runner.Ready() {
 		return noModel, false
 	}
 	if a.agentRevoked {
@@ -113,9 +117,12 @@ func (a *App) reach() map[string]any {
 	for _, t := range cfg.Tools {
 		tools = append(tools, toolOut{Name: t.Name, Tools: t.Allow, Confirm: t.Confirm})
 	}
+	_, modelName := a.Runner.ModelFor(cfg)
 	return map[string]any{"allow_domains": cfg.AllowDomains, "tools": tools,
 		"max_runs_per_day": cfg.MaxRunsPerDay, "max_fetches_per_day": cfg.MaxFetchesPerDay,
-		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json"}
+		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json",
+		"model": modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
+		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != ""}
 }
 
 func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
@@ -269,8 +276,11 @@ func (a *App) handleAgentRevoke(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		AllowDomains []string `json:"allow_domains"`
-		Brief        *string  `json:"brief"`
+		AllowDomains  []string `json:"allow_domains"`
+		Brief         *string  `json:"brief"`
+		Model         *string  `json:"model"`
+		OpenRouterKey *string  `json:"openrouter_key"`
+		ModelURL      *string  `json:"model_url"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil {
 		http.Error(w, "bad config", http.StatusBadRequest)
@@ -289,6 +299,20 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Brief != nil {
 		cfg.Brief = strings.TrimSpace(*in.Brief)
+	}
+	if in.Model != nil {
+		cfg.Model = strings.TrimSpace(*in.Model)
+	}
+	if in.OpenRouterKey != nil && strings.TrimSpace(*in.OpenRouterKey) != "" {
+		cfg.OpenRouterKey = strings.TrimSpace(*in.OpenRouterKey)
+	}
+	if in.ModelURL != nil {
+		u := strings.TrimSpace(*in.ModelURL)
+		if u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			http.Error(w, "model_url must start with http:// or https://", http.StatusBadRequest)
+			return
+		}
+		cfg.ModelURL = u
 	}
 	if err := agent.SaveConfig(a.DataDir, cfg); err != nil {
 		http.Error(w, "could not save", http.StatusInternalServerError)
@@ -332,4 +356,87 @@ func (a *App) handleDeleteThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "links_stopped": killed})
+}
+
+// The model list: what OpenRouter serves that can call tools, with prices,
+// so a person picks by name and cost rather than by guessing an id. Cached
+// for an hour; the list is public and changes slowly.
+var modelCache struct {
+	sync.Mutex
+	at   time.Time
+	body []byte
+}
+
+var modelVendors = []string{"openai/", "anthropic/", "google/", "moonshotai/", "deepseek/", "x-ai/", "qwen/", "meta-llama/", "mistralai/", "z-ai/", "minimax/"}
+
+func (a *App) handleModels(w http.ResponseWriter, r *http.Request) {
+	modelCache.Lock()
+	defer modelCache.Unlock()
+	if time.Since(modelCache.at) < time.Hour && modelCache.body != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(modelCache.body)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://openrouter.ai/api/v1/models", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": "could not reach openrouter.ai: " + err.Error(), "models": []any{}})
+		return
+	}
+	defer resp.Body.Close()
+	var raw struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Context int    `json:"context_length"`
+			Pricing struct {
+				Prompt     string `json:"prompt"`
+				Completion string `json:"completion"`
+			} `json:"pricing"`
+			Supported []string `json:"supported_parameters"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&raw); err != nil {
+		writeJSON(w, map[string]any{"error": "bad model list", "models": []any{}})
+		return
+	}
+	type out struct {
+		ID      string  `json:"id"`
+		Name    string  `json:"name"`
+		In      float64 `json:"in_per_m"`
+		Out     float64 `json:"out_per_m"`
+		Context int     `json:"context"`
+	}
+	var models []out
+	for _, m := range raw.Data {
+		tools := false
+		for _, p := range m.Supported {
+			if p == "tools" {
+				tools = true
+			}
+		}
+		if !tools {
+			continue
+		}
+		vendor := false
+		for _, v := range modelVendors {
+			if strings.HasPrefix(m.ID, v) {
+				vendor = true
+			}
+		}
+		if !vendor || strings.Contains(m.ID, ":") {
+			continue
+		}
+		var pin, pout float64
+		fmt.Sscanf(m.Pricing.Prompt, "%g", &pin)
+		fmt.Sscanf(m.Pricing.Completion, "%g", &pout)
+		models = append(models, out{ID: m.ID, Name: m.Name, In: pin * 1e6, Out: pout * 1e6, Context: m.Context})
+	}
+	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+	body, _ := json.Marshal(map[string]any{"models": models, "default": agent.DefaultModel})
+	modelCache.at, modelCache.body = time.Now(), body
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(body)
 }

@@ -179,7 +179,7 @@ summary:before{content:"▸ ";color:var(--ink4)}details[open] summary:before{con
 
 const appJS = `
 "use strict";
-var cur=null, me=null, entries=[], sheetEl=null, titles={}, agentInfo=null, busy=false;
+var cur=null, me=null, entries=[], sheetEl=null, titles={}, agentInfo=null, busy=false, prices={}, modelList=null;
 var $=function(i){return document.getElementById(i)};
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function when(ts){var d=new Date(ts);if(isNaN(d))return ts||"";var n=new Date();
@@ -197,6 +197,8 @@ function note(t,cls){$("note").textContent=t||"";$("note").className="note"+(cls
 function loadMe(){return api("/app/api/me").then(function(d){me=d;$("me-name").textContent=d.name;$("me-av").textContent=initials(d.name);
   $("ask").hidden=!d.can_ask;if(!d.can_ask)note("Your agent is off until a model key is set. Open settings for how.","warn")})}
 function loadAgent(){return api("/app/api/agent").then(function(d){agentInfo=d;return d})}
+function loadModels(){if(modelList)return Promise.resolve(modelList);return api("/app/api/models").then(function(d){modelList=d.models||[];modelList.forEach(function(m){prices[m.id]={i:m.in_per_m,o:m.out_per_m}});return modelList})}
+function cost(d){var p=prices[d.model];if(!p||!d.tokens)return "";var c=((d.tokens.prompt||0)*p.i+(d.tokens.completion||0)*p.o)/1e6;return c<0.0005?"<$0.001":"$"+c.toFixed(3)}
 
 function threads(){return api("/app/api/threads").then(function(d){var el=$("threads");
   if(!d.threads.length){el.innerHTML="";empty();return}
@@ -223,10 +225,10 @@ function runRow(e){var d=dataOf(e);
   if(d.tool_calls&&d.tool_calls.length)more.push("tools: "+d.tool_calls.join(", "));
   if(d.fetches&&d.fetches.length)more.push("fetched: "+d.fetches.map(function(f){return f.url+(f.error?" ("+f.error+")":"")}).join("\n         "));
   if(d.external&&d.external.length)more.push("external: "+d.external.map(function(x){return x.tool+(x.error?" ("+x.error+")":"")}).join(", "));
-  if(d.tokens)more.push("tokens: "+(d.tokens.prompt||0)+" in, "+(d.tokens.completion||0)+" out · "+Math.round((d.duration_ms||0)/1000)+"s · "+esc(d.model||""));
+  if(d.tokens)more.push("tokens: "+(d.tokens.prompt||0)+" in, "+(d.tokens.completion||0)+" out · "+Math.round((d.duration_ms||0)/1000)+"s · "+esc(d.model||"")+(cost(d)?" · "+cost(d):""));
   if(d.problems&&d.problems.length)more.push("problems: "+d.problems.join("; "));
   if(d.error)more.push("error: "+d.error);
-  return '<div class="run'+(d.outcome==="error"?' bad':'')+'"><span>'+esc(when(e.ts))+'</span><details><summary>agent ran ('+esc(d.trigger||"")+') · '+esc(e.text)+'</summary><div class="more">'+esc(more.join("\n"))+'</div></details></div>'}
+  return '<div class="run'+(d.outcome==="error"?' bad':'')+'"><span>'+esc(when(e.ts))+'</span><details><summary>agent ran ('+esc(d.trigger||"")+') · '+esc(e.text)+(cost(d)?' · '+cost(d):'')+'</summary><div class="more">'+esc(more.join("\n"))+'</div></details></div>'}
 function decisionCard(e,all){var reply=all.filter(function(x){return x.kind==="agent.decision_reply"&&x.replies_to===e.id})[0];
   var h='<article class="entry agent">'+meta(e,'<span class="tag">needs your call</span>')+'<div class="decision"><div class="ask">'+body(e.text)+'</div>';
   if(reply){var r=dataOf(reply);h+='<div class="done">You answered: '+esc((r.choice||"")+(r.text?" "+r.text:""))+'</div>'}
@@ -347,9 +349,18 @@ function shareSheet(){if(!cur)return;var mode="summary";
 
 /* Settings: name, your agent, what it may reach, and everything else folded away. */
 function settings(){var m=me||{};var origin=location.origin;
-  loadAgent().then(function(a){a=a||{};var reach=a.reach||{},st=a.status||{};
+  Promise.all([loadAgent(),loadModels()]).then(function(r){var a=r[0]||{},models=r[1]||[];var reach=a.reach||{},st=a.status||{};
+  var curModel=reach.model||"";var known=models.some(function(m){return m.id===curModel});
+  var opts=models.map(function(m){return '<option value="'+esc(m.id)+'"'+(m.id===curModel?' selected':'')+'>'+esc(m.id)+' · $'+m.in_per_m.toFixed(2)+' in / $'+m.out_per_m.toFixed(2)+' out per M'+(m.context?' · '+Math.round(m.context/1000)+'k':'')+'</option>'}).join("");
+  if(!known&&curModel)opts='<option value="'+esc(curModel)+'" selected>'+esc(curModel)+' (current)</option>'+opts;
   var s=sheet('<header><h2>Settings</h2></header><section>'+
   '<label class="f">Your name</label><div style="display:flex;gap:.5rem"><input id="c-name" value="'+esc(m.name==="you"?"":m.name)+'" placeholder="How others will see you"><button class="btn" id="c-save">Save</button></div>'+
+  '<label class="f">Model</label><select id="c-model">'+opts+'<option value="__custom">Another id…</option></select><input id="c-model-custom" placeholder="vendor/model-id as OpenRouter names it" hidden style="margin-top:.4rem">'+
+  '<p class="hint">Any model OpenRouter serves that can call tools. Prices are live from OpenRouter; each run in a thread shows what it cost. Switching takes effect on the next question.</p>'+
+  '<div class="grid2" style="margin-top:.5rem"><div><label class="f" style="margin-top:.3rem">OpenRouter key</label><input id="c-key" type="password" placeholder="'+(reach.has_key?(reach.key_from_env?"set in the environment":"saved on this machine"):"sk-or-…")+'"></div>'+
+  '<div><label class="f" style="margin-top:.3rem">Or a local model server</label><input id="c-url" value="'+esc(reach.model_url||"")+'" placeholder="http://localhost:11434/v1"></div></div>'+
+  '<p class="hint">The key is written to <span class="mono">agent.json</span> in your data directory, readable only by you. A local server (Ollama, vLLM, anything OpenAI-compatible) needs no key; the same harness runs against it.</p>'+
+  '<button class="btn" id="c-modelsave" style="margin-top:.5rem">Save model settings</button>'+
   '<label class="f">Your agent</label>'+
   (a.problem?'<p class="hint" style="color:var(--gold)">'+esc(a.problem)+'</p>':'<p class="hint">Runs on '+esc(a.model||"")+'. Acting for you in '+esc(String(a.delegated_threads||0))+' thread'+(a.delegated_threads===1?"":"s")+'. Today: '+esc(String(st.runs_today||0))+' runs, '+esc(String(st.fetches_today||0))+' fetches, '+esc(String(st.tokens_today||0))+' tokens.'+(st.last_sync?' Synced with peers '+esc(ago(st.last_sync))+'.':'')+(st.last_sync_error?' <span style="color:var(--red)">Sync: '+esc(st.last_sync_error)+'</span>':'')+'</p>')+
   '<p class="hint">It has its own key, signed by yours, so anyone reading a thread can tell you from your agent. Anything it writes says so. It can never share or grant access.</p>'+
@@ -359,7 +370,7 @@ function settings(){var m=me||{};var origin=location.origin;
   '<p class="hint">Connect MCP servers in <span class="mono">'+esc(reach.config_path||"agent.json")+'</span>: <span class="mono">{"tools":[{"name":"gh","command":"gh-mcp","allow":["get_issue"],"confirm":["create_issue"]}]}</span>. Only allowlisted tools are visible to it; confirm tools wait for your yes each time.</p>'+
   '<label class="f">Use with Claude</label><div class="cmd">claude mcp add lamdis -- lamdis mcp<button data-copy="claude mcp add lamdis -- lamdis mcp">copy</button></div>'+
   '<p class="hint">Run that once. Claude Code can then read your threads and write into them; its entries are labelled. Any other AI that speaks MCP works the same way.</p>'+
-  (m.can_ask?'':'<p class="hint">To switch your agent on, put <span class="mono">LAMDIS_OPENROUTER_KEY=…</span> in the <span class="mono">.env</span> file next to your data and restart. Keys are at openrouter.ai/keys.</p>')+
+  (m.can_ask?'':'<p class="hint">Your agent is off: add an OpenRouter key above (keys are at openrouter.ai/keys) or point at a local model server.</p>')+
   '<details><summary>Advanced: identity, other nodes, direct grants, revoke the agent</summary>'+
   '<label class="f">Your identity</label><div class="cmd">'+esc(m.principal)+'<button data-copy="'+esc(m.principal)+'">copy</button></div>'+
   '<label class="f">Your agent’s identity</label><div class="cmd">'+esc(a.principal||"")+'<button data-copy="'+esc(a.principal||"")+'">copy</button></div>'+
@@ -373,6 +384,9 @@ function settings(){var m=me||{};var origin=location.origin;
   s.querySelector("[data-x]").onclick=closeSheet;
   Array.prototype.forEach.call(s.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="copied"}});
   s.querySelector("#c-save").onclick=function(){api("/app/api/me",{name:s.querySelector("#c-name").value}).then(loadMe)};
+  var sel=s.querySelector("#c-model"),cust=s.querySelector("#c-model-custom");sel.onchange=function(){cust.hidden=sel.value!=="__custom";if(!cust.hidden)cust.focus()};
+  s.querySelector("#c-modelsave").onclick=function(){var b=s.querySelector("#c-modelsave");var id=sel.value==="__custom"?cust.value.trim():sel.value;var body={model:id,model_url:s.querySelector("#c-url").value};var k=s.querySelector("#c-key").value.trim();if(k)body.openrouter_key=k;
+    api("/app/api/agent/config",body).then(function(r){b.textContent=r.error?"Failed: "+r.error:"Saved";loadMe()})};
   s.querySelector("#c-domsave").onclick=function(){var b=s.querySelector("#c-domsave");api("/app/api/agent/config",{allow_domains:s.querySelector("#c-dom").value.split(",")}).then(function(r){b.textContent=r.error?"Failed":"Saved"})};
   var rv=s.querySelector("#c-revoke");rv.onclick=function(){if(rv.getAttribute("data-armed")){api("/app/api/agent/revoke").then(function(r){rv.textContent=r.error?r.error:"Revoked in "+r.revoked_in+" threads";loadMe()})}else{rv.setAttribute("data-armed","1");rv.textContent="Click again to confirm"}};
   function peers(){var l=(me&&me.peers)||[];s.querySelector("#peers").innerHTML=l.map(function(p){return '<div class="row"><div class="t"><b>'+esc(p.name)+'</b><span>'+esc(p.url)+'</span></div></div>'}).join("")}
@@ -389,7 +403,7 @@ function settings(){var m=me||{};var origin=location.origin;
 $("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("more").onclick=moreSheet;$("new").onclick=newThread;$("gear").onclick=settings;
 $("text").oninput=grow;$("text").onkeydown=function(e){if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();post()}if(e.key==="Enter"&&!e.shiftKey&&!e.metaKey&&!e.ctrlKey&&$("text").value.trim().slice(-1)==="?"&&!$("ask").hidden){e.preventDefault();ask()}};
 document.onkeydown=function(e){if(e.key==="Escape")closeSheet()};
-loadMe().then(threads);setInterval(function(){if(!sheetEl&&!busy){cur?open(cur):threads()}},15000);
+loadMe().then(threads);loadModels().then(function(){if(cur)open(cur)});setInterval(function(){if(!sheetEl&&!busy){cur?open(cur):threads()}},15000);
 `
 
 // appHTML is the owner's view.

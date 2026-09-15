@@ -25,6 +25,15 @@ type Config struct {
 	SyncEvery        string       `json:"sync_every"`
 	// Brief is the node-wide standing instruction used when a thread has none.
 	Brief string `json:"brief"`
+	// Model is the model id (OpenRouter's, or whatever ModelURL serves).
+	// Empty means the LAMDIS_MODEL environment or the default.
+	Model string `json:"model,omitempty"`
+	// OpenRouterKey lets the interface set the key; the environment wins
+	// when both exist. The file is 0600 in the person's own data directory.
+	OpenRouterKey string `json:"openrouter_key,omitempty"`
+	// ModelURL is an OpenAI-compatible base URL for a local or private
+	// model server, e.g. http://localhost:11434/v1. No key needed.
+	ModelURL string `json:"model_url,omitempty"`
 }
 
 // ToolServer is one external MCP server the agent may call.

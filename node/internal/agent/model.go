@@ -58,11 +58,25 @@ type Model interface {
 // LAMDIS_MODEL; the id is shown in the interface so nobody has to guess.
 const DefaultModel = "openai/gpt-5.6-luna"
 
-// OpenRouter is a Model over OpenRouter's chat completions API.
+// OpenRouter is a Model over an OpenAI-compatible chat completions API.
+// OpenRouter by default; BaseURL points it at anything else that speaks the
+// same shape, such as a local Ollama or vLLM at http://localhost:11434/v1.
 type OpenRouter struct {
-	Key   string
-	Model string
-	HTTP  *http.Client
+	Key     string
+	Model   string
+	BaseURL string
+	HTTP    *http.Client
+}
+
+const openRouterURL = "https://openrouter.ai/api/v1"
+
+// Endpoint is where completions go.
+func (o *OpenRouter) Endpoint() string {
+	base := strings.TrimRight(o.BaseURL, "/")
+	if base == "" {
+		base = openRouterURL
+	}
+	return base + "/chat/completions"
 }
 
 // NewOpenRouter returns nil when no key is set, so callers can ask "can I
@@ -93,11 +107,13 @@ func (o *OpenRouter) Complete(ctx context.Context, msgs []Message, tools []ToolS
 	if err != nil {
 		return Message{}, Usage{}, err
 	}
-	hr, err := http.NewRequestWithContext(ctx, "POST", "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(body))
+	hr, err := http.NewRequestWithContext(ctx, "POST", o.Endpoint(), bytes.NewReader(body))
 	if err != nil {
 		return Message{}, Usage{}, err
 	}
-	hr.Header.Set("Authorization", "Bearer "+o.Key)
+	if o.Key != "" {
+		hr.Header.Set("Authorization", "Bearer "+o.Key)
+	}
 	hr.Header.Set("Content-Type", "application/json")
 	hr.Header.Set("HTTP-Referer", "https://lamdis.ai")
 	hr.Header.Set("X-Title", "Lamdis")

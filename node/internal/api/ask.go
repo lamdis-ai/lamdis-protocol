@@ -56,6 +56,13 @@ func NewOpenRouterAsk(key, model string) func(context.Context, string, []string)
 		return nil
 	}
 	return func(ctx context.Context, question string, entries []string) (string, error) {
+		return AskWith(ctx, m, question, entries)
+	}
+}
+
+// AskWith answers one question from entries using any Model, no tools.
+func AskWith(ctx context.Context, m agent.Model, question string, entries []string) (string, error) {
+	{
 		if len(entries) == 0 {
 			return "This thread has nothing in it yet, so there is nothing for me to read.", nil
 		}

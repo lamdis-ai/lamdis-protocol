@@ -142,7 +142,7 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 		"peers":     list,
 		"pending":   pending,
 		"model":     a.Model,
-		"can_ask":   a.Runner != nil && a.Runner.Model != nil && !a.agentRevoked,
+		"can_ask":   a.Runner != nil && a.Runner.Ready() && !a.agentRevoked,
 		"agent":     a.AgentSelf,
 	})
 }
