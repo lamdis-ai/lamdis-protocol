@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -326,7 +327,7 @@ func (w *Workspace) Call(ctx context.Context, name string, args map[string]any) 
 		}
 		cctx, cancel := context.WithTimeout(ctx, runTimeout)
 		defer cancel()
-		cmd := exec.CommandContext(cctx, "sh", "-c", cmdline)
+		cmd := shellCommand(cctx, cmdline)
 		cmd.Dir = w.Root
 		cmd.Env = append(os.Environ(), "CI=1", "NO_COLOR=1", "TERM=dumb")
 		var buf bytes.Buffer
@@ -347,6 +348,14 @@ func (w *Workspace) Call(ctx context.Context, name string, args map[string]any) 
 		return fmt.Sprintf("$ %s\n[%s, %s]\n%s", cmdline, status, took, distill(buf.String())), true
 	}
 	return "", false
+}
+
+// shellCommand runs a command line through whatever shell this machine has.
+func shellCommand(ctx context.Context, line string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, "cmd", "/c", line)
+	}
+	return exec.CommandContext(ctx, "sh", "-c", line)
 }
 
 // distill keeps the head and tail of long output. The middle of a test log

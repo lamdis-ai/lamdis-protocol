@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/aws/aws-lambda-go v1.55.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/ncruces/go-sqlite3-wasm/v3 v3.2.35303 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
