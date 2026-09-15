@@ -122,7 +122,7 @@ func (a *App) reach() map[string]any {
 		"max_runs_per_day": cfg.MaxRunsPerDay, "max_fetches_per_day": cfg.MaxFetchesPerDay,
 		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json",
 		"model": modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
-		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != ""}
+		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != "", "has_url_key": cfg.ModelURLKey != ""}
 }
 
 func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +281,7 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		Model         *string  `json:"model"`
 		OpenRouterKey *string  `json:"openrouter_key"`
 		ModelURL      *string  `json:"model_url"`
+		ModelURLKey   *string  `json:"model_url_key"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil {
 		http.Error(w, "bad config", http.StatusBadRequest)
@@ -312,7 +313,14 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "model_url must start with http:// or https://", http.StatusBadRequest)
 			return
 		}
+		if u != cfg.ModelURL {
+			// A new endpoint does not inherit the last one's credential.
+			cfg.ModelURLKey = ""
+		}
 		cfg.ModelURL = u
+	}
+	if in.ModelURLKey != nil && strings.TrimSpace(*in.ModelURLKey) != "" {
+		cfg.ModelURLKey = strings.TrimSpace(*in.ModelURLKey)
 	}
 	if err := agent.SaveConfig(a.DataDir, cfg); err != nil {
 		http.Error(w, "could not save", http.StatusInternalServerError)

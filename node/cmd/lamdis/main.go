@@ -38,7 +38,7 @@ func main() {
 	}
 }
 
-var commandNames = []string{"help", "-h", "--help", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
+var commandNames = []string{"help", "-h", "--help", "app", "keys", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
 	"whoami", "thread", "threads", "post", "read", "search", "mcp", "serve", "peer", "peers", "sync", "share",
 	"discover", "request", "requests", "approve", "deny", "grant", "revoke", "access"}
 
@@ -97,8 +97,18 @@ commands:
                               fraudulent one; exits non-zero if any
                               invariant fails.
 
+  app                         open your threads in a browser (starts the node
+                              if it isn't running already)
+  keys mint <who> [-limit 2]  let someone else use your inference without
+  keys list | revoke <hash>   being able to drain you: each key carries a hard
+                              credit cap that never refills. Needs
+                              LAMDIS_OPENROUTER_MANAGEMENT_KEY.
+
   mcp                         serve MCP over stdio (add to your agent's .mcp.json)
-  serve [-addr :8420]         serve sync to peers (run this; give peers your URL)
+  serve [-addr 127.0.0.1:8420]  run the node: the app, approvals, and sync.
+       [-expose-app]          Listens on this machine only unless you set
+                              -addr :8420 for peers; even then the app stays
+                              local unless -expose-app.
   peer add <name> <url>       pair with a person's node (exchanges identities)
   peers                       list who you're paired with
   sync [peer] [-watch 30s]    sync permitted threads with peers (default: all)
@@ -185,6 +195,9 @@ func run(args []string) error {
 	case "verify-photo":
 		// Real image, real model call. Needs AWS credentials, not the store.
 		return cmdVerifyPhoto(rest)
+	case "keys":
+		// Operator side: no store, no keys of ours, just OpenRouter.
+		return cmdKeys(ctx, rest)
 	case "whoami":
 		_, pid, err := loadKey(*dataDir)
 		if err != nil {
@@ -230,6 +243,8 @@ func run(args []string) error {
 			return usage()
 		}
 		return cmdSearch(ctx, s, strings.Join(rest, " "))
+	case "app":
+		return cmdApp(ctx, *dataDir, s, rest)
 	case "mcp":
 		priv, pid, err := loadKey(*dataDir)
 		if err != nil {
@@ -484,7 +499,8 @@ func resolveThread(ctx context.Context, s store.Store, ref string) (string, erro
 
 func cmdServe(dataDir string, s store.Store, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	addr := fs.String("addr", ":8420", "listen address")
+	addr := fs.String("addr", "127.0.0.1:8420", "listen address; use :8420 to let peers reach you")
+	exposeApp := fs.Bool("expose-app", false, "let the interface answer from other machines (off by default)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -507,11 +523,11 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 	token := strings.TrimSpace(string(tokenRaw))
 	mux := (&api.Server{Sync: &syncp.Server{Store: s}, Principal: pid}).Handler()
 	names := func(principal string) string { return peerName(dataDir, principal) }
-	portal := &api.Portal{Store: s, Key: priv, Self: pid, Token: token, Names: names}
+	portal := &api.Portal{Store: s, Key: priv, Self: pid, Token: token, Names: names, ExposeApp: *exposeApp}
 	portal.Register(mux)
 	ask, model := api.AskFromEnv()
 	app := &api.App{Store: s, Key: priv, Self: pid, Token: token, Names: names,
-		Ask: ask, Model: model, DataDir: dataDir}
+		Ask: ask, Model: model, DataDir: dataDir, ExposeApp: *exposeApp}
 	// The built-in agent: its own key, delegated per thread, and a scheduler
 	// that lets it work when nobody is looking.
 	agentKey, agentPID, err := agent.LoadOrMintAgentKey(dataDir)
@@ -573,6 +589,16 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 		fmt.Printf("asking     off - set LAMDIS_OPENROUTER_KEY to answer questions about a thread\n")
 	} else {
 		fmt.Printf("asking     %s\n", model)
+	}
+	if strings.HasPrefix(*addr, "127.0.0.1") || strings.HasPrefix(*addr, "localhost") {
+		fmt.Printf("network    this machine only. For peers: lamdis serve -addr :8420\n")
+	} else {
+		fmt.Printf("network    reachable from your network. Peers authenticate with signatures;\n")
+		if *exposeApp {
+			fmt.Printf("           the interface is EXPOSED and protected only by the token above\n")
+		} else {
+			fmt.Printf("           the interface stays on this machine (-expose-app to change)\n")
+		}
 	}
 	fmt.Printf("peers      give them this URL; grants decide what they can pull\n")
 	// Open the interface. The address carries a token and nobody should have

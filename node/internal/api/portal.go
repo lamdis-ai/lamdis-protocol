@@ -24,6 +24,8 @@ type Portal struct {
 	Key   ed25519.PrivateKey
 	Self  string
 	Token string
+	// ExposeApp mirrors App.ExposeApp: the approval inbox is yours alone.
+	ExposeApp bool
 	// Names maps principal -> friendly peer name for display.
 	Names func(principal string) string
 }
@@ -51,6 +53,10 @@ func (p *Portal) name(principal string) string {
 
 func (p *Portal) authed(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !p.ExposeApp && !fromThisMachine(r) {
+			http.Error(w, "this interface answers only on this machine", http.StatusForbidden)
+			return
+		}
 		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if tok == "" || subtle.ConstantTimeCompare([]byte(tok), []byte(p.Token)) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

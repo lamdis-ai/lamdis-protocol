@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -59,8 +60,23 @@ type App struct {
 	Runner    *agent.Runner
 	Scheduler *agent.Scheduler
 	AgentSelf string
+	// ExposeApp lets the interface answer requests from other machines.
+	// Off by default: exposing the node so peers can sync must not also
+	// put your own threads on the network behind a single bearer token.
+	ExposeApp bool
 
 	agentRevoked bool
+}
+
+// fromThisMachine reports whether a request came over the loopback
+// interface. A token is a secret; the loopback check is the second lock.
+func fromThisMachine(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (a *App) now() time.Time {
@@ -123,6 +139,10 @@ func (a *App) Register(mux *http.ServeMux) {
 // through a timing difference is not a token.
 func (a *App) owner(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.ExposeApp && !fromThisMachine(r) {
+			http.Error(w, "this interface answers only on this machine", http.StatusForbidden)
+			return
+		}
 		if a.Token == "" || !a.authed(r) {
 			http.Error(w, "not authorised", http.StatusUnauthorized)
 			return
@@ -144,6 +164,10 @@ func (a *App) authed(r *http.Request) bool {
 }
 
 func (a *App) page(w http.ResponseWriter, r *http.Request) {
+	if !a.ExposeApp && !fromThisMachine(r) {
+		http.Error(w, "this interface answers only on this machine", http.StatusForbidden)
+		return
+	}
 	if !a.authed(r) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)

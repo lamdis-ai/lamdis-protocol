@@ -153,11 +153,14 @@ func (r *Runner) ModelFor(cfg Config) (Model, string) {
 	if key == "" {
 		key = cfg.OpenRouterKey
 	}
+	forBase := false
 	if cfg.Model != "" {
 		name = cfg.Model
 	}
 	if cfg.ModelURL != "" {
 		url = cfg.ModelURL
+		// A custom endpoint uses its own credential, or none.
+		key, forBase = cfg.ModelURLKey, cfg.ModelURLKey != ""
 	}
 	if name == "" {
 		name = DefaultModel
@@ -168,7 +171,8 @@ func (r *Runner) ModelFor(cfg Config) (Model, string) {
 	if key == "" && url == "" {
 		return nil, name
 	}
-	return &OpenRouter{Key: key, Model: name, BaseURL: url, HTTP: &http.Client{Timeout: 120 * time.Second}}, name
+	return &OpenRouter{Key: key, Model: name, BaseURL: url, KeyIsForBaseURL: forBase,
+		HTTP: &http.Client{Timeout: 120 * time.Second}}, name
 }
 
 // Ready reports whether a model can answer right now.

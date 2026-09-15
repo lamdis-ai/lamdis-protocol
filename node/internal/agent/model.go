@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -65,10 +66,38 @@ type OpenRouter struct {
 	Key     string
 	Model   string
 	BaseURL string
-	HTTP    *http.Client
+	// KeyIsForBaseURL says the key was set for this endpoint specifically,
+	// not inherited from the OpenRouter setting. Only then is it sent to a
+	// host that is not OpenRouter.
+	KeyIsForBaseURL bool
+	HTTP            *http.Client
 }
 
 const openRouterURL = "https://openrouter.ai/api/v1"
+
+// openRouterHost is the only host the OpenRouter key is ever sent to. A
+// person can point the agent at a local or private model server, and that
+// must not become a way to hand their paid key to whoever owns that URL.
+const openRouterHost = "openrouter.ai"
+
+// keyGoesHere reports whether the credential belongs to the endpoint being
+// called. A key set for OpenRouter travels only to OpenRouter; a key set
+// explicitly for a custom endpoint travels only there.
+func (o *OpenRouter) keyGoesHere() bool {
+	base := strings.TrimRight(o.BaseURL, "/")
+	if base == "" || base == openRouterURL {
+		return true
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	if u.Hostname() == openRouterHost || strings.HasSuffix(u.Hostname(), "."+openRouterHost) {
+		return true
+	}
+	// A custom endpoint only ever receives a key the person set for it.
+	return o.KeyIsForBaseURL
+}
 
 // Endpoint is where completions go.
 func (o *OpenRouter) Endpoint() string {
@@ -111,7 +140,7 @@ func (o *OpenRouter) Complete(ctx context.Context, msgs []Message, tools []ToolS
 	if err != nil {
 		return Message{}, Usage{}, err
 	}
-	if o.Key != "" {
+	if o.Key != "" && o.keyGoesHere() {
 		hr.Header.Set("Authorization", "Bearer "+o.Key)
 	}
 	hr.Header.Set("Content-Type", "application/json")

@@ -36,23 +36,41 @@ type FetchRecord struct {
 }
 
 // PublicHost refuses anything that resolves to a private, loopback,
-// link-local or unspecified address. Resolution happens here, before the
-// connection, so a hostname cannot point the agent at the node itself or at
-// a cloud metadata service.
+// link-local or unspecified address.
 func PublicHost(raw string) (*url.URL, error) {
+	u, _, err := publicHostIPs(raw)
+	return u, err
+}
+
+// publicHostIPs vets a URL and returns the addresses it may be dialled at.
+//
+// Checking a name and then letting the HTTP client resolve it again leaves a
+// window: the second answer can be a private address the first was not. So
+// the vetted addresses are returned here and dialled directly, and the check
+// runs again at dial time for every hop.
+func publicHostIPs(raw string) (*url.URL, []net.IP, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Scheme != "https" || u.Host == "" {
-		return nil, fmt.Errorf("only https URLs can be fetched")
+		return nil, nil, fmt.Errorf("only https URLs can be fetched")
 	}
 	if u.User != nil {
-		return nil, fmt.Errorf("URLs with credentials are refused")
+		return nil, nil, fmt.Errorf("URLs with credentials are refused")
 	}
-	host := u.Hostname()
+	ips, err := vetHost(u.Hostname())
+	if err != nil {
+		return nil, nil, err
+	}
+	return u, ips, nil
+}
+
+// vetHost resolves a host and returns its addresses only if every one of
+// them is public.
+func vetHost(host string) ([]net.IP, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		if !publicIP(ip) {
 			return nil, fmt.Errorf("%s is not a public address", host)
 		}
-		return u, nil
+		return []net.IP{ip}, nil
 	}
 	ips, err := net.LookupIP(host)
 	if err != nil || len(ips) == 0 {
@@ -63,7 +81,35 @@ func PublicHost(raw string) (*url.URL, error) {
 			return nil, fmt.Errorf("%s resolves to a private address", host)
 		}
 	}
-	return u, nil
+	return ips, nil
+}
+
+// pinnedTransport dials only addresses it has vetted itself, re-checking on
+// every connection rather than trusting the name.
+func pinnedTransport() *http.Transport {
+	d := &net.Dialer{Timeout: 10 * time.Second}
+	return &http.Transport{
+		DisableKeepAlives: true,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			ips, err := vetHost(host)
+			if err != nil {
+				return nil, err
+			}
+			var last error
+			for _, ip := range ips {
+				c, err := d.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+				if err == nil {
+					return c, nil
+				}
+				last = err
+			}
+			return nil, last
+		},
+	}
 }
 
 func publicIP(ip net.IP) bool {
@@ -80,7 +126,8 @@ func Fetch(ctx context.Context, raw string) (string, FetchRecord) {
 		return "", rec
 	}
 	client := &http.Client{
-		Timeout: fetchTimeout,
+		Timeout:   fetchTimeout,
+		Transport: pinnedTransport(),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return fmt.Errorf("too many redirects")
@@ -88,6 +135,9 @@ func Fetch(ctx context.Context, raw string) (string, FetchRecord) {
 			if _, err := PublicHost(req.URL.String()); err != nil {
 				return err
 			}
+			// Credentials never survive a hop, even a same-host one.
+			req.Header.Del("Authorization")
+			req.Header.Del("Cookie")
 			return nil
 		},
 	}

@@ -34,6 +34,10 @@ type Config struct {
 	// ModelURL is an OpenAI-compatible base URL for a local or private
 	// model server, e.g. http://localhost:11434/v1. No key needed.
 	ModelURL string `json:"model_url,omitempty"`
+	// ModelURLKey is a credential for ModelURL alone. The OpenRouter key is
+	// never sent anywhere but OpenRouter, so a private endpoint that needs
+	// authentication gets its own.
+	ModelURLKey string `json:"model_url_key,omitempty"`
 }
 
 // ToolServer is one external MCP server the agent may call.
