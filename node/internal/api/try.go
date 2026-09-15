@@ -106,16 +106,17 @@ func (t *Try) defaults() {
 }
 
 // seeded is the record the demo starts from. It is small, ordinary, and
-// contains one thing a person would forget and one contradiction, because
-// that is what makes "it remembers" mean something rather than sound nice.
+// contains one thing anybody would forget, one number nobody added up, and
+// one promise that may no longer hold, because that is what makes a record
+// worth keeping rather than a pile of messages.
 func seeded(now time.Time) []tryEntry {
 	d := func(days int) string { return now.AddDate(0, 0, -days).Format("Jan 2") }
 	return []tryEntry{
-		{Who: "you", When: d(34), Text: "Quote from Marek for the kitchen: £14,200, four weeks, could start 6 October. Includes the tiles."},
-		{Who: "you", When: d(31), Text: "Second quote, Dalton: £11,800. Six weeks though, and they don't do plastering, so that's someone else on top."},
-		{Who: "you", When: d(29), Text: "Told the bank we'd be finished by mid-November when I asked about the drawdown."},
-		{Who: "you", When: d(12), Text: "Plasterer quoted £1,900 for the whole job. Two days once the units are out."},
-		{Who: "you", When: d(3), Text: "Marek emailed: he can still start 6 October but wants 40% up front now instead of 25%."},
+		{Who: "you", When: d(34), Text: "Quote from Marek Systems to replace the billing platform: £14,200 a year, four weeks to migrate, can start 6 October. Includes the connectors."},
+		{Who: "you", When: d(31), Text: "Second quote, Dalton: £11,800 a year. Six weeks though, and they do not do the data migration, so that is somebody else on top."},
+		{Who: "you", When: d(29), Text: "Told the board we would be off the old system by mid-November."},
+		{Who: "you", When: d(12), Text: "Migration contractor quoted £1,900 for the whole export. Two days once they have the dump."},
+		{Who: "you", When: d(3), Text: "Marek emailed: still 6 October, but now wants 40% up front instead of the 25% in the quote."},
 	}
 }
 
@@ -193,16 +194,16 @@ func (t *Try) session(id string) (string, *trySession) {
 	return id, s
 }
 
-const trySystem = `You are somebody's own assistant, answering from the notes they have written
-down over the past few weeks. You are shown all of them.
+const trySystem = `You are somebody's own agent, answering from the record they have kept
+over the past few weeks. You are shown all of it.
 
 Rules:
-1. Answer only from the notes. Do not invent numbers, dates or names.
-2. Do the arithmetic when it helps, and say which notes you used and when
+1. Answer only from the record. Do not invent numbers, dates or names.
+2. Do the arithmetic when it helps, and say which entries you used and when
    they were written.
-3. If two notes disagree, or something has been missed, say so plainly. That
-   is the most useful thing you can do.
-4. If the answer is not in the notes, say so in one sentence.
+3. If two entries disagree, or something has been missed, say so plainly.
+   That is the most useful thing you can do.
+4. If the answer is not in the record, say so in one sentence.
 5. Two to four sentences. Plain text, no markdown, no headings, no bullets.
 
 Write like a capable person who has read everything and is telling a friend.`
@@ -278,7 +279,7 @@ func (t *Try) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Their notes, oldest first:\n\n")
+	sb.WriteString("Their record, oldest first:\n\n")
 	t.mu.Lock()
 	for _, e := range s.entries {
 		if e.Agent {

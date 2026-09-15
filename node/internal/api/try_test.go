@@ -49,7 +49,7 @@ func ask(h http.Handler, ip, session, text string) (int, map[string]any) {
 // already there. The question and the answer both land in the thread, which
 // is the thing the page is trying to show.
 func TestTryAnswersIntoTheThread(t *testing.T) {
-	m := &fakeModel{reply: "Dalton is cheaper by £500 once the plasterer is counted."}
+	m := &fakeModel{reply: "Dalton is cheaper by £500 once the migration is counted."}
 	_, h := tryServer(t, m)
 
 	w := httptest.NewRecorder()
@@ -84,9 +84,9 @@ func TestTryAnswersIntoTheThread(t *testing.T) {
 	if asked["asked"] != true {
 		t.Fatalf("the question is not marked: %v", asked)
 	}
-	// The model was given the notes, not a blank page.
-	if !strings.Contains(m.lastIn, "Marek") || !strings.Contains(strings.ToLower(m.lastIn), "plasterer") {
-		t.Fatalf("the notes did not reach the model: %s", m.lastIn)
+	// The model was given the record, not a blank page.
+	if !strings.Contains(m.lastIn, "Marek") || !strings.Contains(strings.ToLower(m.lastIn), "migration") {
+		t.Fatalf("the record did not reach the model: %s", m.lastIn)
 	}
 	if !strings.Contains(m.lastIn, "which one actually costs less?") {
 		t.Fatalf("the question did not reach the model: %s", m.lastIn)
