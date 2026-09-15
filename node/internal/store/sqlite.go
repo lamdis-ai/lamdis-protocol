@@ -86,6 +86,35 @@ CREATE TABLE IF NOT EXISTS vectors (rid INTEGER PRIMARY KEY REFERENCES entries(r
 
 func (s *SQLite) Close() error { return s.db.Close() }
 
+// DeleteThread drops a thread from this node. The FTS index is external
+// content, so it is rebuilt rather than patched row by row.
+func (s *SQLite) DeleteThread(ctx context.Context, threadID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`DELETE FROM vectors WHERE rid IN (SELECT rid FROM entries WHERE thread = ?)`,
+		`DELETE FROM entries WHERE thread = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, threadID); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO entries_fts(entries_fts) VALUES('rebuild')`); err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	delete(s.logs, threadID)
+	return nil
+}
+
 // threadLog returns the in-memory log for a thread, rehydrating from the
 // database whenever another process (or connection) has appended since the
 // cache was built. The log package owns every append invariant; the store

@@ -97,6 +97,7 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /app/api/agent", a.owner(a.handleAgent))
 	mux.HandleFunc("POST /app/api/agent/revoke", a.owner(a.handleAgentRevoke))
 	mux.HandleFunc("POST /app/api/agent/config", a.owner(a.handleAgentConfig))
+	mux.HandleFunc("POST /app/api/thread/{id}/delete", a.owner(a.handleDeleteThread))
 	mux.HandleFunc("POST /app/api/summarize", a.owner(a.handleSummarize))
 	mux.HandleFunc("POST /app/api/share", a.owner(a.handleShare))
 	mux.HandleFunc("GET /app/api/me", a.owner(a.handleMe))
@@ -315,6 +316,10 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 		}
 		if e.OnBehalfOf != "" {
 			ae.Agent = "agent"
+			if e.Author != a.AgentSelf {
+				// Someone else's agent: name it by the person it acts for.
+				ae.Who = a.displayName(e.OnBehalfOf) + "'s agent"
+			}
 		}
 		if e.Lane == protolog.LaneControl {
 			ae.Agent = "" // a delegation's "agent" field is a principal, not a label

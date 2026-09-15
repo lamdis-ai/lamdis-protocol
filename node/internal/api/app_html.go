@@ -209,7 +209,7 @@ function threads(){return api("/app/api/threads").then(function(d){var el=$("thr
   Array.prototype.forEach.call(el.querySelectorAll(".thread"),function(n){n.onclick=function(){open(n.getAttribute("data-id"))}});
   if(!cur)empty()})}
 
-function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("agentbtn").hidden=true;
+function empty(){$("title").textContent="Lamdis";$("share").disabled=true;$("agentbtn").hidden=true;$("more").hidden=true;
   $("stream").innerHTML='<div class="void"><h2>A thread is a workspace for you, your agent, and whoever you choose.</h2>'+
   '<p>Write notes. Ask your agent; its answers stay in the thread. Give it standing instructions and it keeps working while you are away. Share a summary, or everything, by link.</p>'+
   '<button class="btn solid" id="e-new">Start a thread</button></div>';$("e-new").onclick=newThread}
@@ -251,7 +251,7 @@ function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.
 function open(id){cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(d.error){note(d.error,"bad");return}entries=d.entries;$("title").textContent=d.title||"Untitled";
     var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"});
-    var t=(window._threads||[]).filter(function(x){return x.id===id})[0]||{};agentPill(t);
+    var t=(window._threads||[]).filter(function(x){return x.id===id})[0]||{};agentPill(t);$("more").hidden=!t.mine;
     var nudge=t.since_shared?'<div class="nudge"><span>'+t.since_shared+(t.since_shared===1?" entry":" entries")+' since you last shared '+esc(when(t.last_shared))+'.</span><button class="btn sm solid" id="nudge-go">Send an update</button></div>':'';
     $("stream").innerHTML=nudge+(vis.length?render(d.entries):'<div class="void"><h2>'+esc(d.title)+'</h2><p>Nothing here yet. Write the first thing below, or ask your agent something.</p></div>');
     if(t.since_shared)$("nudge-go").onclick=shareSheet;
@@ -302,6 +302,15 @@ function agentSheet(){if(!cur)return;
     s.querySelector("#b-save").onclick=function(){api("/app/api/thread/"+tid()+"/brief",read()).then(function(r){if(r.error){alert(r.error);return}closeSheet();open(cur)})};
     s.querySelector("#b-run").onclick=function(){var btn=s.querySelector("#b-run");btn.disabled=true;btn.textContent="Running…";
       api("/app/api/thread/"+tid()+"/brief",read()).then(function(){return api("/app/api/thread/"+tid()+"/run")}).then(function(r){closeSheet();if(r.error)note(r.error,"bad");open(cur)})}})}
+
+/* Delete: only a steward can, and only from this node. */
+function moreSheet(){if(!cur)return;var t=(window._threads||[]).filter(function(x){return x.id===cur})[0]||{};
+  var s=sheet('<header><h2>'+esc(t.title||"This thread")+'</h2><p>You own this thread. Deleting removes it and everything in it from your node and stops every link you shared. Anyone who already pulled a copy to their own node keeps theirs; the record is append-only between nodes.</p></header>'+
+  '<section><p class="hint">'+esc(String(t.entries||0))+' entries'+(t.shared?' · shared with '+t.shared+(t.shared===1?' person':' people'):'')+'</p></section>'+
+  '<footer><button class="btn danger" id="del">Delete this thread</button><span class="spacer"></span><button class="btn" data-x>Cancel</button></footer>');
+  s.querySelector("[data-x]").onclick=closeSheet;var d=s.querySelector("#del");
+  d.onclick=function(){if(!d.getAttribute("data-armed")){d.setAttribute("data-armed","1");d.textContent="Click again to delete for good";return}
+    d.disabled=true;api("/app/api/thread/"+tid()+"/delete",{}).then(function(r){if(r.error){alert(r.error);d.disabled=false;return}closeSheet();cur=null;threads()})}}
 
 /* Share: one button, two choices, one link. */
 function shareSheet(){if(!cur)return;var mode="summary";
@@ -377,7 +386,7 @@ function settings(){var m=me||{};var origin=location.origin;
       api("/app/api/thread/"+tid()+"/grant",{to:s.querySelector("#g-to").value,scopes:[s.querySelector("#g-scope").value.trim()||"summary"]}).then(function(r){
         st.innerHTML='<div class="status '+(r.error?"bad":"ok")+'">'+esc(r.error||("Granted to "+r.name))+'</div>';grants()})}}})}
 
-$("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("new").onclick=newThread;$("gear").onclick=settings;
+$("post").onclick=post;$("ask").onclick=ask;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("more").onclick=moreSheet;$("new").onclick=newThread;$("gear").onclick=settings;
 $("text").oninput=grow;$("text").onkeydown=function(e){if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();post()}if(e.key==="Enter"&&!e.shiftKey&&!e.metaKey&&!e.ctrlKey&&$("text").value.trim().slice(-1)==="?"&&!$("ask").hidden){e.preventDefault();ask()}};
 document.onkeydown=function(e){if(e.key==="Escape")closeSheet()};
 loadMe().then(threads);setInterval(function(){if(!sheetEl&&!busy){cur?open(cur):threads()}},15000);
@@ -396,7 +405,7 @@ func appHTML(model string, canAsk bool) string {
     <div class="me"><div class="avatar" id="me-av">·</div><b id="me-name">you</b><button class="icon" id="gear" title="Settings">⚙</button></div>
   </aside>
   <main class="main">
-    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="btn solid" id="share" disabled>Share</button></header>
+    <header class="head"><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
     <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
     <div class="composer"><div class="box">
       <div class="field">

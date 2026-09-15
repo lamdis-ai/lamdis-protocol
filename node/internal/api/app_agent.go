@@ -296,3 +296,40 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"ok": true, "reach": a.reach()})
 }
+
+// handleDeleteThread removes a thread the person stewards from this node.
+//
+// Ownership is stewardship: the creator is always a steward, and only
+// stewards can delete here. Deletion is local. A copy a peer already pulled,
+// or a page someone already read through a link, is theirs; what this does
+// is stop the thread existing on this node and kill every live link to it.
+func (a *App) handleDeleteThread(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ctx := r.Context()
+	tl, err := a.Store.Thread(ctx, id)
+	if err != nil {
+		http.Error(w, "no such thread", http.StatusNotFound)
+		return
+	}
+	st := perm.Fold(id, tl.Entries())
+	if !st.Stewards[a.Self] {
+		writeJSON(w, map[string]any{"error": "Only a steward of this thread can delete it. You can revoke your own access instead, or ask the owner."})
+		return
+	}
+	shares := a.loadShares()
+	killed := 0
+	for i := range shares {
+		if shares[i].Thread == id && !shares[i].Revoked {
+			shares[i].Revoked = true
+			killed++
+		}
+	}
+	if killed > 0 {
+		a.saveShares(shares)
+	}
+	if err := a.Store.DeleteThread(ctx, id); err != nil {
+		http.Error(w, "could not delete", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "links_stopped": killed})
+}

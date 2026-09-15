@@ -175,11 +175,13 @@ func (s *Server) Push(ctx context.Context, principal string, req PushRequest) (*
 		if e.Thread != req.Thread {
 			return nil, fmt.Errorf("entry %s belongs to another thread", e.ID)
 		}
-		if !st.ActsFor(e.Author, principal) && !(e.Lane == protolog.LaneControl && e.Author == principal) {
-			return nil, fmt.Errorf("entry %s: author is not the authenticated principal", e.ID)
-		}
 		switch e.Lane {
 		case protolog.LaneControl:
+			// Authorship of content is checked in the second pass, against
+			// a fold that includes any delegation arriving in this batch.
+			if !st.ActsFor(e.Author, principal) && e.Author != principal {
+				return nil, fmt.Errorf("entry %s: author is not the authenticated principal", e.ID)
+			}
 			selfBinding := e.Author == principal && e.OnBehalfOf == "" &&
 				(e.Kind == protolog.KindDelegation || e.Kind == protolog.KindAccessRequest)
 			if !st.Stewards[e.Author] && !selfBinding {

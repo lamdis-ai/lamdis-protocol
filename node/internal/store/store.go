@@ -64,5 +64,9 @@ type Store interface {
 	PendingEmbeds(ctx context.Context, limit int) ([]string, error)
 	// EntryText returns the indexable text of an entry ("" if none).
 	EntryText(ctx context.Context, entryID string) (string, error)
+	// DeleteThread removes a thread and everything in it from this node.
+	// Copies on other nodes are untouched: the log is append-only between
+	// peers, and deletion is a local decision about local storage.
+	DeleteThread(ctx context.Context, threadID string) error
 	Close() error
 }
