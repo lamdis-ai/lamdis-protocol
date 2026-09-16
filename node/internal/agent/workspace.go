@@ -33,6 +33,12 @@ type Workspace struct {
 	// Ask requests a directory. It returns true when the person allowed it,
 	// and is nil where nobody can be asked, which means the answer is no.
 	Ask func(ctx context.Context, path, why string) (bool, error)
+	// Remember persists a directory somebody allowed, so the same question
+	// is never asked twice.
+	Remember func(path string)
+	// Guard refuses credential stores even inside allowed ground. On unless
+	// somebody has deliberately turned it off.
+	Guard bool
 
 	mu sync.Mutex
 }
@@ -52,9 +58,7 @@ func (w *Workspace) Allow(dir string) {
 	if err != nil {
 		return
 	}
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
-	}
+	abs = resolveSymlinks(abs)
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for _, r := range append([]string{w.Root}, w.Roots...) {
@@ -106,13 +110,35 @@ func (w *Workspace) resolve(p string) (string, error) {
 		abs = filepath.Join(root, p)
 	}
 	abs = filepath.Clean(abs)
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
+	abs = resolveSymlinks(abs)
+	if w.Guard {
+		if bad, what := Guarded(abs); bad {
+			return "", fmt.Errorf("%s is in %s, which holds credentials. That is off limits even here; ask the person to fetch what you need", p, what)
+		}
 	}
 	if !w.Allowed(abs) {
 		return "", fmt.Errorf("%s is somewhere you have not allowed. Use open_path to ask for it", p)
 	}
 	return abs, nil
+}
+
+// resolveSymlinks follows links as far as it can. A file that does not
+// exist yet cannot be resolved, but the directory it would go in can, and
+// that is what decides whether it is somewhere allowed. On a Mac this is
+// not a nicety: /var is a link to /private/var, so without it writing a new
+// file into a directory somebody just allowed would be refused.
+func resolveSymlinks(abs string) string {
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	dir, base := filepath.Split(abs)
+	if dir == "" || dir == abs {
+		return abs
+	}
+	if real, err := filepath.EvalSymlinks(filepath.Clean(dir)); err == nil {
+		return filepath.Join(real, base)
+	}
+	return abs
 }
 
 // homeDir is where a person's own things live, and the one place a request
@@ -137,8 +163,11 @@ func (w *Workspace) RequestPath(ctx context.Context, dir, why string) (string, e
 	if !st.IsDir() {
 		abs = filepath.Dir(abs)
 	}
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
+	abs = resolveSymlinks(abs)
+	if w.Guard {
+		if bad, what := Guarded(abs); bad {
+			return "", fmt.Errorf("%s holds credentials, so it is not offered", what)
+		}
 	}
 	if w.Allowed(abs) {
 		return abs, nil
@@ -162,6 +191,9 @@ func (w *Workspace) RequestPath(ctx context.Context, dir, why string) (string, e
 		return "", fmt.Errorf("they said no")
 	}
 	w.Allow(abs)
+	if w.Remember != nil {
+		w.Remember(abs)
+	}
 	return abs, nil
 }
 

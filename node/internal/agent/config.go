@@ -39,6 +39,17 @@ type Config struct {
 	// ModelURL is an OpenAI-compatible base URL for a local or private
 	// model server, e.g. http://localhost:11434/v1. No key needed.
 	ModelURL string `json:"model_url,omitempty"`
+	// Trust is how much of this machine the agent may work in without
+	// asking: "project" where you started it, "home" everything under your
+	// home directory, "all" the whole machine. Set once, remembered.
+	Trust string `json:"trust,omitempty"`
+	// AllowPaths are directories you have already said yes to, so nobody is
+	// asked the same question twice.
+	AllowPaths []string `json:"allow_paths,omitempty"`
+	// Unguarded turns off the refusal to read credential stores. Off by
+	// default, because an agent you can direct from a phone reading your
+	// ssh keys is a different proposition from one reading your code.
+	Unguarded bool `json:"unguarded,omitempty"`
 	// ModelURLKey is a credential for ModelURL alone. The OpenRouter key is
 	// never sent anywhere but OpenRouter, so a private endpoint that needs
 	// authentication gets its own.
@@ -122,6 +133,11 @@ func LoadConfig(dataDir string) (Config, error) {
 	case "listed", "any", "off":
 	default:
 		c.AutoWeb = "listed"
+	}
+	switch c.Trust {
+	case "project", "home", "all":
+	default:
+		c.Trust = "project"
 	}
 	if c.Tools == nil {
 		c.Tools = []ToolServer{}

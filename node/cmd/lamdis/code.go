@@ -77,9 +77,30 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	// Outside a project there is nothing sensible to read or edit, and
 	// handing an agent somebody's whole home directory is worse than
 	// useless. It still answers from the record, which is most of the point.
+	// The same reach the listening agent uses, so the setting is chosen
+	// once and means the same thing wherever you are.
 	var ws *agent.Workspace
-	if inProject {
-		ws = &agent.Workspace{Root: root}
+	extra, mayAsk := agent.Reach(cfg, root)
+	if inProject || cfg.Trust != agent.TrustProject || len(extra) > 0 {
+		ws = &agent.Workspace{Root: root, Guard: !cfg.Unguarded}
+		for _, d := range extra {
+			ws.Allow(d)
+		}
+		ws.Remember = func(p string) {
+			c, _ := agent.LoadConfig(dataDir)
+			for _, q := range c.AllowPaths {
+				if q == p {
+					return
+				}
+			}
+			c.AllowPaths = append(c.AllowPaths, p)
+			agent.SaveConfig(dataDir, c)
+		}
+		if mayAsk {
+			ws.Ask = func(ctx context.Context, path, why string) (bool, error) {
+				return askAtTerminal(path, why)
+			}
+		}
 	}
 	runner := &agent.Runner{Store: s, PersonKey: priv, Person: pid, AgentKey: agentKey, Agent: agentPID,
 		Model: base, ModelName: envModel, DataDir: dataDir, Names: names, Embedder: embedderFromEnv(),
@@ -106,6 +127,9 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	where := filepath.Base(root)
 	if !inProject {
 		where = "no project here"
+		if ws != nil && cfg.Trust != agent.TrustProject {
+			where = agent.TrustSays(cfg.Trust)
+		}
 	}
 	if !*quiet {
 		fmt.Fprint(os.Stderr, banner(where, mname))
@@ -145,10 +169,13 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	// Interactive.
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 1<<20), 1<<20)
-	if inProject {
+	switch {
+	case inProject:
 		fmt.Fprintf(os.Stderr, "\033[2mAsk it anything about this project, or tell it what to change. /help for more.\033[0m\n")
-	} else {
-		fmt.Fprintf(os.Stderr, "\033[2mNo project here, so it answers from your record. cd into a repository to have it read and edit code. /help for more.\033[0m\n")
+	case ws != nil:
+		fmt.Fprintf(os.Stderr, "\033[2mNo project here, but it may work %s. /help for more.\033[0m\n", agent.TrustSays(cfg.Trust))
+	default:
+		fmt.Fprintf(os.Stderr, "\033[2mNo project here, so it answers from your record. `lamdis trust home` lets it work on files anywhere under your home directory. /help for more.\033[0m\n")
 	}
 	for {
 		fmt.Fprint(os.Stderr, "\n\033[1m› \033[0m")
@@ -164,7 +191,12 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		case "/quit", "/q", "exit", "quit":
 			return nil
 		case "/help", "help", "?":
-			fmt.Fprint(os.Stderr, cliHelp(inProject, thread))
+			fmt.Fprint(os.Stderr, cliHelp(ws != nil, thread))
+			continue
+		case "/trust":
+			if err := cmdTrust(ctx, dataDir, nil); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31m%v\033[0m\n", err)
+			}
 			continue
 		case "/threads":
 			if err := cmdThreads(ctx, s); err != nil {
@@ -186,20 +218,21 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 }
 
 // cliHelp is what you get for asking, which should never be a wall.
-func cliHelp(inProject bool, thread string) string {
+func cliHelp(canWork bool, thread string) string {
 	d, z, b := "\033[2m", "\033[0m", "\033[1m"
 	s := "\n" + b + "What you can say" + z + "\n"
-	if inProject {
+	if canWork {
 		s += "  " + d + "a task" + z + "        add a test for the login bug\n" +
 			"  " + d + "a question" + z + "    why does auth fail on refresh?\n" +
 			"  " + d + "it reads, edits and runs your tests, then reports back\n" + z
 	} else {
 		s += "  " + d + "a question" + z + "    what did we decide about the Acme rate?\n" +
 			"  " + d + "a note" + z + "        anything you tell it is kept and searchable\n" +
-			"  " + d + "cd into a project and it can read and edit code there\n" + z
+			"  " + d + "`lamdis trust home` lets it work on files, anywhere under your home\n" + z
 	}
 	s += "\n" + b + "Commands" + z + "\n" +
 		"  /threads     " + d + "everything in your record" + z + "\n" +
+		"  /trust       " + d + "how much of this machine it may use" + z + "\n" +
 		"  /app         " + d + "open it in a browser" + z + "\n" +
 		"  /here        " + d + "where you are and what is answering" + z + "\n" +
 		"  /quit        " + d + "or Ctrl-D" + z + "\n\n" +
@@ -410,4 +443,21 @@ func cmdApp(ctx context.Context, dataDir string, s store.Store, args []string) e
 	// Not running: start it here. serve opens the browser itself.
 	fmt.Fprintf(os.Stderr, "starting the node…\n")
 	return cmdServe(dataDir, s, []string{"-addr", *addr})
+}
+
+// askAtTerminal is the version of the question for somebody who is right
+// here: one line, one keystroke, and the answer is remembered.
+func askAtTerminal(path, why string) (bool, error) {
+	fmt.Fprintf(os.Stderr, "\n\033[36m? May I work in %s\033[0m", path)
+	if strings.TrimSpace(why) != "" {
+		fmt.Fprintf(os.Stderr, "\033[2m — %s\033[0m", strings.TrimSpace(why))
+	}
+	fmt.Fprintf(os.Stderr, "\n\033[2m  [y] yes, and remember it   [n] no\033[0m\n\033[1m› \033[0m")
+	in := bufio.NewReader(os.Stdin)
+	line, err := in.ReadString('\n')
+	if err != nil {
+		return false, nil
+	}
+	a := strings.ToLower(strings.TrimSpace(line))
+	return a == "y" || a == "yes" || a == "allow", nil
 }

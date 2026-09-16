@@ -41,6 +41,7 @@ func cmdListen(ctx context.Context, dataDir string, s store.Store, args []string
 	threadRef := fs.String("thread", "", "thread to work in (default: this machine's own)")
 	dir := fs.String("dir", "", "where it may work (default: here)")
 	allow := fs.String("allow", "", "more directories it may work in, comma separated")
+	trust := fs.String("trust", "", "project, home or all: how much of this machine it may use (remembered)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -67,11 +68,30 @@ func cmdListen(ctx context.Context, dataDir string, s store.Store, args []string
 		return err
 	}
 
-	ws := &agent.Workspace{Root: root}
+	// What it may reach is a setting, not a question asked over and over.
+	if *trust != "" {
+		cfg.Trust = *trust
+		agent.SaveConfig(dataDir, cfg)
+	}
+	extra, mayAsk := agent.Reach(cfg, root)
+	ws := &agent.Workspace{Root: root, Guard: !cfg.Unguarded}
+	for _, d := range extra {
+		ws.Allow(d)
+	}
 	for _, d := range strings.Split(*allow, ",") {
 		if d = strings.TrimSpace(d); d != "" {
 			ws.Allow(d)
 		}
+	}
+	ws.Remember = func(p string) {
+		c, _ := agent.LoadConfig(dataDir)
+		for _, q := range c.AllowPaths {
+			if q == p {
+				return
+			}
+		}
+		c.AllowPaths = append(c.AllowPaths, p)
+		agent.SaveConfig(dataDir, c)
 	}
 
 	var base agent.Model
@@ -113,8 +133,10 @@ func cmdListen(ctx context.Context, dataDir string, s store.Store, args []string
 	// It carries its own syncing, because the run that is asking holds the
 	// agent still: whatever would otherwise deliver the question is itself
 	// waiting on the answer to it.
-	ws.Ask = func(ctx context.Context, path, why string) (bool, error) {
-		return askForPath(ctx, s, priv, agentKey, pid, thread, path, why, syncNow)
+	if mayAsk {
+		ws.Ask = func(ctx context.Context, path, why string) (bool, error) {
+			return askForPath(ctx, s, priv, agentKey, pid, thread, path, why, syncNow)
+		}
 	}
 
 	// Somebody is on the other end of this, so check often enough that it
@@ -137,7 +159,16 @@ func cmdListen(ctx context.Context, dataDir string, s store.Store, args []string
 	} else {
 		fmt.Fprintf(os.Stderr, "\033[2mnot paired with anything yet; `lamdis link` connects this machine to app.lamdis.ai\033[0m\n")
 	}
-	fmt.Fprintf(os.Stderr, "\033[2mworking in %s · it will ask before reaching anywhere else · Ctrl-C to stop\033[0m\n\n", root)
+	reach := root
+	if cfg.Trust != agent.TrustProject {
+		reach = agent.TrustSays(cfg.Trust)
+	}
+	guard := ""
+	if !cfg.Unguarded {
+		guard = " · keys and credentials refused"
+	}
+	fmt.Fprintf(os.Stderr, "\033[2mworking in %s%s%s · Ctrl-C to stop\033[0m\n\n", reach,
+		map[bool]string{true: " · asks before going further", false: ""}[mayAsk], guard)
 
 	// Standing instructions, so the scheduler acts on what arrives. The
 	// person can change them later from anywhere; this only sets them up

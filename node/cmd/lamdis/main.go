@@ -38,7 +38,7 @@ func main() {
 	}
 }
 
-var commandNames = []string{"help", "-h", "--help", "app", "agent", "link", "keys", "host", "try-server", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
+var commandNames = []string{"help", "-h", "--help", "app", "agent", "link", "trust", "keys", "host", "try-server", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
 	"whoami", "thread", "threads", "post", "read", "search", "mcp", "serve", "peer", "peers", "sync", "share",
 	"discover", "request", "requests", "approve", "deny", "grant", "revoke", "access"}
 
@@ -104,6 +104,8 @@ commands:
        [-allow A,B]           from anywhere and it acts here.
   link [CODE]                 connect this machine to your account at
                               app.lamdis.ai, so both see the same threads
+  trust [project|home|all]    how much of this machine the agent may work in
+  trust ~/work                allow one place permanently, so it stops asking
   try-server [-addr :8090]    the public demo behind the website: one question,
                               one answer, nothing stored. Hard rate limits.
 
@@ -264,6 +266,8 @@ func run(args []string) error {
 		return cmdApp(ctx, *dataDir, s, rest)
 	case "agent":
 		return cmdListen(ctx, *dataDir, s, rest)
+	case "trust":
+		return cmdTrust(ctx, *dataDir, rest)
 	case "link":
 		return cmdLink(ctx, *dataDir, s, rest)
 	case "mcp":
