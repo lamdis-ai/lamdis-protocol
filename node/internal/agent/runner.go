@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -818,7 +819,7 @@ func (r *Runner) dispatch(ctx context.Context, t Trigger, tl *protolog.ThreadLog
 		id := s("thread")
 		otl, err := r.Store.Thread(ctx, id)
 		if err != nil {
-			return "no such thread", false, ""
+			return notHere(id), false, ""
 		}
 		if !contains(rec.Threads, id) {
 			rec.Threads = append(rec.Threads, id)
@@ -902,7 +903,7 @@ func (r *Runner) dispatch(ctx context.Context, t Trigger, tl *protolog.ThreadLog
 		}
 		otl, err := r.Store.Thread(ctx, id)
 		if err != nil {
-			return "no such thread", false, ""
+			return notHere(id), false, ""
 		}
 		ost := perm.Fold(id, otl.Entries())
 		if !(ost.Stewards[r.Person] || ost.EffectiveScopes(r.Person, r.now()).Has(perm.ScopeContribute)) {
@@ -949,7 +950,16 @@ func (r *Runner) dispatch(ctx context.Context, t Trigger, tl *protolog.ThreadLog
 		if fr.Error != "" && text == "" {
 			return "fetch failed: " + fr.Error, false, ""
 		}
-		return untrusted(u, text), false, ""
+		out := untrusted(u, text)
+		if host, ok := sharedLink(u); ok {
+			out += "\n\nThis is a read-only view of somebody's thread on " + host +
+				". You are looking through a window: you cannot write to that thread, " +
+				"and it is not one of the threads on this node. If it belongs to the " +
+				"person you are talking to, they can join this machine to that account " +
+				"and then you could work in it directly; tell them: open " + host +
+				", Settings, Connect a machine, and run the command it gives them here."
+		}
+		return out, false, ""
 	default:
 		if xt := ex.tools[name]; xt != nil {
 			if xt.confirm && !g.tools[name] {
@@ -1059,4 +1069,27 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// notHere explains a thread that is not on this node, which is almost
+// always somebody naming one they saw somewhere else. "No such thread" is
+// true and useless; what they want is the way to it.
+func notHere(id string) string {
+	return "There is no thread " + trunc(id, 30) + " on this node. Use list_threads to see what is here. " +
+		"A thread you have only seen through a shared link lives on somebody else's node, and reading that " +
+		"link does not put it here: to work in it, this machine has to be joined to that account."
+}
+
+// sharedLink recognises a Lamdis shared view, and names the host it is on.
+func sharedLink(u string) (string, bool) {
+	p, err := url.Parse(u)
+	if err != nil || p.Host == "" {
+		return "", false
+	}
+	parts := strings.Split(strings.Trim(p.Path, "/"), "/")
+	// /s/<capability> on a node of its own, /s/<account>/<capability> hosted.
+	if len(parts) >= 2 && parts[0] == "s" {
+		return p.Scheme + "://" + p.Host, true
+	}
+	return "", false
 }

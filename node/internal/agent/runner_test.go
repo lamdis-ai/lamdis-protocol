@@ -421,3 +421,64 @@ func TestReflectingRunCarriesItsQuestion(t *testing.T) {
 		t.Fatalf("the run record does not name the rhythm: %q", rb.Trigger)
 	}
 }
+
+// Being told "no such thread" about a link you are looking at is a dead
+// end. What somebody wants at that moment is the way through.
+func TestADeadEndBecomesTheWayThrough(t *testing.T) {
+	msg := notHere("01M2K7FGQFP29JFGM20G13A1FW")
+	for _, want := range []string{"list_threads", "shared link", "joined to that account"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("it does not mention %q: %s", want, msg)
+		}
+	}
+
+	for _, c := range []struct {
+		url   string
+		host  string
+		known bool
+	}{
+		{"https://app.lamdis.ai/s/g4730c98/eyJpIjoi.sig", "https://app.lamdis.ai", true},
+		{"http://localhost:8420/s/eyJpIjoi.sig", "http://localhost:8420", true},
+		{"https://example.com/blog/post", "", false},
+		{"https://app.lamdis.ai/app", "", false},
+		{"not a url at all", "", false},
+	} {
+		host, ok := sharedLink(c.url)
+		if ok != c.known || host != c.host {
+			t.Errorf("%s -> (%q,%v), wanted (%q,%v)", c.url, host, ok, c.host, c.known)
+		}
+	}
+}
+
+// Reading a shared link should not leave the agent thinking it can write
+// to what it just read.
+func TestAWindowIsNotAWayIn(t *testing.T) {
+	m := &script{turns: []Message{call("fetch_url",
+		map[string]any{"url": "https://app.lamdis.ai/s/acct/cap.sig"}), say("that is read only")}}
+	f := setup(t, m)
+	q := f.post(t, KindQuestion, map[string]any{"text": "add a note to that link"}, nil)
+	f.r.Run(context.Background(), Trigger{Kind: TriggerChat, Thread: f.thread, Entry: q.ID})
+
+	// The second turn is where the model sees what the fetch returned.
+	if len(m.tools) < 2 {
+		t.Fatal("it never got a second turn")
+	}
+	var run *protolog.Entry
+	for _, e := range f.entries(t) {
+		if e.Kind == KindRun {
+			run = e
+		}
+	}
+	if run == nil {
+		t.Fatal("no run record")
+	}
+	// The fetch is recorded whether it succeeded or not, which is the point
+	// of the record.
+	var rb struct {
+		Fetches []map[string]any `json:"fetches"`
+	}
+	json.Unmarshal(run.Body, &rb)
+	if len(rb.Fetches) != 1 {
+		t.Fatalf("the fetch was not written down: %+v", rb.Fetches)
+	}
+}

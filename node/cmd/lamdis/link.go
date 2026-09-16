@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -30,19 +31,37 @@ func cmdLink(ctx context.Context, dataDir string, s store.Store, args []string) 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	code := strings.ToLower(strings.TrimSpace(strings.Join(fs.Args(), "")))
+	arg := strings.TrimSpace(strings.Join(fs.Args(), " "))
+	// A link pasted instead of a code is the common mistake, and it is an
+	// understandable one: it is the thing they were just looking at. Say
+	// why it is not enough, in one line, and take them where it is.
+	if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
+		if u, err := url.Parse(arg); err == nil && u.Host != "" {
+			*host = u.Scheme + "://" + u.Host
+			if strings.Contains(u.Path, "/s/") {
+				fmt.Fprintf(os.Stderr, "That is a link for reading a thread, which is not enough to write to it.\n\n")
+			}
+		}
+		arg = ""
+	}
+	code := strings.ToLower(strings.ReplaceAll(arg, " ", ""))
 	if code == "" {
+		where := strings.TrimRight(*host, "/") + "/app"
 		fmt.Fprintf(os.Stderr, `Connect this machine to your account.
 
-  1. Open %s/app on any device
-  2. Settings, then "Connect a machine", and pick a thread
+  1. In %s, open Settings, then "Connect a machine"
+  2. Pick the thread this machine should work in
   3. Run the command it gives you, here
 
 The code lasts fifteen minutes and works once. It gives this machine access
 to that one thread and nothing else, and you can take it back from the same
 place you gave it.
-`, *host)
-		return fmt.Errorf("no code given")
+`, where)
+		if os.Getenv("LAMDIS_NO_OPEN") == "" {
+			fmt.Fprintf(os.Stderr, "\nOpening %s\n", where)
+			openBrowser(where)
+		}
+		return nil
 	}
 
 	priv, pid, err := loadKey(dataDir)
