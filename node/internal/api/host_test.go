@@ -387,3 +387,42 @@ func TestAFullHostFreesRoomBeforeRefusing(t *testing.T) {
 		t.Fatal("it still tells people to write in")
 	}
 }
+
+// A link somebody was handed has to open. The path a hosted node mints and
+// the path it serves are easy to let drift apart, and nothing else catches
+// it: the link is created in one place and used from another.
+func TestAShareLinkFromAHostedAccountOpens(t *testing.T) {
+	_, key, claims, handler := testHost(t)
+	tok := as(t, key, claims, "sam", "sam@example.com")
+	th := firstThread(t, handler, tok)
+
+	if w := call(handler, "POST", "/app/api/post", tok,
+		`{"thread":"`+th+`","text":"Dalton is £500 cheaper once migration is counted.","lane":"summary"}`); w.Code != http.StatusOK {
+		t.Fatalf("summary: %d %s", w.Code, w.Body.String())
+	}
+	w := call(handler, "POST", "/app/api/share", tok, `{"thread":"`+th+`","scope":"summary","days":30,"label":"the board"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("share: %d %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Path  string `json:"path"`
+		Error string `json:"error"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &out)
+	if out.Path == "" {
+		t.Fatalf("no link was minted: %s", w.Body.String())
+	}
+
+	// Exactly what somebody pasting the link would ask for, with no session.
+	if w := call(handler, "GET", out.Path, "", ""); w.Code != http.StatusOK {
+		t.Fatalf("the link 404s: %s -> %d", out.Path, w.Code)
+	}
+	w = call(handler, "GET", out.Path+"/api/thread", "", "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "£500 cheaper") {
+		t.Fatalf("the link shows nothing: %d %s", w.Code, w.Body.String())
+	}
+	// And it shows only what was shared.
+	if strings.Contains(w.Body.String(), "lamdis_token") {
+		t.Fatal("the shared view leaked something")
+	}
+}

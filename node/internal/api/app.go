@@ -176,8 +176,11 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/peers", a.owner(a.handleAddPeer))
 	// The shared view. Deliberately a different path with its own auth: a
 	// capability must never be able to reach an owner route by accident.
-	mux.HandleFunc("GET /s/{cap}", a.sharedPage)
-	mux.HandleFunc("GET /s/{cap}/api/thread", a.sharedThread)
+	// Share links are served where the links themselves say they are. On a
+	// hosted node that path carries the account, because one address serves
+	// many nodes; registering the two apart is how they stopped matching.
+	mux.HandleFunc("GET "+a.sharePrefix()+"/{cap}", a.sharedPage)
+	mux.HandleFunc("GET "+a.sharePrefix()+"/{cap}/api/thread", a.sharedThread)
 }
 
 // owner gates a route on the local token.
