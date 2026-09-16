@@ -21,6 +21,10 @@ import (
 type Scheduler struct {
 	Runner *Runner
 	State  *State
+	// SyncEvery overrides how often it pulls from peers. A node somebody is
+	// talking to across the world wants seconds; one that is only keeping
+	// itself current is fine with minutes.
+	SyncEvery time.Duration
 	// Sync pulls from and pushes to every peer; nil when the node has none.
 	Sync func(ctx context.Context) error
 	// Logf reports what happened; stderr in serve.
@@ -34,6 +38,14 @@ const (
 	debounce  = 20 * time.Second
 	maxChain  = 3
 )
+
+// Push sends what is here to the peers now, for when somebody is waiting
+// on the other end of it.
+func (s *Scheduler) Push(ctx context.Context) {
+	if s.Sync != nil {
+		s.Sync(ctx)
+	}
+}
 
 // Wake asks for an immediate poll, e.g. after the app writes an entry.
 func (s *Scheduler) Wake() {
@@ -59,6 +71,9 @@ func (s *Scheduler) Start(ctx context.Context) {
 	syncEvery, err := time.ParseDuration(cfg.SyncEvery)
 	if err != nil || syncEvery < 30*time.Second {
 		syncEvery = 2 * time.Minute
+	}
+	if s.SyncEvery > 0 {
+		syncEvery = s.SyncEvery
 	}
 	var lastSync time.Time
 	// First pass records where every chain is, without firing: a node
@@ -196,6 +211,13 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 		res := r.Run(ctx, t)
 		s.logf("agent: %s run on %s: %s %s", t.Kind, t.Thread, res.Outcome, res.Error)
 		s.consumeOwn(ctx, t.Thread)
+		// Whoever asked is waiting, so send the answer rather than letting
+		// it sit until the next round.
+		if s.Sync != nil && res.Outcome != "nothing" {
+			if err := s.Sync(ctx); err != nil {
+				s.logf("agent: could not send that back yet: %v", err)
+			}
+		}
 	}
 }
 

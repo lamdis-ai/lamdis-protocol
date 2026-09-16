@@ -262,6 +262,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 		// An account with an email behind it may keep credentials; one that
 		// is only a token in somebody's browser may not.
 		PublicBase: h.PublicBase,
+		SyncBase:   h.PublicBase,
 		Identified: func() bool {
 			_, err := os.Stat(filepath.Join(dir, "subject"))
 			return err == nil
@@ -279,7 +280,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	}
 	acct.App = app
 	acct.Sched = sched
-	acct.sync = &Server{Sync: &syncp.Server{Store: st}, Principal: self}
+	acct.sync = &Server{Prefix: "/n/" + id, Sync: &syncp.Server{Store: st}, Principal: self}
 
 	mux := http.NewServeMux()
 	app.Register(mux)
@@ -465,6 +466,9 @@ func (h *Host) Handler() http.Handler {
 	mux.HandleFunc("GET /app/{$}", page)
 	// Starting is public: that is the whole point of it.
 	mux.HandleFunc("POST /app/api/start", h.handleStart)
+	// Redeeming a link code is public too: a machine has a keypair and a
+	// code, and nothing else.
+	mux.HandleFunc("POST /v1/link", h.LinkHandler)
 
 	mux.HandleFunc("GET /app/app.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
@@ -504,7 +508,8 @@ func (h *Host) Handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		http.StripPrefix("/n/"+id, acct.sync.Handler()).ServeHTTP(w, r)
+		// No stripping: the prefix is part of what the caller signed.
+		acct.sync.Handler().ServeHTTP(w, r)
 	})
 	return mux
 }

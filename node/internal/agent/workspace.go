@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,8 +21,62 @@ import (
 // and by distilling what comes back, not by choosing a language. Six tools,
 // all bounded, every path checked to stay inside the root.
 
+// A workspace is one or more places the agent may work. It starts with
+// wherever you launched it and grows only when you say so: the agent asks
+// for a directory the way it asks for any other decision, and you answer
+// from wherever you happen to be.
 type Workspace struct {
 	Root string
+	// Roots are the directories it may reach, Root included. Empty means
+	// Root alone.
+	Roots []string
+	// Ask requests a directory. It returns true when the person allowed it,
+	// and is nil where nobody can be asked, which means the answer is no.
+	Ask func(ctx context.Context, path, why string) (bool, error)
+
+	mu sync.Mutex
+}
+
+// roots is every place it may currently work.
+func (w *Workspace) roots() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := []string{w.Root}
+	out = append(out, w.Roots...)
+	return out
+}
+
+// Allow adds a directory to what the agent may reach.
+func (w *Workspace) Allow(dir string) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, r := range append([]string{w.Root}, w.Roots...) {
+		if r == abs {
+			return
+		}
+	}
+	w.Roots = append(w.Roots, abs)
+}
+
+// Allowed reports whether a path is inside somewhere already permitted.
+func (w *Workspace) Allowed(abs string) bool {
+	for _, r := range w.roots() {
+		root, err := filepath.EvalSymlinks(r)
+		if err != nil {
+			root = r
+		}
+		if abs == root || strings.HasPrefix(abs, root+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 const (
@@ -54,19 +109,73 @@ func (w *Workspace) resolve(p string) (string, error) {
 	if real, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = real
 	}
-	if abs != root && !strings.HasPrefix(abs, root+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s is outside the workspace", p)
+	if !w.Allowed(abs) {
+		return "", fmt.Errorf("%s is somewhere you have not allowed. Use open_path to ask for it", p)
 	}
 	return abs, nil
 }
 
+// homeDir is where a person's own things live, and the one place a request
+// for "everything" is always refused: an agent that may read your whole home
+// directory may read your keys, your mail and your browser profile.
+func homeDir() string {
+	h, _ := os.UserHomeDir()
+	return filepath.Clean(h)
+}
+
+// RequestPath asks the person for a directory, and adds it if they agree.
+func (w *Workspace) RequestPath(ctx context.Context, dir, why string) (string, error) {
+	abs, err := filepath.Abs(strings.TrimSpace(dir))
+	if err != nil {
+		return "", fmt.Errorf("that is not a path")
+	}
+	abs = filepath.Clean(abs)
+	st, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("%s is not there", dir)
+	}
+	if !st.IsDir() {
+		abs = filepath.Dir(abs)
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+	if w.Allowed(abs) {
+		return abs, nil
+	}
+	// Some requests are refused rather than asked, because no answer given
+	// in a hurry should be able to hand over everything at once.
+	switch {
+	case abs == "/" || abs == filepath.VolumeName(abs)+string(filepath.Separator):
+		return "", fmt.Errorf("the whole filesystem is not something to hand over; ask for the directory you need")
+	case abs == homeDir():
+		return "", fmt.Errorf("your home directory holds keys, mail and browser profiles, so it is not offered whole; ask for the folder you need")
+	}
+	if w.Ask == nil {
+		return "", fmt.Errorf("nobody is here to allow that")
+	}
+	ok, err := w.Ask(ctx, abs, why)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("they said no")
+	}
+	w.Allow(abs)
+	return abs, nil
+}
+
+// rel names a file the shortest way that is still unambiguous: relative to
+// the place you launched in, absolute anywhere else.
 func (w *Workspace) rel(abs string) string {
 	root, err := filepath.EvalSymlinks(w.Root)
 	if err != nil {
 		root = w.Root
 	}
-	if r, err := filepath.Rel(root, abs); err == nil {
-		return r
+	if abs == root || strings.HasPrefix(abs, root+string(filepath.Separator)) {
+		if r, err := filepath.Rel(root, abs); err == nil {
+			return r
+		}
 	}
 	return abs
 }
@@ -77,29 +186,9 @@ func (w *Workspace) Map() string {
 	var files []string
 	sizes := map[string]int64{}
 	n := 0
-	filepath.WalkDir(w.Root, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if p != w.Root && skipDirs[d.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if n >= mapMaxFiles {
-			return filepath.SkipAll
-		}
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
-		r := w.rel(p)
-		files = append(files, r)
-		sizes[r] = info.Size()
-		n++
-		return nil
-	})
+	for _, root := range w.roots() {
+		w.mapInto(root, &files, sizes, &n)
+	}
 	sort.Strings(files)
 	var sb strings.Builder
 	for _, f := range files {
@@ -109,6 +198,32 @@ func (w *Workspace) Map() string {
 		sb.WriteString("… (more files not listed; use list_files or search_files)\n")
 	}
 	return sb.String()
+}
+
+func (w *Workspace) mapInto(root string, files *[]string, sizes map[string]int64, n *int) {
+	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if p != root && skipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if *n >= mapMaxFiles {
+			return filepath.SkipAll
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		r := w.rel(p)
+		*files = append(*files, r)
+		sizes[r] = info.Size()
+		*n++
+		return nil
+	})
 }
 
 func humanSize(n int64) string {
@@ -146,6 +261,10 @@ func (w *Workspace) Specs() []ToolSpec {
 			Parameters: obj(map[string]any{"path": str("file path"), "content": str("full file content")}, "path", "content")},
 		{Name: "run", Description: "Run a shell command in the workspace (tests, builds, git, scripts). Output is distilled to the first and last lines. Two-minute limit.",
 			Parameters: obj(map[string]any{"command": str("the command, as for sh -c")}, "command")},
+		{Name: "open_path", Description: "Ask the person for a directory you are not allowed to reach yet. They see what you asked for and why, and answer. Use it when what you need is somewhere else on this machine.",
+			Parameters: obj(map[string]any{"path": str("absolute path to the directory"), "why": str("one line: what you need it for")}, "path", "why")},
+		{Name: "where", Description: "List the directories you are currently allowed to work in.",
+			Parameters: obj(map[string]any{})},
 	}
 }
 
@@ -197,6 +316,7 @@ func (w *Workspace) Call(ctx context.Context, name string, args map[string]any) 
 		if p == "" {
 			p = "."
 		}
+		_ = p
 		abs, err := w.resolve(p)
 		if err != nil {
 			return "error: " + err.Error(), true
@@ -320,6 +440,19 @@ func (w *Workspace) Call(ctx context.Context, name string, args map[string]any) 
 			return "error: " + err.Error(), true
 		}
 		return fmt.Sprintf("wrote %s (%d bytes)", w.rel(abs), len(s("content"))), true
+	case "where":
+		var sb strings.Builder
+		for _, r := range w.roots() {
+			sb.WriteString(r + "\n")
+		}
+		sb.WriteString("\nAnywhere else, ask with open_path.")
+		return sb.String(), true
+	case "open_path":
+		abs, err := w.RequestPath(ctx, s("path"), s("why"))
+		if err != nil {
+			return "refused: " + err.Error(), true
+		}
+		return "you may now work in " + abs, true
 	case "run":
 		cmdline := strings.TrimSpace(s("command"))
 		if cmdline == "" {

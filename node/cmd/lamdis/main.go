@@ -38,7 +38,7 @@ func main() {
 	}
 }
 
-var commandNames = []string{"help", "-h", "--help", "app", "keys", "host", "try-server", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
+var commandNames = []string{"help", "-h", "--help", "app", "agent", "link", "keys", "host", "try-server", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
 	"whoami", "thread", "threads", "post", "read", "search", "mcp", "serve", "peer", "peers", "sync", "share",
 	"discover", "request", "requests", "approve", "deny", "grant", "revoke", "access"}
 
@@ -99,6 +99,11 @@ commands:
 
   app                         open your threads in a browser (starts the node
                               if it isn't running already)
+  agent [-dir PATH]           leave an agent running on this machine, taking
+       [-thread REF]          direction from a thread. Write into that thread
+       [-allow A,B]           from anywhere and it acts here.
+  link [CODE]                 connect this machine to your account at
+                              app.lamdis.ai, so both see the same threads
   try-server [-addr :8090]    the public demo behind the website: one question,
                               one answer, nothing stored. Hard rate limits.
 
@@ -257,6 +262,10 @@ func run(args []string) error {
 		return cmdSearch(ctx, s, strings.Join(rest, " "))
 	case "app":
 		return cmdApp(ctx, *dataDir, s, rest)
+	case "agent":
+		return cmdListen(ctx, *dataDir, s, rest)
+	case "link":
+		return cmdLink(ctx, *dataDir, s, rest)
 	case "mcp":
 		priv, pid, err := loadKey(*dataDir)
 		if err != nil {

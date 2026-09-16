@@ -514,6 +514,9 @@ function settings(){var m=me||{};var origin=location.origin;
   '<label class="f">Connections</label><p class="hint" style="margin-top:0">Anything that speaks MCP: your issue tracker, your calendar, your own service. Paste the address, then press Sign in and approve it in the window. Services that hand out plain tokens take one in the field instead. Press Test to see what a server offers, and tick what your agent may use.</p>'+
   '<div id="conns"></div>'+
   '<button class="btn" id="conn-add" style="margin-top:.6rem">+ Add a connection</button>'+
+  '<label class="f">Connect a machine</label><p class="hint" style="margin-top:0">Leave an agent running on your laptop or a server, and it takes direction from a thread here. Write from your phone, it happens there.</p>'+
+  (cur?'<button class="btn" id="c-link">Connect this thread to a machine</button><div id="c-linkout"></div>'
+      :'<p class="hint">Open a thread first, then come back: a machine is connected to one thread.</p>')+
   '<label class="f">Use with Claude</label><div class="cmd">claude mcp add lamdis -- lamdis mcp<button data-copy="claude mcp add lamdis -- lamdis mcp">copy</button></div>'+
   '<p class="hint">Run that once. Claude Code can then read your threads and write into them; its entries are labelled. Any other AI that speaks MCP works the same way.</p>'+
   (m.can_ask?'':'<p class="hint">Your agent is off. Three ways on: an OpenRouter key of your own (openrouter.ai/keys), a model on this machine (Ollama, vLLM), or <a href="mailto:support@lamdis.ai?subject=Lamdis%20key%20request" style="color:var(--gold)">ask us for a starter key</a> and we will send you one with a small fixed credit.</p>')+
@@ -612,6 +615,15 @@ function settings(){var m=me||{};var origin=location.origin;
   function drawWeb(){s.querySelector("#c-domwrap").hidden=(aw.value!=="listed")}
   drawWeb();
   aw.onchange=function(){drawWeb();api("/app/api/agent/config",{auto_web:aw.value})};
+  var lk=s.querySelector("#c-link");
+  if(lk)lk.onclick=function(){lk.disabled=true;lk.textContent="Asking…";
+    api("/app/api/link/offer",{thread:cur}).then(function(r){lk.disabled=false;lk.textContent="Connect this thread to a machine";
+      var out=s.querySelector("#c-linkout");
+      if(r.error){out.innerHTML='<div class="status bad">'+esc(r.error)+'</div>';return}
+      out.innerHTML='<p class="hint" style="margin-top:.7rem">On the machine, with Lamdis installed, run this within fifteen minutes:</p>'+
+        '<div class="cmd">'+esc(r.command)+'<button data-copy="'+esc(r.command)+'">copy</button></div>'+
+        '<p class="hint">Then <span class="mono">lamdis agent</span> there. It works only in the directory you start it in, asks before reaching anywhere else, and writes everything it does into this thread.</p>';
+      Array.prototype.forEach.call(out.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="copied"}})})};
   s.querySelector("#c-domsave").onclick=function(){var b=s.querySelector("#c-domsave");api("/app/api/agent/config",{allow_domains:s.querySelector("#c-dom").value.split(",")}).then(function(r){b.textContent=r.error?"Failed":"Saved"})};
   var rv=s.querySelector("#c-revoke");rv.onclick=function(){if(rv.getAttribute("data-armed")){api("/app/api/agent/revoke").then(function(r){rv.textContent=r.error?r.error:"Revoked in "+r.revoked_in+" threads";loadMe()})}else{rv.setAttribute("data-armed","1");rv.textContent="Click again to confirm"}};
   function peers(){var l=(me&&me.peers)||[];s.querySelector("#peers").innerHTML=l.map(function(p){return '<div class="row"><div class="t"><b>'+esc(p.name)+'</b><span>'+esc(p.url)+'</span></div></div>'}).join("")}

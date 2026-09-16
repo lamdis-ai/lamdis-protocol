@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
@@ -80,7 +81,12 @@ func authenticate(r *http.Request, body []byte, now time.Time) (string, error) {
 
 // Server exposes the sync protocol over HTTP.
 type Server struct {
-	Sync *syncp.Server
+	// Prefix mounts this node's sync API somewhere other than the root,
+	// which is how one process serves many nodes. It is part of the path a
+	// caller signs, so it cannot be stripped before the signature is
+	// checked; the routes carry it instead.
+	Prefix string
+	Sync   *syncp.Server
 	// Principal is this node's person principal id, served unauthenticated
 	// at /v1/node so pairing can exchange identities automatically.
 	Principal string
@@ -96,16 +102,17 @@ func (s *Server) now() time.Time {
 
 func (s *Server) Handler() *http.ServeMux {
 	mux := http.NewServeMux()
+	p := strings.TrimRight(s.Prefix, "/")
 	// Node identity is public by design: it's how two people pair. It reveals
 	// nothing about threads or content.
-	mux.HandleFunc("GET /v1/node", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+p+"/v1/node", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"principal": s.Principal})
 	})
-	mux.HandleFunc("POST /v1/sync/list", s.withAuth(s.handleList))
-	mux.HandleFunc("POST /v1/sync/pull", s.withAuth(s.handlePull))
-	mux.HandleFunc("POST /v1/sync/push", s.withAuth(s.handlePush))
-	mux.HandleFunc("POST /v1/discover", s.withAuth(s.handleDiscover))
-	mux.HandleFunc("POST /v1/access/request", s.withAuth(s.handleAccessRequest))
+	mux.HandleFunc("POST "+p+"/v1/sync/list", s.withAuth(s.handleList))
+	mux.HandleFunc("POST "+p+"/v1/sync/pull", s.withAuth(s.handlePull))
+	mux.HandleFunc("POST "+p+"/v1/sync/push", s.withAuth(s.handlePush))
+	mux.HandleFunc("POST "+p+"/v1/discover", s.withAuth(s.handleDiscover))
+	mux.HandleFunc("POST "+p+"/v1/access/request", s.withAuth(s.handleAccessRequest))
 	return mux
 }
 

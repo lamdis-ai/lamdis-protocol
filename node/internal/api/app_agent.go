@@ -242,6 +242,19 @@ func (a *App) handleDecision(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	// A question asked by somebody else's agent is answered by that agent,
+	// not by this one. Recording the reply is the whole job here; the agent
+	// waiting on it is on another machine, and picks it up when it syncs.
+	if decision.Author != a.AgentSelf {
+		if a.Scheduler != nil {
+			a.Scheduler.Consume(ctx, thread)
+			// Somebody is waiting on this answer, so send it now.
+			a.Scheduler.Push(ctx)
+		}
+		writeJSON(w, map[string]any{"reply": reply.ID, "outcome": "sent",
+			"note": "Sent to the agent that asked."})
+		return
+	}
 	res := a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerDecision, Thread: thread, Entry: reply.ID, Chain: db.Chain})
 	if a.Scheduler != nil {
 		a.Scheduler.Consume(ctx, thread)

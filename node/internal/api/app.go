@@ -84,6 +84,9 @@ type App struct {
 	// the one in the request. A sign-in has to come back to exactly what
 	// was registered, so it cannot be guessed per request.
 	PublicBase string
+	// SyncBase is the address other nodes reach this one at, which is not
+	// always the address a person browses to.
+	SyncBase string
 
 	agentRevoked bool
 }
@@ -154,6 +157,7 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/tools", a.owner(a.handleToolsSet))
 	mux.HandleFunc("POST /app/api/tools/probe", a.owner(a.handleToolsProbe))
 	mux.HandleFunc("POST /app/api/tools/remove", a.owner(a.handleToolsRemove))
+	mux.HandleFunc("POST /app/api/link/offer", a.owner(a.handleLinkOffer))
 	mux.HandleFunc("POST /app/api/tools/auth/start", a.owner(a.handleToolsAuthStart))
 	// The way back from an authorization server carries its own one-time
 	// state, so it is not behind the owner check: the browser arriving here
