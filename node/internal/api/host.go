@@ -77,6 +77,7 @@ type Host struct {
 	accounts map[string]*Account
 	secret   []byte
 	ctx      context.Context
+	stop     context.CancelFunc
 }
 
 // SignIn is the hosted user pool's browser endpoints.
@@ -127,6 +128,10 @@ func accountID(subject string) string {
 // Start loads every account that already exists and starts its agent, so
 // standing instructions run for people who are not looking at the screen.
 func (h *Host) Start(ctx context.Context) error {
+	// Every account's agent runs under this, so closing the host actually
+	// stops them rather than leaving them writing to a directory nobody
+	// owns any more.
+	ctx, h.stop = context.WithCancel(ctx)
 	h.ctx = ctx
 	h.mu.Lock()
 	if h.accounts == nil {
@@ -152,6 +157,7 @@ func (h *Host) Start(ctx context.Context) error {
 		n++
 	}
 	h.logf("host: %d accounts running", n)
+	go h.Tidy(ctx)
 	return nil
 }
 
@@ -170,6 +176,11 @@ func (h *Host) sharedModel() agent.Model {
 // Close releases every account's database. Used by tests and by a shutdown
 // that wants to leave the files consistent.
 func (h *Host) Close() {
+	if h.stop != nil {
+		h.stop()
+	}
+	// Give the schedulers the moment they need to notice.
+	time.Sleep(50 * time.Millisecond)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, a := range h.accounts {
@@ -202,7 +213,13 @@ func (h *Host) load(id, email string) (*Account, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		fresh = true
 		if h.MaxAccounts > 0 && h.Count() >= h.MaxAccounts {
-			return nil, fmt.Errorf("this host is full; write to support@lamdis.ai")
+			// Somebody is at the door, so take back the slots nobody used
+			// before telling them there is no room.
+			h.reap(h.now())
+			if h.Count() >= h.MaxAccounts {
+				return nil, fmt.Errorf("more people are trying this than there is room for right now. " +
+					"Try again shortly, or run it on your own machine: lamdis.ai has one command for that.")
+			}
 		}
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err

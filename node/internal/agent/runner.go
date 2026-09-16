@@ -485,6 +485,9 @@ func (r *Runner) systemPrompt(b Brief, g gate, canWrite bool, st *perm.State) st
 	} else {
 		sb.WriteString("You have no web access on this run. Answer from the record, and say so if that is not enough.\n")
 	}
+	if r.Workspace == nil && b.Text == "" {
+		sb.WriteString("\nThey are at a terminal with no project open, so you have no file or shell tools here. Answer from the record, and if they want code read or changed, say they should run this inside the project.\n")
+	}
 	if r.Workspace != nil {
 		sb.WriteString("\nYou are working in a code repository with file and shell tools. Read before you edit. Make the smallest change that does the job, with edit_file. After changing anything, run the project's own tests or build with run and say what you ran and what it printed; never claim something is verified unless a command showed it. If the task is unclear or would touch something outside it, ask_person first. The final message is a short report: what changed, what was run, anything left open.\n")
 	}
@@ -575,7 +578,16 @@ func (r *Runner) contextFor(ctx context.Context, t Trigger, tl *protolog.ThreadL
 		if trig != nil {
 			q = bodyText(trig)
 		}
-		sb.WriteString("Task from the person (entry " + t.Entry + "):\n" + q + "\n\nDo it in the workspace, verify it, then report.")
+		if r.Workspace != nil {
+			sb.WriteString("They are at a terminal, in the project above (entry " + t.Entry + "):\n" + q +
+				"\n\nIf that is a task, do it and verify it. If it is a question, answer it. " +
+				"If it is neither, say hello and tell them in one line what you could do here.")
+		} else {
+			sb.WriteString("They are at a terminal, not in any project (entry " + t.Entry + "):\n" + q +
+				"\n\nAnswer from the record. If it is not a question, say hello and tell them in one line " +
+				"what you can do: answer from what they have written, keep what they tell you, and read or " +
+				"edit code if they move into a project.")
+		}
 	case TriggerDecision:
 		q, a := "", ""
 		if decision != nil {

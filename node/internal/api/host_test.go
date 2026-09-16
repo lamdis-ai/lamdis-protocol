@@ -176,8 +176,10 @@ func TestHostStopsAtItsAccountLimit(t *testing.T) {
 	if w.Code == http.StatusOK {
 		t.Fatal("the account limit was ignored")
 	}
-	if !strings.Contains(w.Body.String(), "support@lamdis.ai") {
-		t.Fatalf("a full host should say what to do: %s", w.Body.String())
+	// Somebody turned away should be told something they can act on, not
+	// given an address to write to and wait.
+	if !strings.Contains(w.Body.String(), "your own machine") {
+		t.Fatalf("a full host should say what to do instead: %s", w.Body.String())
 	}
 }
 
@@ -273,5 +275,115 @@ func TestGuestsCanBeTurnedOff(t *testing.T) {
 	_, _, _, handler := testHost(t) // Guests defaults to false
 	if w := call(handler, "POST", "/app/api/start", "", ""); w.Code != http.StatusForbidden {
 		t.Fatalf("a host with guests off still handed out nodes: %d", w.Code)
+	}
+}
+
+// A visitor account nobody ever used gives its slot back. One somebody
+// typed into, or signed in to, is kept however old it is.
+func TestUnusedVisitorAccountsFreeTheirSlot(t *testing.T) {
+	h, key, claims, handler := testHost(t)
+	h.Guests = true
+	h.MaxAccounts = 10
+	// Look at all of it from two days later.
+	later := time.Now().Add(48 * time.Hour)
+	h.Now = func() time.Time { return later }
+	old := time.Now().Add(-time.Minute)
+
+	start := func() string {
+		w := call(handler, "POST", "/app/api/start", "", "")
+		var d struct {
+			Token string `json:"token"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &d)
+		if d.Token == "" {
+			t.Fatalf("no token: %s", w.Body.String())
+		}
+		return d.Token
+	}
+
+	looked := start()   // looked once, wrote nothing
+	wrote := start()    // typed something
+	signedIn := start() // came back with an email
+
+	th := firstThread(t, handler, wrote)
+	if w := call(handler, "POST", "/app/api/post", wrote,
+		`{"thread":"`+th+`","text":"Acme wants 7%.","lane":"content"}`); w.Code != http.StatusOK {
+		t.Fatalf("write: %d", w.Code)
+	}
+	r := httptest.NewRequest("GET", "/app/api/threads", nil)
+	r.Header.Set("Authorization", "Bearer "+as(t, key, claims, "sam", "sam@example.com"))
+	r.Header.Set("X-Lamdis-Guest", signedIn)
+	handler.ServeHTTP(httptest.NewRecorder(), r)
+
+	// Make every account look old, so age is not what distinguishes them.
+	entries, _ := os.ReadDir(h.Root)
+	for _, e := range entries {
+		if e.IsDir() {
+			os.Chtimes(filepath.Join(h.Root, e.Name()), old, old)
+		}
+	}
+
+	if h.Count() != 3 {
+		t.Fatalf("expected three accounts, got %d", h.Count())
+	}
+	if freed := h.reap(h.now()); freed != 1 {
+		t.Fatalf("expected one slot back, got %d", freed)
+	}
+	if h.Count() != 2 {
+		t.Fatalf("the wrong number survived: %d", h.Count())
+	}
+
+	// What was written is still there, and so is the account behind an email.
+	if w := call(handler, "GET", "/app/api/thread/"+th, wrote, ""); w.Code != http.StatusOK ||
+		!strings.Contains(w.Body.String(), "Acme wants 7%") {
+		t.Fatalf("an account somebody used was reaped: %d %s", w.Code, w.Body.String())
+	}
+	if w := call(handler, "GET", "/app/api/threads", as(t, key, claims, "sam", "sam@example.com"), ""); w.Code != http.StatusOK {
+		t.Fatalf("an account with an email behind it was reaped: %d", w.Code)
+	}
+	// The one nobody used is gone, and its token opens a new node instead.
+	if ok, why := h.abandoned(strings.Split(looked, ".")[1], h.now()); ok || why != "it is not a visitor account" {
+		t.Fatalf("the reaped account is somehow still judged: %v %q", ok, why)
+	}
+}
+
+// A slot is never taken from somebody who might still be typing.
+func TestARecentVisitorIsLeftAlone(t *testing.T) {
+	h, _, _, handler := testHost(t)
+	h.Guests = true
+	call(handler, "POST", "/app/api/start", "", "")
+	if freed := h.reap(time.Now()); freed != 0 {
+		t.Fatalf("a slot was taken from somebody who just arrived: %d", freed)
+	}
+	if h.Count() != 1 {
+		t.Fatalf("count: %d", h.Count())
+	}
+}
+
+// When the door is shut, it opens again by itself rather than by email.
+func TestAFullHostFreesRoomBeforeRefusing(t *testing.T) {
+	h, _, _, handler := testHost(t) // MaxAccounts: 2
+	h.Guests = true
+	later := time.Now().Add(48 * time.Hour)
+	h.Now = func() time.Time { return later }
+	old := time.Now().Add(-time.Minute)
+
+	for i := 0; i < 2; i++ {
+		if w := call(handler, "POST", "/app/api/start", "", ""); w.Code != http.StatusOK {
+			t.Fatalf("start %d: %d", i, w.Code)
+		}
+	}
+	entries, _ := os.ReadDir(h.Root)
+	for _, e := range entries {
+		if e.IsDir() {
+			os.Chtimes(filepath.Join(h.Root, e.Name()), old, old)
+		}
+	}
+	w := call(handler, "POST", "/app/api/start", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("a full host of unused accounts did not make room: %d %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "support@lamdis.ai") {
+		t.Fatal("it still tells people to write in")
 	}
 }

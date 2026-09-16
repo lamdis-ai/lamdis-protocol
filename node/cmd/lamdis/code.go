@@ -44,8 +44,9 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	task := strings.TrimSpace(strings.Join(fs.Args(), " "))
 
 	root := *dir
+	inProject := true
 	if root == "" {
-		root = repoRoot()
+		root, inProject = workspaceHere()
 	}
 	root, _ = filepath.Abs(root)
 
@@ -73,9 +74,16 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		base = or
 	}
 	names := func(principal string) string { return peerName(dataDir, principal) }
+	// Outside a project there is nothing sensible to read or edit, and
+	// handing an agent somebody's whole home directory is worse than
+	// useless. It still answers from the record, which is most of the point.
+	var ws *agent.Workspace
+	if inProject {
+		ws = &agent.Workspace{Root: root}
+	}
 	runner := &agent.Runner{Store: s, PersonKey: priv, Person: pid, AgentKey: agentKey, Agent: agentPID,
 		Model: base, ModelName: envModel, DataDir: dataDir, Names: names, Embedder: embedderFromEnv(),
-		State: agent.LoadState(dataDir), Workspace: &agent.Workspace{Root: root}}
+		State: agent.LoadState(dataDir), Workspace: ws}
 	if !runner.Ready() {
 		return fmt.Errorf("no model is configured.\n  OpenRouter:  put LAMDIS_OPENROUTER_KEY=sk-or-... in %s/.env (keys at openrouter.ai/keys)\n  local model: lamdis -url http://localhost:11434/v1 -model qwen3.5:4b", dataDir)
 	}
@@ -90,13 +98,17 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		}
 	}
 
-	thread, err := codeThread(ctx, s, priv, pid, root)
+	thread, err := codeThread(ctx, s, priv, pid, root, inProject)
 	if err != nil {
 		return err
 	}
 	_, mname := runner.ModelFor(cfg)
+	where := filepath.Base(root)
+	if !inProject {
+		where = "no project here"
+	}
 	if !*quiet {
-		fmt.Fprint(os.Stderr, banner(filepath.Base(root), mname))
+		fmt.Fprint(os.Stderr, banner(where, mname))
 	}
 
 	ask := func(text string) error {
@@ -133,20 +145,66 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	// Interactive.
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 1<<20), 1<<20)
-	fmt.Fprintf(os.Stderr, "\033[2mType a task. Empty line or Ctrl-D to quit.\033[0m\n")
+	if inProject {
+		fmt.Fprintf(os.Stderr, "\033[2mAsk it anything about this project, or tell it what to change. /help for more.\033[0m\n")
+	} else {
+		fmt.Fprintf(os.Stderr, "\033[2mNo project here, so it answers from your record. cd into a repository to have it read and edit code. /help for more.\033[0m\n")
+	}
 	for {
 		fmt.Fprint(os.Stderr, "\n\033[1m› \033[0m")
 		if !in.Scan() {
+			fmt.Fprintln(os.Stderr)
 			return nil
 		}
 		line := strings.TrimSpace(in.Text())
-		if line == "" || line == "/quit" || line == "/q" {
+		if line == "" {
+			continue
+		}
+		switch line {
+		case "/quit", "/q", "exit", "quit":
 			return nil
+		case "/help", "help", "?":
+			fmt.Fprint(os.Stderr, cliHelp(inProject, thread))
+			continue
+		case "/threads":
+			if err := cmdThreads(ctx, s); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31m%v\033[0m\n", err)
+			}
+			continue
+		case "/app":
+			fmt.Fprintf(os.Stderr, "\033[2mopening your record…\033[0m\n")
+			go cmdApp(ctx, dataDir, s, nil)
+			continue
+		case "/here":
+			fmt.Fprintf(os.Stderr, "\033[2m%s · thread %s · %s\033[0m\n", root, thread[:12], mname)
+			continue
 		}
 		if err := ask(line); err != nil {
 			fmt.Fprintf(os.Stderr, "\033[31m%v\033[0m\n", err)
 		}
 	}
+}
+
+// cliHelp is what you get for asking, which should never be a wall.
+func cliHelp(inProject bool, thread string) string {
+	d, z, b := "\033[2m", "\033[0m", "\033[1m"
+	s := "\n" + b + "What you can say" + z + "\n"
+	if inProject {
+		s += "  " + d + "a task" + z + "        add a test for the login bug\n" +
+			"  " + d + "a question" + z + "    why does auth fail on refresh?\n" +
+			"  " + d + "it reads, edits and runs your tests, then reports back\n" + z
+	} else {
+		s += "  " + d + "a question" + z + "    what did we decide about the Acme rate?\n" +
+			"  " + d + "a note" + z + "        anything you tell it is kept and searchable\n" +
+			"  " + d + "cd into a project and it can read and edit code there\n" + z
+	}
+	s += "\n" + b + "Commands" + z + "\n" +
+		"  /threads     " + d + "everything in your record" + z + "\n" +
+		"  /app         " + d + "open it in a browser" + z + "\n" +
+		"  /here        " + d + "where you are and what is answering" + z + "\n" +
+		"  /quit        " + d + "or Ctrl-D" + z + "\n\n" +
+		d + "This conversation is thread " + thread[:12] + ", kept with everything else.\n" + z
+	return s
 }
 
 type decisionReply struct{ choice, text string }
@@ -189,8 +247,12 @@ func promptDecision(ctx context.Context, s store.Store, thread string, res agent
 
 // codeThread finds or creates the thread for a workspace. Threads are
 // matched by title, "code: <directory name>", among the ones you steward.
-func codeThread(ctx context.Context, s store.Store, priv ed25519.PrivateKey, pid, root string) (string, error) {
+func codeThread(ctx context.Context, s store.Store, priv ed25519.PrivateKey, pid, root string, inProject bool) (string, error) {
 	title := "code: " + filepath.Base(root)
+	if !inProject {
+		// Not a project, so this is just where terminal conversations go.
+		title = "terminal"
+	}
 	ids, err := s.Threads(ctx)
 	if err != nil {
 		return "", err
@@ -212,9 +274,11 @@ func codeThread(ctx context.Context, s store.Store, priv ed25519.PrivateKey, pid
 	if err := s.AppendEntries(ctx, []*protolog.Entry{genesis}); err != nil {
 		return "", err
 	}
-	if _, err := personAppendCLI(ctx, s, priv, genesis.ID, protolog.Draft{Kind: protolog.KindMessage, Lane: protolog.LaneContent,
-		Body: map[string]any{"text": "Workspace: " + root}}); err != nil {
-		return "", err
+	if inProject {
+		if _, err := personAppendCLI(ctx, s, priv, genesis.ID, protolog.Draft{Kind: protolog.KindMessage, Lane: protolog.LaneContent,
+			Body: map[string]any{"text": "Workspace: " + root}}); err != nil {
+			return "", err
+		}
 	}
 	return genesis.ID, nil
 }
@@ -265,16 +329,29 @@ func trunc(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// repoRoot is the git root of the current directory, or the directory.
-func repoRoot() string {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err == nil {
+// workspaceHere decides whether the directory you are standing in is a
+// project worth giving an agent, and says so.
+//
+// A git root obviously is. A directory with the marks of a project probably
+// is. Your home directory is not, and handing an agent everything in it is
+// worse than handing it nothing.
+func workspaceHere() (string, bool) {
+	if out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output(); err == nil {
 		if p := strings.TrimSpace(string(out)); p != "" {
-			return p
+			return p, true
 		}
 	}
 	wd, _ := os.Getwd()
-	return wd
+	if home, err := os.UserHomeDir(); err == nil && filepath.Clean(wd) == filepath.Clean(home) {
+		return wd, false
+	}
+	for _, mark := range []string{"go.mod", "package.json", "pyproject.toml", "Cargo.toml",
+		"Gemfile", "pom.xml", "build.gradle", "composer.json", "Makefile", "requirements.txt"} {
+		if _, err := os.Stat(filepath.Join(wd, mark)); err == nil {
+			return wd, true
+		}
+	}
+	return wd, false
 }
 
 // banner is the block mark: three blocks in an L, the same shape as the

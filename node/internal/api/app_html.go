@@ -40,8 +40,15 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .shell{display:grid;grid-template-columns:300px minmax(0,1fr);height:100vh;height:100dvh}
 .menu{display:none}
 .scrim{display:none}
+/* Touch targets and text sizes that survive a phone. 16px on inputs is not
+   a style choice: anything smaller makes iOS zoom the page on focus. */
 @media(max-width:860px){
   .shell{grid-template-columns:1fr}
+  body{font-size:16px}
+  input,textarea,select{font-size:16px}
+  .btn{padding:.55rem .9rem}
+  .btn.sm{padding:.4rem .7rem;font-size:.82rem}
+  .icon{width:36px;height:36px}
   /* The rail slides over rather than vanishing: hiding it took the thread
      list, settings and sign-in with it. */
   .rail{position:fixed;inset:0 auto 0 0;width:min(84vw,320px);z-index:40;
@@ -54,20 +61,59 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
   .menu{display:inline-grid;place-items:center;width:34px;height:34px;flex:none;
         border:1px solid var(--line2);border-radius:9px;color:var(--ink2)}
   .menu:hover{color:var(--ink)}
-  .head{padding:.8rem 1rem;gap:.5rem}
-  .head h1{font-size:.98rem}
-  .feed{padding:1.2rem 1rem .5rem}
-  .composer{padding:.7rem 1rem calc(.8rem + env(safe-area-inset-bottom))}
+  /* The header has four things and a phone has room for two, so the
+     secondary ones shrink to their icons rather than wrapping. */
+  .head{padding:.6rem .7rem;gap:.4rem;position:sticky;top:0;z-index:20}
+  .head h1{font-size:1rem;min-width:0}
+  .head .pill{padding:.3rem .5rem;gap:0}
+  .head .pill .full{display:none}
+  .head .pill .short{display:inline}
+  .head .pill.wait{gap:.3rem;padding:.3rem .55rem}
+  .head .pill.wait .short{font-size:.76rem}
+  .head .btn.solid{padding:.45rem .8rem;font-size:.85rem}
+  .feed{padding:1rem .9rem .4rem;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .stream{gap:1.1rem}
+  .composer{padding:.6rem .9rem calc(.7rem + env(safe-area-inset-bottom))}
+  .field textarea{padding:.75rem .9rem .25rem;max-height:9rem}
   .tools .hint{display:none}
-  .tools{padding:.35rem .5rem .5rem .9rem}
-  .entry .body{font-size:.94rem}
+  .tools{padding:.3rem .45rem .45rem .9rem;gap:.4rem}
+  .entry .body{font-size:.95rem;line-height:1.6}
+  .entry .meta{flex-wrap:wrap;row-gap:.15rem}
+  .rail .mark{padding:1rem 1.1rem .8rem}
+  .newbtn{margin:0 .8rem .5rem}
+  .threads{padding:0 .6rem}
+  .thread{padding:.75rem .8rem}
+  .me{padding:.7rem 1.1rem calc(.7rem + env(safe-area-inset-bottom))}
+  /* Two columns of anything is one column on a phone. */
+  .grid2,.setup,.qa{grid-template-columns:1fr}
+  .rh{grid-template-columns:5.5rem 1fr auto}
+  .linkbox{flex-direction:column;align-items:stretch}
+  .linkbox .btn{justify-content:center}
+  .cmd{padding-right:1rem;font-size:.78rem}
+  .cmd button{position:static;display:block;margin-top:.5rem}
+  .run{flex-wrap:wrap}
+  .decision .free{flex-direction:column}
+  .decision .free .btn{justify-content:center}
   .sheet{width:100%;max-height:92dvh;border-radius:18px 18px 0 0}
   .veil{padding:0;place-items:end center}
   .sheet header{padding:1.1rem 1.15rem .4rem}
   .sheet section{padding:.4rem 1.15rem 1rem}
   .sheet footer{padding:.8rem 1.15rem calc(1rem + env(safe-area-inset-bottom))}
   .choices{grid-template-columns:1fr}
-  .void{margin:8vh auto}
+  .void{margin:8vh auto;padding:0 .4rem}
+  .void h2{font-size:1.12rem}
+  .void p{font-size:.92rem}
+}
+@media(max-width:400px){
+  .head .btn.solid{padding:.42rem .65rem}
+  .rail{width:88vw}
+  .rh{grid-template-columns:1fr;gap:.35rem}
+}
+/* A short screen is a phone in landscape: give the reading area the room. */
+@media(max-height:520px) and (max-width:900px){
+  .feed{padding-top:.5rem}
+  .void{margin:3vh auto}
+  .sheet{max-height:96dvh}
 }
 .rail{background:var(--bg2);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .mark{display:flex;align-items:center;gap:.6rem;padding:1.3rem 1.4rem 1rem;font-size:1.02rem;font-weight:640;letter-spacing:-.012em}
@@ -115,6 +161,7 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .pill{display:inline-flex;align-items:center;gap:.35rem;border:1px solid var(--line2);border-radius:99px;padding:.3rem .7rem;font-size:.78rem;color:var(--ink2);transition:all .14s}
 .pill:hover{border-color:var(--ink4);color:var(--ink)}
 .pill i{width:7px;height:7px;border-radius:50%;background:var(--ink4)}
+.pill .short{display:none;font-size:.76rem}
 .pill.on i{background:#7DD3FC;box-shadow:0 0 8px #7DD3FC}
 .pill.off{border-style:dashed;color:var(--ink3)}
 .pill.off:hover{border-style:solid;color:var(--ink);border-color:var(--gold)}
@@ -301,7 +348,8 @@ function thinking(t){var el=document.createElement("div");el.className="thinking
 function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.waiting>0;
   b.className="pill"+(wait?" wait":(on?" on":" off"));
   b.title=on?"What your agent does here on its own":"Your agent only answers when asked. Click to let it work on its own.";
-  b.innerHTML="<i></i>"+(wait?"Agent needs you":(on?"Agent on":"Agent off"))}
+  b.innerHTML='<i></i><span class="full">'+(wait?"Agent needs you":(on?"Agent on":"Agent off"))+'</span>'+
+    '<span class="short">'+(wait?"you":"")+'</span>'}
 
 function open(id){cur=id;$("share").disabled=false;drawer(false);threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(d.error){note(d.error,"bad");return}entries=d.entries;$("title").textContent=d.title||"Untitled";
@@ -310,7 +358,7 @@ function open(id){cur=id;$("share").disabled=false;drawer(false);threads();
     api("/app/api/thread/"+encodeURIComponent(id)+"/links").then(function(l){
       if(cur!==id)return;
       var b=$("linksbtn");b.hidden=!l.total;
-      if(l.total){b.textContent=l.total+(l.total===1?" connection":" connections");window._links=l}});
+      if(l.total){b.innerHTML='<span class="full">'+l.total+(l.total===1?" connection":" connections")+'</span><span class="short">⇄'+l.total+'</span>';window._links=l}});
     var nudge=t.since_shared?'<div class="nudge"><span>'+t.since_shared+(t.since_shared===1?" entry":" entries")+' since you last shared '+esc(when(t.last_shared))+'.</span><button class="btn sm solid" id="nudge-go">Send an update</button></div>':'';
     $("stream").innerHTML=nudge+(vis.length?render(d.entries):'<div class="void"><h2>'+esc(d.title)+'</h2>'+
       '<p>Write the first thing below, or ask your agent something. It answers from whatever is in here.</p>'+
