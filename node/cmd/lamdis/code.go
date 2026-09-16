@@ -135,12 +135,16 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		fmt.Fprint(os.Stderr, banner(where, mname))
 	}
 
+	// What somebody typed is not thrown away because the network hiccuped.
+	// It goes back in the box, so Enter tries it again.
+	var retry string
 	ask := func(text string) error {
 		q, err := personAppendCLI(ctx, s, priv, thread, protolog.Draft{Kind: agent.KindQuestion, Lane: protolog.LaneContent,
 			Body: map[string]any{"text": text, "workspace": root}})
 		if err != nil {
 			return err
 		}
+		retry = text
 		res := runner.Run(ctx, agent.Trigger{Kind: agent.TriggerCode, Thread: thread, Entry: q.ID})
 		for res.Outcome == "waiting" {
 			// The agent asked something. Answer here, in the terminal.
@@ -159,6 +163,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		if res.Outcome == "error" {
 			return fmt.Errorf("%s", res.Error)
 		}
+		retry = ""
 		fmt.Println(res.Answer)
 		return nil
 	}
@@ -185,7 +190,12 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		}
 		line := strings.TrimSpace(in.Text())
 		if line == "" {
-			continue
+			// Enter on an empty line retries whatever did not get through.
+			if retry == "" {
+				continue
+			}
+			line, retry = retry, ""
+			fmt.Fprintf(os.Stderr, "\033[2m%s\033[0m\n", line)
 		}
 		switch line {
 		case "/quit", "/q", "exit", "quit":
@@ -213,6 +223,9 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		}
 		if err := ask(line); err != nil {
 			fmt.Fprintf(os.Stderr, "\033[31m%v\033[0m\n", err)
+			if retry != "" {
+				fmt.Fprintf(os.Stderr, "\033[2mYour question is still here. Press Enter to try it again.\033[0m\n")
+			}
 		}
 	}
 }

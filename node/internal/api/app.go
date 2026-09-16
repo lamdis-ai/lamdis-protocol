@@ -603,9 +603,35 @@ func (a *App) sharedPage(w http.ResponseWriter, r *http.Request) {
 			full = true
 		}
 	}
+	// The page carries what it is about, rather than fetching it after it
+	// loads. A link you send somebody is read by more than browsers: an
+	// agent, a crawler, a preview card, somebody with scripts off. All of
+	// them were getting the word "Loading…".
+	lanes := make([]protolog.Lane, 0, len(c.Lanes))
+	for _, l := range c.Lanes {
+		lanes = append(lanes, protolog.Lane(l))
+	}
+	title, entries, err := a.entriesFor(r.Context(), c.Thread, lanes)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, appNotice("This is no longer here",
+			"The thread behind this link has been deleted."))
+		return
+	}
+	shown := entries[:0]
+	for _, e := range entries {
+		if e.Lane == string(protolog.LaneControl) || strings.TrimSpace(e.Text) == "" {
+			continue
+		}
+		if e.Kind == "agent.run" || e.Kind == "thread.brief" || e.Kind == "agent.decision_reply" {
+			continue
+		}
+		shown = append(shown, e)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	fmt.Fprint(w, sharedHTML(full))
+	fmt.Fprint(w, sharedHTML(full, title, shown))
 }
 
 func (a *App) sharedThread(w http.ResponseWriter, r *http.Request) {

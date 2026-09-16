@@ -1,6 +1,10 @@
 package api
 
-import "html/template"
+import (
+	"html/template"
+	"strings"
+	"time"
+)
 
 // The interface.
 //
@@ -685,28 +689,57 @@ func appHTML(model string, canAsk bool) string {
 
 // sharedHTML is what the other person sees. No rail, no composer, nothing
 // beyond what the link named.
-func sharedHTML(full bool) string {
+// sharedHTML is the page somebody who was sent a link sees. The content is
+// in the markup, not fetched afterwards, so anything that reads a page can
+// read this one.
+func sharedHTML(full bool, title string, entries []appEntry) string {
 	scope := "A summary"
 	if full {
 		scope = "The whole thread"
 	}
+	esc := template.HTMLEscapeString
+	var body strings.Builder
+	for _, e := range entries {
+		who := e.Who
+		if e.Agent != "" {
+			who += " · agent"
+		}
+		when := e.TS
+		if t, err := time.Parse(time.RFC3339, e.TS); err == nil {
+			when = t.Format("2 Jan, 3:04 PM")
+		}
+		cls := "entry"
+		if e.Lane == "summary" {
+			cls += " summary"
+		}
+		body.WriteString(`<article class="` + cls + `"><div class="meta"><span class="auth">` +
+			esc(who) + `</span><span>` + esc(when) + `</span></div><div class="body">` +
+			esc(e.Text) + `</div></article>`)
+	}
+	if len(entries) == 0 {
+		body.WriteString(`<p class="muted">Nothing has been shared here yet.</p>`)
+	}
+	// A description so a preview card says something, and the title so a
+	// tab does.
+	desc := "Shared through Lamdis"
+	if len(entries) > 0 {
+		desc = entries[len(entries)-1].Text
+		if len(desc) > 200 {
+			desc = desc[:200] + "…"
+		}
+	}
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="dark">
-<title>Shared — Lamdis</title><style>` + appCSS + `</style></head><body>
-<div class="guest"><div class="crest"><svg style="width:18px;height:20px;color:var(--gold)" viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg>Shared with you through Lamdis</div>
-  <h1 id="title">Loading…</h1><div class="scope"><i></i>` + template.HTMLEscapeString(scope) + `</div>
-  <div id="stream" style="display:flex;flex-direction:column;gap:1.4rem"></div>
+<meta name="robots" content="noindex,nofollow">
+<title>` + esc(title) + ` — shared through Lamdis</title>
+<meta property="og:title" content="` + esc(title) + `">
+<meta property="og:description" content="` + esc(desc) + `">
+<style>` + appCSS + `</style></head><body>
+<div class="guest"><div class="crest"><svg viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true" style="width:18px;height:20px;color:var(--gold)"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg>Shared with you through Lamdis</div>
+  <h1>` + esc(title) + `</h1><div class="scope"><i></i>` + esc(scope) + `</div>
+  <div id="stream" style="display:flex;flex-direction:column;gap:1.4rem">` + body.String() + `</div>
   <div class="foot">Someone chose to show you this. It is read only, nothing you do here is recorded, and the link expires. No account was needed and none was created.</div></div>
-<script>
-"use strict";
-function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
-function when(ts){var d=new Date(ts);return isNaN(d)?ts:d.toLocaleDateString([],{month:"short",day:"numeric"})+" "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}
-fetch(location.pathname.replace(/\/$/,"")+"/api/thread").then(function(r){if(!r.ok)throw new Error("This link is no longer valid.");return r.json()})
-.then(function(d){document.getElementById("title").textContent=d.title||"Shared";var rows=d.entries.filter(function(e){return e.lane!=="control"});
-  document.getElementById("stream").innerHTML=rows.length?rows.map(function(e){return '<article class="entry"><div class="meta"><span class="auth">'+esc(e.who)+'</span><span>'+esc(when(e.ts))+'</span></div><div class="body">'+esc(e.text)+'</div></article>'}).join("")
-  :'<p class="muted">Nothing has been shared here yet.</p>'})
-.catch(function(e){document.getElementById("title").textContent="Not available";document.getElementById("stream").innerHTML='<p class="muted">'+esc(e.message)+'</p>'});
-</script></body></html>`
+</body></html>`
 }
 
 func appNotice(title, body string) string {

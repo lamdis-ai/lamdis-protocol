@@ -417,6 +417,15 @@ func TestAShareLinkFromAHostedAccountOpens(t *testing.T) {
 	if w := call(handler, "GET", out.Path, "", ""); w.Code != http.StatusOK {
 		t.Fatalf("the link 404s: %s -> %d", out.Path, w.Code)
 	}
+	// What it is about has to be in the page itself. A link is read by more
+	// than browsers: an agent, a preview card, somebody with scripts off.
+	page := call(handler, "GET", out.Path, "", "").Body.String()
+	if !strings.Contains(page, "£500 cheaper") {
+		t.Fatalf("the page says nothing without running scripts: %s", page[:min(len(page), 400)])
+	}
+	if strings.Contains(page, "Loading…") {
+		t.Fatal("the page still loads its content afterwards")
+	}
 	w = call(handler, "GET", out.Path+"/api/thread", "", "")
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "£500 cheaper") {
 		t.Fatalf("the link shows nothing: %d %s", w.Code, w.Body.String())
