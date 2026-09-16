@@ -108,14 +108,22 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	if !runner.Ready() {
 		return fmt.Errorf("no model is configured.\n  OpenRouter:  put LAMDIS_OPENROUTER_KEY=sk-or-... in %s/.env (keys at openrouter.ai/keys)\n  local model: lamdis -url http://localhost:11434/v1 -model qwen3.5:4b", dataDir)
 	}
+	spin := newSpinner(os.Stderr)
 	if !*quiet {
+		// What it just did goes above the line; what it is doing now stays
+		// on it. So a wait always says something, and the transcript
+		// afterwards reads as though nothing was ever spinning.
 		runner.OnTool = func(name string, args map[string]any, out string, took time.Duration) {
 			sum := strings.ReplaceAll(toolArgSummary(name, args), root+"/", "")
 			status := ""
 			if strings.HasPrefix(out, "error:") {
 				status = " \033[31m" + trunc(strings.TrimPrefix(out, "error: "), 60) + "\033[0m"
 			}
-			fmt.Fprintf(os.Stderr, "  \033[2m→ %s %s (%s)\033[0m%s\n", name, sum, took.Round(100*time.Millisecond), status)
+			spin.Note("  \033[2m→ %s %s (%s)\033[0m%s\n", name, sum, took.Round(100*time.Millisecond), status)
+			spin.Say("thinking")
+		}
+		runner.OnStep = func(what string, args map[string]any) {
+			spin.Say(doing(what, args))
 		}
 	}
 
@@ -145,7 +153,9 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 			return err
 		}
 		retry = text
+		spin.Start("thinking")
 		res := runner.Run(ctx, agent.Trigger{Kind: agent.TriggerCode, Thread: thread, Entry: q.ID})
+		spin.Stop()
 		for res.Outcome == "waiting" {
 			// The agent asked something. Answer here, in the terminal.
 			reply, err := promptDecision(ctx, s, thread, res)
@@ -158,7 +168,9 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 			if err != nil {
 				return err
 			}
+			spin.Start("thinking")
 			res = runner.Run(ctx, agent.Trigger{Kind: agent.TriggerDecision, Thread: thread, Entry: r.ID})
+			spin.Stop()
 		}
 		if res.Outcome == "error" {
 			return fmt.Errorf("%s", res.Error)

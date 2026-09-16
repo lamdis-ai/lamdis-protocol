@@ -212,15 +212,24 @@ func (w *Workspace) rel(abs string) string {
 	return abs
 }
 
-// Map is the repository at a glance: paths and sizes, capped. It goes at
-// the start of the prompt once per session so the prefix stays stable.
+// Map is the place you launched in, at a glance: paths and sizes, capped.
+// It goes at the start of the prompt once per session so the prefix stays
+// stable.
+//
+// Only the launch directory, and only when it looks like a project. The
+// first four hundred files under a home directory are dotfiles, and under
+// the root of a disk they are somebody's applications: thousands of
+// characters of noise on every question, which costs money, slows the
+// answer and makes it worse. Everywhere else the agent asks for what it
+// wants with list_files and search_files, which is what those are for.
 func (w *Workspace) Map() string {
+	if !worthMapping(w.Root) {
+		return ""
+	}
 	var files []string
 	sizes := map[string]int64{}
 	n := 0
-	for _, root := range w.roots() {
-		w.mapInto(root, &files, sizes, &n)
-	}
+	w.mapInto(w.Root, &files, sizes, &n)
 	sort.Strings(files)
 	var sb strings.Builder
 	for _, f := range files {
@@ -230,6 +239,27 @@ func (w *Workspace) Map() string {
 		sb.WriteString("… (more files not listed; use list_files or search_files)\n")
 	}
 	return sb.String()
+}
+
+// worthMapping is true for somewhere small enough to describe and specific
+// enough to be worth describing.
+func worthMapping(root string) bool {
+	clean := filepath.Clean(root)
+	if home, err := os.UserHomeDir(); err == nil && clean == filepath.Clean(home) {
+		return false
+	}
+	if clean == string(filepath.Separator) || clean == filepath.VolumeName(clean)+string(filepath.Separator) {
+		return false
+	}
+	// Somewhere with a project's marks in it is worth a listing; anywhere
+	// else, the agent can look for itself.
+	for _, mark := range []string{".git", "go.mod", "package.json", "pyproject.toml",
+		"Cargo.toml", "Gemfile", "pom.xml", "build.gradle", "composer.json", "Makefile"} {
+		if _, err := os.Stat(filepath.Join(clean, mark)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Workspace) mapInto(root string, files *[]string, sizes map[string]int64, n *int) {

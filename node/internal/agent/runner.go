@@ -54,6 +54,9 @@ type Runner struct {
 	// OnTool is told about every tool call as it completes, for a terminal
 	// to show progress. Optional.
 	OnTool func(name string, args map[string]any, out string, took time.Duration)
+	// OnStep is told what is about to happen, so something waiting can say
+	// so rather than showing a bare spinner for twenty seconds.
+	OnStep func(what string, args map[string]any)
 	// NoCommands refuses tool servers that run a local command, which is
 	// what a hosted node wants.
 	NoCommands bool
@@ -370,6 +373,9 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 				args = map[string]any{}
 			}
 			rec.ToolCalls = append(rec.ToolCalls, name)
+			if r.OnStep != nil {
+				r.OnStep(name, args)
+			}
 			t0 := r.now()
 			out, done, oc := r.dispatch(ctx, t, tl, st, g, canWrite, ex, &rec, name, args)
 			if r.OnTool != nil {
@@ -511,8 +517,21 @@ func (r *Runner) contextFor(ctx context.Context, t Trigger, tl *protolog.ThreadL
 	if r.Workspace != nil {
 		if r.mapOnce == "" {
 			r.mapOnce = r.Workspace.Map()
+			if r.mapOnce == "" {
+				r.mapOnce = "-"
+			}
 		}
-		sb.WriteString("Workspace: " + r.Workspace.Root + "\nFiles:\n" + r.mapOnce + "\n")
+		sb.WriteString("You are on a machine, in " + r.Workspace.Root + ".\n")
+		if r.mapOnce != "-" {
+			sb.WriteString("Files here:\n" + r.mapOnce + "\n")
+		} else {
+			sb.WriteString("It is not a project, so there is no listing: use list_files, " +
+				"search_files or run to find what you need.\n")
+		}
+		if where := strings.Join(r.Workspace.roots(), ", "); where != r.Workspace.Root {
+			sb.WriteString("You may also work in: " + where + "\n")
+		}
+		sb.WriteString("\n")
 	}
 	sb.WriteString("This thread: " + title + " (id " + t.Thread + ")\n")
 	lines := r.lines(tl, true)

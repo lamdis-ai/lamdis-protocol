@@ -182,7 +182,9 @@ select{background:var(--bg);border:1px solid var(--line2);border-radius:10px;pad
 .rh .x{color:var(--ink4);font-size:1rem;padding:0 .4rem}
 .rh .x:hover{color:var(--red)}
 .presets{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.55rem}
-.thinking{font:.78rem/1.5 var(--mono);color:#7DD3FC;animation:pulse 1.2s ease-in-out infinite}
+.thinking{font:.78rem/1.5 var(--mono);color:#7DD3FC;animation:pulse 1.2s ease-in-out infinite;display:flex;gap:.5rem;align-items:center}
+.thinking:before{content:"";width:9px;height:9px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
 .me{border-top:1px solid var(--line);padding:.8rem 1.4rem;display:flex;align-items:center;gap:.7rem}
 .me .avatar{width:30px;height:30px;border-radius:50%;background:var(--panel2);border:1px solid var(--line2);display:grid;place-items:center;font-size:.76rem;font-weight:600;color:var(--ink2);flex:none}
@@ -347,7 +349,20 @@ function wire(){Array.prototype.forEach.call(document.querySelectorAll("[data-go
   Array.prototype.forEach.call(document.querySelectorAll("[data-dec]"),function(b){b.onclick=function(){var id=b.getAttribute("data-dec"),choice=b.getAttribute("data-choice")||"",text="";
     if(b.getAttribute("data-free")){var inp=document.querySelector('[data-decin="'+id+'"]');text=inp?inp.value.trim():"";if(!text)return}
     b.disabled=true;thinking("Your agent is continuing…");api("/app/api/decision",{id:id,choice:choice,text:text}).then(function(d){if(d.error)note(d.error,"bad");open(cur)})}})}
-function thinking(t){var el=document.createElement("div");el.className="thinking";el.id="thinking";el.textContent=t||"Your agent is reading…";$("stream").appendChild(el);$("feed").scrollTop=$("feed").scrollHeight}
+function thinking(t){
+  var el=document.createElement("div");el.className="thinking";el.id="thinking";
+  el.textContent=t||"Your agent is reading…";$("stream").appendChild(el);$("feed").scrollTop=$("feed").scrollHeight;
+  // After a few seconds a bare message reads as a hang, so say how long it
+  // has been, and after a while say that this one is a long one.
+  var t0=Date.now(), base=el.textContent;
+  clearInterval(window._thinkTimer);
+  window._thinkTimer=setInterval(function(){
+    if(!document.getElementById("thinking")){clearInterval(window._thinkTimer);return}
+    var s=Math.round((Date.now()-t0)/1000);
+    if(s<3){el.textContent=base;return}
+    el.textContent=base+" · "+s+"s"+(s>25?" · this one is taking a while":"");
+  },500);
+}
 
 function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.waiting>0;
   b.className="pill"+(wait?" wait":(on?" on":" off"));

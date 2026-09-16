@@ -75,11 +75,47 @@ func TestRunIsDistilledAndScoped(t *testing.T) {
 
 func TestMapSkipsNoise(t *testing.T) {
 	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "go.mod"), []byte("module x"), 0o644)
 	os.MkdirAll(filepath.Join(root, "node_modules", "x"), 0o755)
 	os.WriteFile(filepath.Join(root, "node_modules", "x", "i.js"), []byte("x"), 0o644)
 	os.WriteFile(filepath.Join(root, "main.go"), []byte("package main"), 0o644)
 	m := (&Workspace{Root: root}).Map()
 	if !strings.Contains(m, "main.go") || strings.Contains(m, "node_modules") {
 		t.Fatalf("map: %q", m)
+	}
+}
+
+// A listing of somewhere enormous is not a map, it is noise on every
+// question: thousands of characters of applications and dotfiles, paid for
+// each time and crowding out the thing actually being asked.
+func TestNowhereEnormousIsListed(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory")
+	}
+	if m := (&Workspace{Root: home}).Map(); m != "" {
+		t.Fatalf("a home directory was listed: %d characters", len(m))
+	}
+	if m := (&Workspace{Root: "/"}).Map(); m != "" {
+		t.Fatalf("a whole disk was listed: %d characters", len(m))
+	}
+	// A directory that is not a project is not worth describing either.
+	plain := t.TempDir()
+	os.WriteFile(filepath.Join(plain, "a.txt"), []byte("x"), 0o644)
+	if m := (&Workspace{Root: plain}).Map(); m != "" {
+		t.Fatalf("an ordinary directory was listed: %q", m)
+	}
+	// Allowing more places does not make the listing grow.
+	proj := t.TempDir()
+	os.WriteFile(filepath.Join(proj, "go.mod"), []byte("module x"), 0o644)
+	os.WriteFile(filepath.Join(proj, "main.go"), []byte("package main"), 0o644)
+	w := &Workspace{Root: proj}
+	w.Allow(home)
+	m := w.Map()
+	if !strings.Contains(m, "main.go") {
+		t.Fatalf("the project itself was not listed: %q", m)
+	}
+	if len(m) > 4000 {
+		t.Fatalf("allowing home dragged %d characters into every prompt", len(m))
 	}
 }
