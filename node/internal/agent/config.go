@@ -74,6 +74,10 @@ type ToolServer struct {
 	// Header names a header other than Authorization, for services that
 	// want their own (e.g. X-Api-Key).
 	Header string `json:"header,omitempty"`
+	// Known is what the server said it offers, the last time anybody
+	// looked. Kept so the settings page can describe a connection without
+	// going back out to the network every time it is opened.
+	Known []ProbeTool `json:"known,omitempty"`
 	// OAuth is what the server told us about signing in, and whatever it
 	// has granted. Present means nobody has to type a secret.
 	OAuth    *OAuthConfig `json:"oauth,omitempty"`

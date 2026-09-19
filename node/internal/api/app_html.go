@@ -151,6 +151,23 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .pick{border:1px solid var(--line2);border-radius:99px;padding:.22rem .6rem;font-size:.76rem;color:var(--ink3);cursor:pointer;background:none}
 .pick[aria-pressed=true]{border-color:var(--gold);color:var(--gold);background:var(--gold-glow)}
 .pick.ask[aria-pressed=true]{border-color:var(--blue);color:var(--blue);background:rgba(125,211,252,.1)}
+/* Adding a connection is one field. Everything else is derived. */
+.addconn{display:flex;gap:.5rem;margin-top:.5rem}
+.addconn input{flex:1;min-width:0}
+.conn .sum{font-size:.78rem;color:var(--ink3);margin-top:.35rem}
+/* Three named modes instead of a cycling button nobody can discover. */
+.modes{display:inline-flex;border:1px solid var(--line2);border-radius:9px;overflow:hidden;margin-top:.6rem}
+.modes button{background:none;border:0;border-right:1px solid var(--line2);padding:.3rem .7rem;font-size:.78rem;color:var(--ink3);cursor:pointer}
+.modes button:last-child{border-right:0}
+.modes button[aria-pressed=true]{background:var(--gold-glow);color:var(--gold);font-weight:560}
+.conn .each{margin-top:.6rem;border-top:1px solid var(--line);padding-top:.5rem}
+.conn .each summary{font-size:.78rem;color:var(--ink3);cursor:pointer}
+.trow{display:flex;align-items:flex-start;gap:.6rem;padding:.4rem 0;border-bottom:1px solid var(--line)}
+.trow:last-child{border-bottom:0}
+.trow .tn{flex:1;min-width:0}
+.trow .tn b{font:.78rem/1.3 var(--mono);font-weight:500;color:var(--ink2);display:block}
+.trow .tn span{font-size:.74rem;color:var(--ink4);display:block;margin-top:.1rem}
+.trow .tw{font-size:.68rem;color:var(--gold);white-space:nowrap;padding-top:.1rem}
 .conn .probe{font-size:.78rem;color:var(--ink4);margin-top:.5rem;min-height:1.1rem}
 .conn .probe.bad{color:var(--red)}
 .conn .probe.ok{color:var(--green)}
@@ -535,9 +552,10 @@ function settings(){var m=me||{};var origin=location.origin;
   '<select id="c-autoweb"><option value="listed">Only the sites I list below</option><option value="any">Any public page, same as when I ask</option><option value="off">None at all unless I ask</option></select>'+
   '<div id="c-domwrap" style="display:flex;gap:.5rem;margin-top:.5rem"><input id="c-dom" value="'+esc((reach.allow_domains||[]).join(", "))+'" placeholder="*.sec.gov, docs.stripe.com"><button class="btn" id="c-domsave">Save</button></div>'+
   '<p class="hint">When you ask it something yourself it may always fetch any public page, and every fetch is written into the thread. This is only about what it does while you are away. Private and local addresses are refused either way, and a thread can narrow this further but never widen it.</p>'+
-  '<label class="f">Connections</label><p class="hint" style="margin-top:0">Anything that speaks MCP: your issue tracker, your calendar, your own service. Paste the address, then press Sign in and approve it in the window. Services that hand out plain tokens take one in the field instead. Press Test to see what a server offers, and tick what your agent may use.</p>'+
+  '<label class="f">Connections</label><p class="hint" style="margin-top:0">Anything that speaks MCP: your issue tracker, your calendar, your own service. Paste its address and press Connect. Lamdis names it, signs you in if the service wants that, and reads back what it offers. Anything that changes something asks you first until you say otherwise.</p>'+
+  '<div class="addconn"><input id="conn-url" placeholder="https://mcp.example.com/mcp" autocomplete="off" spellcheck="false"><button class="btn solid" id="conn-add">Connect</button></div>'+
+  '<div id="conn-add-status" class="hint"></div>'+
   '<div id="conns"></div>'+
-  '<button class="btn" id="conn-add" style="margin-top:.6rem">+ Add a connection</button>'+
   '<label class="f">Connect a machine</label><p class="hint" style="margin-top:0">Leave an agent running on your laptop or a server, and it takes direction from a thread here. Write from your phone, it happens there.</p>'+
   (cur?'<button class="btn" id="c-link">Connect this thread to a machine</button><div id="c-linkout"></div>'
       :'<p class="hint">Open a thread first, then come back: a machine is connected to one thread.</p>')+
@@ -558,41 +576,97 @@ function settings(){var m=me||{};var origin=location.origin;
   Array.prototype.forEach.call(s.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="copied"}});
   s.querySelector("#c-save").onclick=function(){api("/app/api/me",{name:s.querySelector("#c-name").value}).then(loadMe)};
   var conns=[];
+  // A connection shows what it is and one decision: how much of it the
+  // agent may use. The per-tool list is still there for anyone who wants
+  // it, but nobody has to open it to get a working, safe connection.
+  function meta(c){
+    var all=(c._tools||[]).length, ask=(c.confirm||[]).length, on=(c.allow||[]).length;
+    if(c._failed)return "It did not answer. Press Check to try again.";
+    if(c.needs_signin)return "Waiting on you to sign in.";
+    if(c.disabled&&!all)return "Off.";
+    if(c.disabled)return "Off. Your agent cannot use this.";
+    if(!all&&!on)return "Nothing read back yet — press Check.";
+    var bits=[on+" of "+(all||on)+(on===1?" thing":" things")+" allowed"];
+    if(ask)bits.push(ask+" asks you first");
+    return bits.join(" · ");
+  }
+  // Three named modes. "Everything" still makes the tools that change
+  // something ask first, because that is what makes a connection safe to
+  // leave running rather than one you have to sit and watch.
+  function modeOf(c){
+    if(c.disabled)return "off";
+    var all=(c._tools||[]);
+    if(!all.length)return (c.allow||[]).length?"all":"off";
+    var on=(c.allow||[]).length;
+    if(!on)return "off";
+    var writes=all.filter(function(t){return t.writes}).length;
+    if(on===all.length)return "all";
+    if(on===all.length-writes)return "read";
+    return "some";
+  }
+  function setMode(c,m){
+    var all=(c._tools||[]);
+    c.disabled=(m==="off");
+    if(m==="off"){c.allow=[];c.confirm=[];return}
+    if(m==="all"){
+      c.allow=all.map(function(t){return t.name});
+      c.confirm=all.filter(function(t){return t.writes}).map(function(t){return t.name});
+      return}
+    if(m==="read"){
+      c.allow=all.filter(function(t){return !t.writes}).map(function(t){return t.name});
+      c.confirm=[]}
+  }
+  function toolRows(c,i){
+    return (c._tools||[]).map(function(t){
+      var on=(c.allow||[]).indexOf(t.name)>=0, ask=(c.confirm||[]).indexOf(t.name)>=0;
+      return '<div class="trow">'+
+        '<label class="check" style="margin:0"><input type="checkbox" data-t="'+esc(t.name)+'" data-i="'+i+'"'+(on?" checked":"")+'></label>'+
+        '<div class="tn"><b>'+esc(t.name)+'</b>'+(t.what?'<span>'+esc(t.what)+'</span>':'')+'</div>'+
+        (t.writes?'<span class="tw">changes things</span>':'')+
+        '<label class="check" style="margin:0;font-size:.72rem'+(on?'':';opacity:.4')+'"><input type="checkbox" data-a="'+esc(t.name)+'" data-i="'+i+'"'+(ask?" checked":"")+(on?"":" disabled")+'> ask first</label>'+
+        '</div>'}).join("");
+  }
   function connRow(c,i){
-    var picks=(c._tools||c.allow||[]).map(function(t){
-      var on=(c.allow||[]).indexOf(t)>=0, ask=(c.confirm||[]).indexOf(t)>=0;
-      return '<button class="pick'+(ask?' ask':'')+'" aria-pressed="'+(on?"true":"false")+'" data-tool="'+esc(t)+'" data-i="'+i+'">'+esc(t)+(ask?' · asks first':'')+'</button>'}).join("");
+    var m=modeOf(c);
     return '<div class="conn" data-conn="'+i+'">'+
       '<div class="top"><b>'+esc(c.name||"New connection")+'</b>'+
       (c.signed_in?'<span class="pip">signed in</span>':'')+
-      '<button class="btn sm" data-signin="'+i+'">'+(c.signed_in?"Sign in again":"Sign in")+'</button>'+
-      '<button class="btn sm" data-test="'+i+'">Test</button>'+
+      (c.needs_signin?'<button class="btn sm solid" data-signin="'+i+'">Sign in</button>':'')+
+      '<button class="btn sm" data-test="'+i+'">Check</button>'+
       '<button class="btn sm danger" data-del="'+i+'">Remove</button></div>'+
-      (c._new?'<input placeholder="A short name, like github" value="'+esc(c.name||"")+'" data-f="name" data-i="'+i+'" style="margin-top:.5rem">':'')+
-      '<input placeholder="https://mcp.example.com/mcp" value="'+esc(c.url||"")+'" data-f="url" data-i="'+i+'" style="margin-top:.4rem">'+
-      (canHold
-        ? '<input type="password" placeholder="'+(c.has_auth?"a credential is saved; type to replace it":"Or paste a token, if the service uses one")+'" data-f="auth" data-i="'+i+'" style="margin-top:.4rem">'
-        : '<p class="hint" style="margin-top:.4rem">Add your email to this account before storing a credential here. Servers that need nothing still work.</p>')+
-      (c.command?'<div class="addr">runs locally: '+esc(c.command)+'</div>':'')+
-      '<div class="picks">'+picks+'</div>'+
+      '<div class="addr">'+esc(c.url||c.command||"")+'</div>'+
+      '<div class="sum">'+esc(meta(c))+'</div>'+
+      '<div class="modes" role="group" aria-label="How much of this the agent may use">'+
+        '<button data-m="all" data-i="'+i+'" aria-pressed="'+(m==="all")+'">Everything</button>'+
+        '<button data-m="read" data-i="'+i+'" aria-pressed="'+(m==="read")+'">Read only</button>'+
+        '<button data-m="off" data-i="'+i+'" aria-pressed="'+(m==="off")+'">Off</button>'+
+      '</div>'+
+      ((c._tools||[]).length?'<details class="each"'+(m==="some"?" open":"")+'><summary>Choose each one'+(m==="some"?" (you have)":"")+'</summary>'+toolRows(c,i)+'</details>':'')+
+      (c.needs_auth&&canHold?'<input type="password" placeholder="'+(c.has_auth?"a credential is saved; type to replace it":"If this service uses a plain token, paste it here")+'" data-f="auth" data-i="'+i+'" style="margin-top:.5rem">':'')+
       '<div class="probe" data-probe="'+i+'"></div></div>';
   }
   function drawConns(){
     var el=s.querySelector("#conns");
     el.innerHTML=conns.length?conns.map(connRow).join(""):'<p class="hint">Nothing connected yet.</p>';
-    Array.prototype.forEach.call(el.querySelectorAll("[data-f]"),function(n){n.oninput=function(){conns[+n.getAttribute("data-i")][n.getAttribute("data-f")]=n.value}});
+    Array.prototype.forEach.call(el.querySelectorAll("[data-f]"),function(n){n.oninput=function(){conns[+n.getAttribute("data-i")][n.getAttribute("data-f")]=n.value};
+      n.onchange=function(){saveConn(+n.getAttribute("data-i"))}});
     Array.prototype.forEach.call(el.querySelectorAll("[data-test]"),function(b){b.onclick=function(){testConn(+b.getAttribute("data-test"))}});
     Array.prototype.forEach.call(el.querySelectorAll("[data-signin]"),function(b){b.onclick=function(){signInConn(+b.getAttribute("data-signin"))}});
     Array.prototype.forEach.call(el.querySelectorAll("[data-del]"),function(b){b.onclick=function(){var i=+b.getAttribute("data-del");
       var c=conns[i];conns.splice(i,1);drawConns();if(c.name&&!c._new)api("/app/api/tools/remove",{name:c.name})}});
-    Array.prototype.forEach.call(el.querySelectorAll("[data-tool]"),function(b){b.onclick=function(){
-      var i=+b.getAttribute("data-i"),t=b.getAttribute("data-tool"),c=conns[i];
+    Array.prototype.forEach.call(el.querySelectorAll("[data-m]"),function(b){b.onclick=function(){
+      var i=+b.getAttribute("data-i");setMode(conns[i],b.getAttribute("data-m"));drawConns();saveConn(i)}});
+    Array.prototype.forEach.call(el.querySelectorAll("[data-t]"),function(cb){cb.onchange=function(){
+      var i=+cb.getAttribute("data-i"),t=cb.getAttribute("data-t"),c=conns[i];
       c.allow=c.allow||[];c.confirm=c.confirm||[];
-      var on=c.allow.indexOf(t)>=0, ask=c.confirm.indexOf(t)>=0;
-      /* off -> allowed -> allowed but asks first -> off */
-      if(!on){c.allow.push(t)}
-      else if(!ask){c.confirm.push(t)}
-      else {c.allow.splice(c.allow.indexOf(t),1);c.confirm.splice(c.confirm.indexOf(t),1)}
+      var at=c.allow.indexOf(t);
+      if(cb.checked){if(at<0)c.allow.push(t)}
+      else{if(at>=0)c.allow.splice(at,1);var ac=c.confirm.indexOf(t);if(ac>=0)c.confirm.splice(ac,1)}
+      drawConns();saveConn(i)}});
+    Array.prototype.forEach.call(el.querySelectorAll("[data-a]"),function(cb){cb.onchange=function(){
+      var i=+cb.getAttribute("data-i"),t=cb.getAttribute("data-a"),c=conns[i];
+      c.confirm=c.confirm||[];var ac=c.confirm.indexOf(t);
+      if(cb.checked){if(ac<0)c.confirm.push(t)}else if(ac>=0)c.confirm.splice(ac,1);
       drawConns();saveConn(i)}});
   }
   // Sign in the way the protocol actually specifies: ask the server who
@@ -600,7 +674,7 @@ function settings(){var m=me||{};var origin=location.origin;
   // Nobody types a secret.
   function signInConn(i){
     var c=conns[i],p=s.querySelector('[data-probe="'+i+'"]');
-    if(!c.name||!c.url){p.className="probe bad";p.textContent="Give it a name and an address first.";return}
+    if(!c.name||!c.url){p.className="probe bad";p.textContent="Paste an address first.";return}
     p.className="probe";p.textContent="Asking the server how it wants to be signed in to…";
     saveConn(i);
     api("/app/api/tools/auth/start",{name:c.name,url:c.url}).then(function(r){
@@ -610,27 +684,67 @@ function settings(){var m=me||{};var origin=location.origin;
       if(!win){p.className="probe bad";p.textContent="Your browser blocked the window. Allow pop-ups for this site and try again.";return}
       var done=function(e){ if(e.origin!==location.origin||!e.data||e.data.lamdis!=="tools-auth")return;
         window.removeEventListener("message",done);
-        api("/app/api/tools").then(function(d){conns=(d.servers||[]).map(function(x){x._tools=x.allow;return x});drawConns();
-          var q=s.querySelector('[data-probe="'+i+'"]');if(q){q.className="probe ok";q.textContent="Connected. Press Test to see what it offers."}})};
+        // Signed in, so read back what it offers without being asked to.
+        reload().then(function(){var j=indexOfName(c.name);if(j>=0)testConn(j)})};
       window.addEventListener("message",done)})}
 
-  function testConn(i){
+  // testConn is the one round trip that fills everything in: the name, the
+  // sign-in question, and the list of what the server offers.
+  function testConn(i,quiet){
     var c=conns[i],p=s.querySelector('[data-probe="'+i+'"]');
-    p.className="probe";p.textContent="Connecting…";
-    api("/app/api/tools/probe",{name:c.name,url:c.url,auth:c.auth||"",header:c.header||""}).then(function(r){
-      if(r.error){p.className="probe bad";p.textContent=r.error;return}
-      c._tools=r.tools||[];c.auth="";
-      p.className="probe ok";p.textContent=(c._tools.length||0)+" tools. Tick the ones it may use; tick again to make it ask first.";
+    if(p&&!quiet){p.className="probe";p.textContent="Connecting…"}
+    return api("/app/api/tools/probe",{name:c.name,url:c.url,auth:c.auth||"",header:c.header||""}).then(function(r){
+      var q=s.querySelector('[data-probe="'+i+'"]');
+      if(r.error){if(q){q.className="probe bad";q.textContent=r.error}c.needs_auth=true;c._failed=true;drawConns();return}
+      if(r.needs_signin){c.needs_signin=true;c.needs_auth=true;
+        if(q){q.className="probe";q.textContent="This service wants you to sign in. Press Sign in and approve it."}
+        drawConns();return}
+      c.needs_signin=false;c._failed=false;c._tools=r.tools||[];c.auth="";
+      // First look at a connection: allow it all, and let the things that
+      // change something ask first. That is the setting most people would
+      // have picked, so nobody has to pick it.
+      if(!(c.allow||[]).length&&!c._touched){c._touched=true;setMode(c,"all")}
+      if(q){q.className="probe ok";q.textContent=""}
       drawConns();saveConn(i)})}
   function saveConn(i){
-    var c=conns[i];if(!c.name||!c.url)return;
-    api("/app/api/tools",{name:c.name,url:c.url,auth:c.auth||"",header:c.header||"",allow:c.allow||[],confirm:c.confirm||[]}).then(function(r){
-      if(r.error){var p=s.querySelector('[data-probe="'+i+'"]');p.className="probe bad";p.textContent=r.error;return}
+    var c=conns[i];if(!c||!c.name||!c.url)return;
+    api("/app/api/tools",{name:c.name,url:c.url,auth:c.auth||"",header:c.header||"",
+      allow:c.allow||[],confirm:c.confirm||[],disabled:!!c.disabled,known:c._tools||[]}).then(function(r){
+      if(r.error){var p=s.querySelector('[data-probe="'+i+'"]');if(p){p.className="probe bad";p.textContent=r.error}return}
       c._new=false;c.auth="";c.has_auth=true})}
+  function indexOfName(n){for(var i=0;i<conns.length;i++)if(conns[i].name===n)return i;return -1}
   var canHold=true;
-  api("/app/api/tools").then(function(d){canHold=d.may_hold_secrets!==false;
-    conns=(d.servers||[]).map(function(x){x._tools=x.allow;return x});drawConns()});
-  s.querySelector("#conn-add").onclick=function(){conns.push({_new:true,name:"",url:"",allow:[],confirm:[]});drawConns()};
+  function reload(){
+    return api("/app/api/tools").then(function(d){
+      canHold=d.may_hold_secrets!==false;
+      var was={};conns.forEach(function(c){was[c.name]=c});
+      conns=(d.servers||[]).map(function(x){
+        var old=was[x.name]||{};
+        x._tools=(x.known&&x.known.length?x.known:old._tools)||[];
+        x.needs_signin=!!x.wants_signin&&!x.signed_in;
+        x.needs_auth=!!x.wants_signin||!!x.has_auth;
+        x._touched=true;return x});
+      drawConns()})}
+  reload();
+  // One field, one press. The address is the only thing we cannot work out.
+  s.querySelector("#conn-add").onclick=function(){
+    var f=s.querySelector("#conn-url"), st=s.querySelector("#conn-add-status");
+    var u=(f.value||"").trim();
+    if(!u){f.focus();return}
+    if(!/^https?:\/\//.test(u))u="https://"+u;
+    st.textContent="Looking at "+u+"…";
+    api("/app/api/tools/probe",{name:"",url:u}).then(function(r){
+      if(r.error&&!r.name){st.textContent=r.error;return}
+      var c={name:r.name,url:u,allow:[],confirm:[],_new:true,_touched:false};
+      if(r.needs_signin){c.needs_signin=true;c.needs_auth=true}
+      else if(r.error){c.needs_auth=true;c._failed=true}
+      else{c._tools=r.tools||[];setMode(c,"all");c._touched=true}
+      conns.push(c);f.value="";
+      st.textContent=r.needs_signin?"Added "+c.name+". Press Sign in on it to finish."
+        :(r.error?"Added "+c.name+", but it would not answer: "+r.error
+                 :"Added "+c.name+" with "+((c._tools||[]).length)+" things it can do.");
+      drawConns();
+      if(!r.needs_signin&&!r.error)saveConn(conns.length-1)})};
 
   var sel=s.querySelector("#c-model"),cust=s.querySelector("#c-model-custom");sel.onchange=function(){cust.hidden=sel.value!=="__custom";if(!cust.hidden)cust.focus()};
   s.querySelector("#c-modelsave").onclick=function(){var b=s.querySelector("#c-modelsave");var id=sel.value==="__custom"?cust.value.trim():sel.value;var body={model:id,model_url:s.querySelector("#c-url").value};var k=s.querySelector("#c-key").value.trim();if(k)body.openrouter_key=k;var uk=s.querySelector("#c-urlkey").value.trim();if(uk)body.model_url_key=uk;

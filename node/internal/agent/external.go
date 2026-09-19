@@ -154,28 +154,101 @@ func (h headerRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-// Probe connects to one server and reports the tools it offers, so a person
+// ProbeTool is one thing a server offers, in the words the server uses.
+// The description matters: "create_issue" tells a person almost nothing,
+// and the sentence beside it tells them everything.
+type ProbeTool struct {
+	Name   string `json:"name"`
+	What   string `json:"what,omitempty"`
+	Writes bool   `json:"writes"`
+}
+
+// ProbeResult is everything one paste of an address can tell us, so that
+// nobody has to name the connection, guess whether it needs a password, or
+// read a list of bare function names and work out which ones are dangerous.
+type ProbeResult struct {
+	// Name is what the server calls itself, falling back to its host.
+	Name  string      `json:"name"`
+	Tools []ProbeTool `json:"tools"`
+}
+
+// Probe connects to one server and reports what it offers, so a person
 // can see what they just wired up before allowing any of it.
-func Probe(ctx context.Context, srv ToolServer, allowCommands bool) ([]string, error) {
+func Probe(ctx context.Context, srv ToolServer, allowCommands bool) (ProbeResult, error) {
+	var out ProbeResult
 	transport, err := transportFor(ctx, srv, allowCommands)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	client := sdk.NewClient(&sdk.Implementation{Name: "lamdis-agent", Version: "1"}, nil)
 	sess, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	defer sess.Close()
+	if init := sess.InitializeResult(); init != nil && init.ServerInfo != nil {
+		out.Name = init.ServerInfo.Name
+	}
 	list, err := sess.ListTools(ctx, nil)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
-	var names []string
 	for _, t := range list.Tools {
-		names = append(names, t.Name)
+		out.Tools = append(out.Tools, ProbeTool{
+			Name: t.Name, What: firstSentence(t.Description), Writes: writes(t),
+		})
 	}
-	return names, nil
+	return out, nil
+}
+
+// firstSentence keeps a tool's description to something that fits on a line.
+// MCP descriptions run to paragraphs; a person scanning a list wants the
+// first clause, not the argument reference.
+func firstSentence(d string) string {
+	d = strings.TrimSpace(strings.ReplaceAll(d, "\n", " "))
+	for strings.Contains(d, "  ") {
+		d = strings.ReplaceAll(d, "  ", " ")
+	}
+	if i := strings.Index(d, ". "); i > 0 && i < 160 {
+		d = d[:i]
+	}
+	if len(d) > 160 {
+		if cut := strings.LastIndex(d[:160], " "); cut > 40 {
+			d = d[:cut]
+		} else {
+			d = d[:160]
+		}
+		d += "\u2026"
+	}
+	return strings.TrimRight(d, ".")
+}
+
+// changes are the verbs that mean a tool does something to the world rather
+// than reporting on it. Anything matching starts out asking the person first,
+// which is the difference between a connection you can leave running and one
+// you have to supervise. A server that declares a read-only hint is believed.
+var changes = []string{"create", "update", "delete", "write", "send", "post",
+	"remove", "set_", "add_", "put_", "edit", "merge", "close", "cancel",
+	"archive", "pay", "charge", "refund", "transfer", "deploy", "publish",
+	"invite", "revoke", "grant", "upload", "move", "rename", "assign",
+	"comment", "approve", "reject", "run_", "exec", "insert", "patch", "drop"}
+
+func writes(t *sdk.Tool) bool {
+	if h := t.Annotations; h != nil {
+		if h.ReadOnlyHint {
+			return false
+		}
+		if h.DestructiveHint != nil && *h.DestructiveHint {
+			return true
+		}
+	}
+	n := strings.ToLower(t.Name)
+	for _, v := range changes {
+		if strings.HasPrefix(n, v) || strings.Contains(n, "_"+v) {
+			return true
+		}
+	}
+	return false
 }
 
 func (ex *externals) close() {
