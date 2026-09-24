@@ -458,7 +458,7 @@ function api(p,body){var o=body?{method:"POST",headers:{"content-type":"applicat
   return fetch(p,o).then(function(r){return r.text().then(function(t){var d;try{d=JSON.parse(t)}catch(e){d={error:t||("HTTP "+r.status)}}
     if(!r.ok&&!d.error)d.error="HTTP "+r.status;return d})})}
 function copy(t){if(navigator.clipboard)navigator.clipboard.writeText(t)}
-function initials(n){return (n&&n!=="you"&&n!=="your agent")?n.split(/\s+/).map(function(w){return w[0]}).join("").slice(0,2).toUpperCase():(n==="your agent"?"A":"·")}
+function initials(n){return (n&&n!=="you"&&n!=="your agent")?n.split(/\s+/).map(function(w){return w[0]}).join("").slice(0,2).toUpperCase():(n==="your agent"?"A":"Y")}
 function tid(){return encodeURIComponent(cur)}
 function note(t,cls){$("note").textContent=t||"";$("note").className="note"+(cls?" "+cls:"")}
 function each(sel,fn,root){Array.prototype.forEach.call((root||document).querySelectorAll(sel),fn)}
@@ -643,7 +643,7 @@ function members(t){var a='<div class="av you">'+esc(initials(me?me.name:"you"))
 function open(id){cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(cur!==id)return;if(d.error){note(d.error,"bad");$("stream").innerHTML='<div class="void"><h2>Not here</h2><p>That channel is not on this account.</p></div>';return}
     entries=d.entries;var lastE=d.entries[d.entries.length-1];window._sig=d.entries.length+":"+(lastE?lastE.id:"");$("title").innerHTML='<span class="hash">#</span>'+esc(d.title||"untitled");
-    $("text").placeholder=(mode==="ask"?"Ask "+agentName()+" about #"+(d.title||"this channel")+"…":"Write in #"+(d.title||"this channel")+" — @"+(agentName()==="your agent"?"agent":agentName())+" to ask");
+    $("text").placeholder=(mode==="ask"?"Ask "+agentName()+" about #"+String(d.title||"this channel").replace(/…$/,"")+"…":"Write in #"+(d.title||"this channel")+" — @"+(agentName()==="your agent"?"agent":agentName())+" to ask");
     var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"});
     var t=threadOf(id);agentPill(t);members(t);$("more").hidden=!t.mine;if(t.last)seen(id,t.last);
     api("/app/api/thread/"+encodeURIComponent(id)+"/links").then(function(l){if(cur!==id)return;var b=$("linksbtn");b.hidden=!l.total;
@@ -683,7 +683,7 @@ function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
 function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px";$("send").disabled=!t.value.trim()}
 function drawMode(){each(".seg button",function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-mode")===mode))});
   var an=agentName()==="your agent"?"agent":agentName();$("mode-ask").textContent="Ask "+(an==="agent"?"agent":an);
-  if(cur&&view==="chan"){var t=threadOf(cur);$("text").placeholder=mode==="ask"?"Ask "+agentName()+" about #"+(t.title||"this channel")+"…":"Write in #"+(t.title||"this channel")+" — @"+an+" to ask"}}
+  if(cur&&view==="chan"){var t=threadOf(cur);$("text").placeholder=mode==="ask"?"Ask "+agentName()+" about #"+String(t.title||"this channel").replace(/…$/,"")+"…":"Write in #"+(t.title||"this channel")+" — @"+an+" to ask"}}
 function mentionsAgent(t){var n=agentName()==="your agent"?"agent":agentName();var re=new RegExp("(^|\\s)@("+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"|agent)\\b","i");return re.test(t)}
 function send(){var t=$("text").value.trim();if(!cur||!t)return;
   if(mode==="ask"||mentionsAgent(t)){if(me&&!me.can_ask){note(AgentName()+" is off until a model key is set.","warn");return}ask();return}
@@ -1162,7 +1162,17 @@ function refresh(){if(sheetEl||busy||palEl||document.hidden)return;
     if(sig!==window._sig){window._sig=sig;open(cur)}else threads()});return}
   api("/app/api/today").then(function(d){if(d.error)return;var sig=JSON.stringify([d.decisions.length,d.runs.length&&d.runs[0].id,d.schedules.length]);
     if(sig!==window._tsig){window._tsig=sig;if(view==="today")today();else if(view==="sched")scheduled()}else threads()})}
-Promise.all([loadMe(),loadAgent().catch(function(){}),loadModels().catch(function(){})]).then(function(){drawMode();return fromHash()});
+/* Arriving with something to do (the landing page's box sends ?q=): make it
+   a channel and put the question to the agent straight away, so the first
+   thing a new person sees is their own work being done. */
+function arriving(){var q="";try{q=(new URLSearchParams(location.search).get("q")||"").trim().slice(0,2000)}catch(e){}
+  if(!q)return false;history.replaceState(null,"",location.pathname+"#today");
+  var title=q.replace(/\s+/g," ");if(title.length>48){title=title.slice(0,48);var sp=title.lastIndexOf(" ");if(sp>24)title=title.slice(0,sp);title+="…"}
+  api("/app/api/threads",{title:title}).then(function(d){if(d.error){go("today");return}
+    threads().then(function(){go("chan",d.id).then(function(){$("text").value=q;grow();
+      if(me&&me.can_ask){mode="ask";drawMode();ask()}else{mode="note";drawMode();post()}})})});
+  return true}
+Promise.all([loadMe(),loadAgent().catch(function(){}),loadModels().catch(function(){})]).then(function(){drawMode();if(!arriving())return fromHash()});
 setInterval(refresh,15000);
 `
 
