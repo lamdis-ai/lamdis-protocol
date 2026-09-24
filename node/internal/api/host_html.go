@@ -11,7 +11,7 @@ import (
 // resulting token to every call the application makes. The application below
 // is unchanged and does not know a front door exists.
 
-const hostMark = `<svg viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true" style="width:26px;height:28px;color:var(--gold)"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg>`
+const hostMark = `<svg viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true" style="width:26px;height:28px;color:var(--gold-text)"><path d="M2 5.5 7 3l5 2.5-5 2.5z M2 5.5v4.6l5 2.5V8 M12 5.5v4.6L7 12.6"/><path d="M2 10.1v4.6l5 2.5v-4.6 M12 10.1v4.6l-5 2.5"/><path d="M7 17.2l5-2.5 5 2.5-5 2.5z M12 19.7v2 M17 17.2v2l-5 2.5 M2 14.7l5 2.5"/></svg>`
 
 const hostCSS = `
 /* A class that sets display beats the hidden attribute, so say it once. */
@@ -20,7 +20,7 @@ const hostCSS = `
 .gate .box{max-width:23rem;text-align:center;animation:rise .4s both}
 @media(max-width:520px){.gate{padding:1.1rem}.gate h1{font-size:1.25rem}}
 .gate .glyphwrap{display:flex;justify-content:center;margin-bottom:1.4rem}
-.gate h1{font-family:var(--serif);font-size:2.4rem;font-weight:400;line-height:1.1;margin-bottom:.6rem}
+.gate h1{font-family:var(--display);font-size:2.4rem;font-weight:800;letter-spacing:-.035em;line-height:1.05;margin-bottom:.6rem}
 .gate p{color:var(--ink3);font-size:.95rem;line-height:1.6;margin-bottom:1.5rem}
 .gate .btn{width:100%;justify-content:center;padding:.7rem 1rem}
 .gate .err{color:var(--red);font-size:.84rem;margin-top:.9rem;min-height:1.2rem}
@@ -28,7 +28,7 @@ const hostCSS = `
 .booting{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);color:var(--ink4);font:.8rem var(--mono)}
 .who{border-top:1px solid var(--line);padding:.6rem .4rem 0;font-size:.76rem;color:var(--ink4);display:flex;gap:.6rem;align-items:center}
 .who b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
-.who button{color:var(--gold);font-size:.76rem;font-weight:500}
+.who button{color:var(--gold-text);font-size:.76rem;font-weight:500}
 .who button:hover{color:var(--ink2)}
 `
 
@@ -40,10 +40,10 @@ func hostedAppHTML(cfg SignIn) string {
 		"redirect": cfg.Redirect,
 	})
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="dark">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="light">
 <title>Lamdis</title><link rel="icon" href="/favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"><style>` + appCSS + hostCSS + `</style></head><body>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet"><style>` + appCSS + hostCSS + `</style></head><body>
 
 <div class="gate" id="gate" hidden>
   <div class="box">
@@ -225,7 +225,7 @@ function failed(e){
 
 // hostNotice is the plain page for a host that is not configured yet.
 func hostNotice(title, body string) string {
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
 <title>` + template.HTMLEscapeString(title) + `</title><style>` + appCSS + `</style></head>
 <body><div class="notice"><h1>` + template.HTMLEscapeString(title) + `</h1><p>` + template.HTMLEscapeString(body) + `</p></div></body></html>`
 }
