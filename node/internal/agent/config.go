@@ -10,6 +10,9 @@ import (
 // Config is <data>/agent.json: what the agent may reach outside the node and
 // how much it may do in a day. Edited by hand or from Settings.
 type Config struct {
+	// Name is what the person calls their agent. Empty means "your agent".
+	// It is a label for people; the agent's identity is still its key.
+	Name string `json:"name,omitempty"`
 	// AllowDomains are hosts the agent may fetch on its own (globs such as
 	// "*.sec.gov").
 	AllowDomains []string `json:"allow_domains"`

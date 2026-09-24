@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/perm"
 )
@@ -58,6 +59,9 @@ func (a *App) savePeers(p map[string]peerRecord) error {
 // displayName resolves a principal to something a person would say.
 func (a *App) displayName(principal string) string {
 	if principal != "" && principal == a.AgentSelf {
+		if cfg, err := agent.LoadConfig(a.DataDir); err == nil && strings.TrimSpace(cfg.Name) != "" {
+			return strings.TrimSpace(cfg.Name)
+		}
 		return "your agent"
 	}
 	if principal == a.Self {

@@ -50,6 +50,9 @@ type Rhythm struct {
 	Name   string `json:"name"`
 	At     string `json:"at"`             // "07:30", in Zone
 	Zone   string `json:"zone,omitempty"` // IANA name; empty means this machine's time
+	// Paused keeps a rhythm written down without letting it fire, so turning
+	// one off for a holiday does not mean retyping the question afterwards.
+	Paused bool `json:"paused,omitempty"`
 	Prompt string `json:"prompt"`
 }
 
@@ -59,7 +62,7 @@ type Rhythm struct {
 // something to spring on somebody at midnight.
 func (r Rhythm) Due(now time.Time, lastRun string) (bool, string) {
 	hh, mm, ok := parseClock(r.At)
-	if !ok {
+	if !ok || r.Paused {
 		return false, ""
 	}
 	loc := time.Local

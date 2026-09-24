@@ -482,3 +482,16 @@ func TestAWindowIsNotAWayIn(t *testing.T) {
 		t.Fatalf("the fetch was not written down: %+v", rb.Fetches)
 	}
 }
+
+// A paused rhythm is kept, question and all, but never fires.
+func TestAPausedRhythmStaysQuiet(t *testing.T) {
+	r := Rhythm{Name: "morning", At: "07:30", Zone: "UTC", Prompt: "what needs me?", Paused: true}
+	at := time.Date(2026, 9, 15, 8, 0, 0, 0, time.UTC)
+	if due, _ := r.Due(at, ""); due {
+		t.Fatal("a paused rhythm fired")
+	}
+	r.Paused = false
+	if due, _ := r.Due(at, ""); !due {
+		t.Fatal("unpausing did not bring it back")
+	}
+}

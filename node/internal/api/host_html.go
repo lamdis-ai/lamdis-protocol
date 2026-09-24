@@ -20,15 +20,15 @@ const hostCSS = `
 .gate .box{max-width:23rem;text-align:center;animation:rise .4s both}
 @media(max-width:520px){.gate{padding:1.1rem}.gate h1{font-size:1.25rem}}
 .gate .glyphwrap{display:flex;justify-content:center;margin-bottom:1.4rem}
-.gate h1{font-size:1.45rem;font-weight:660;letter-spacing:-.025em;margin-bottom:.5rem}
+.gate h1{font-family:var(--serif);font-size:2.4rem;font-weight:400;line-height:1.1;margin-bottom:.6rem}
 .gate p{color:var(--ink3);font-size:.95rem;line-height:1.6;margin-bottom:1.5rem}
 .gate .btn{width:100%;justify-content:center;padding:.7rem 1rem}
 .gate .err{color:var(--red);font-size:.84rem;margin-top:.9rem;min-height:1.2rem}
 .gate .fine{color:var(--ink4);font-size:.78rem;margin-top:1.6rem;line-height:1.6}
 .booting{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);color:var(--ink4);font:.8rem var(--mono)}
-.who{border-top:1px solid var(--line);padding:.55rem 1.4rem;font-size:.78rem;color:var(--ink4);display:flex;gap:.6rem;align-items:center}
+.who{border-top:1px solid var(--line);padding:.6rem .4rem 0;font-size:.76rem;color:var(--ink4);display:flex;gap:.6rem;align-items:center}
 .who b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
-.who button{color:var(--ink4);font-size:.78rem}
+.who button{color:var(--gold);font-size:.76rem;font-weight:500}
 .who button:hover{color:var(--ink2)}
 `
 
@@ -41,13 +41,15 @@ func hostedAppHTML(cfg SignIn) string {
 	})
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="dark">
-<title>Lamdis</title><link rel="icon" href="/favicon.ico"><style>` + appCSS + hostCSS + `</style></head><body>
+<title>Lamdis</title><link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"><style>` + appCSS + hostCSS + `</style></head><body>
 
 <div class="gate" id="gate" hidden>
   <div class="box">
     <div class="glyphwrap">` + hostMark + `</div>
     <h1>Keep this</h1>
-    <p>You have been using this without an account. Add your email and the same threads follow you to any browser, and stay yours.</p>
+    <p>You have been using this without an account. Add your email and the same channels, and your agent, follow you to any browser.</p>
     <button class="btn solid" id="go">Continue with email</button>
     <button class="btn" id="back" style="width:100%;justify-content:center;margin-top:.5rem">Not now</button>
     <div class="err" id="err"></div>
@@ -56,27 +58,7 @@ func hostedAppHTML(cfg SignIn) string {
 </div>
 <div class="booting" id="booting">opening your record…</div>
 
-<div class="shell" id="shell" hidden>
-  <div class="scrim" id="scrim"></div>
-  <aside class="rail">
-    <div class="mark">` + hostMark + ` Lamdis</div>
-    <button class="newbtn" id="new">+ New thread</button>
-    <div class="threads" id="threads"></div>
-    <div class="me"><div class="avatar" id="me-av">·</div><b id="me-name">you</b><button class="icon" id="gear" title="Settings">⚙</button></div>
-    <div class="who"><b id="who-email"></b><button id="signout">Sign out</button></div>
-  </aside>
-  <main class="main">
-    <header class="head"><button class="menu" id="menu" aria-label="Threads">☰</button><h1 id="title">Lamdis</h1><button class="pill" id="agentbtn" hidden><i></i>Agent</button><button class="pill" id="linksbtn" hidden>Connected</button><button class="btn solid" id="share" disabled>Share</button><button class="icon" id="more" title="More" hidden>⋯</button></header>
-    <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
-    <div class="composer"><div class="box">
-      <div class="field">
-        <textarea id="text" rows="1" placeholder="Write a note, or ask your agent…"></textarea>
-        <div class="tools"><span class="hint">Enter asks · Shift+Enter for a new line · ⌘Enter saves it as a note</span><button class="btn" id="ask">Ask</button><button class="btn solid" id="post">Save</button></div>
-      </div>
-      <div class="note" id="note"></div>
-    </div></div>
-  </main>
-</div>
+` + strings.Replace(appShell(`<div class="who"><b id="who-email"></b><button id="signout">Sign out</button></div>`), `<div class="shell" id="shell">`, `<div class="shell" id="shell" hidden>`, 1) + `
 
 <script>
 "use strict";

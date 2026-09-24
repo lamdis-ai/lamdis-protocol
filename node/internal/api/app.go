@@ -140,6 +140,7 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /app", a.page)
 	mux.HandleFunc("GET /app/", a.page)
 	mux.HandleFunc("GET /app/api/threads", a.owner(a.handleThreads))
+	mux.HandleFunc("GET /app/api/today", a.owner(a.handleToday))
 	mux.HandleFunc("GET /app/api/thread/{id}", a.owner(a.handleThread))
 	mux.HandleFunc("POST /app/api/post", a.owner(a.handlePost))
 	mux.HandleFunc("POST /app/api/chat", a.owner(a.handleChat))
@@ -284,7 +285,7 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 		st := perm.Fold(id, entries)
 		t := appThread{ID: id, Title: st.Title, Mine: st.Stewards[a.Self], Pending: len(st.PendingRequests())}
 		seen := map[string]bool{}
-		if b, has := agent.LoadBrief(tl, a.Self); has && (b.OnNewEntry != "off" || b.Every != "") {
+		if b, has := agent.LoadBrief(tl, a.Self); has && (b.OnNewEntry != "off" || b.Every != "" || anyAwake(b.Rhythms)) {
 			t.Auto = true
 		}
 		answered := map[string]bool{}
@@ -727,4 +728,14 @@ func (a *App) handleSummarize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"draft": draft, "mode": mode, "model": a.Model, "since": len(lines)})
+}
+
+// anyAwake says whether a thread has a rhythm that will actually fire.
+func anyAwake(rs []agent.Rhythm) bool {
+	for _, r := range rs {
+		if !r.Paused {
+			return true
+		}
+	}
+	return false
 }

@@ -323,6 +323,7 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		OpenRouterKey *string  `json:"openrouter_key"`
 		ModelURL      *string  `json:"model_url"`
 		ModelURLKey   *string  `json:"model_url_key"`
+		Name          *string  `json:"name"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil {
 		http.Error(w, "bad config", http.StatusBadRequest)
@@ -341,6 +342,15 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Brief != nil {
 		cfg.Brief = strings.TrimSpace(*in.Brief)
+	}
+	if in.Name != nil {
+		n := strings.TrimSpace(*in.Name)
+		n = strings.TrimPrefix(n, "@")
+		if len([]rune(n)) > 32 || strings.ContainsAny(n, "<>\"\n") {
+			writeJSON(w, map[string]any{"error": "Keep the name short: a word or two."})
+			return
+		}
+		cfg.Name = n
 	}
 	if in.AutoWeb != nil {
 		switch v := strings.TrimSpace(*in.AutoWeb); v {

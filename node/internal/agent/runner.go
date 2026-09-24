@@ -332,6 +332,9 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 
 	// Messages.
 	sys := r.systemPrompt(brief, g, canWrite, st)
+	if n := strings.TrimSpace(cfg.Name); n != "" {
+		sys = "Your name is " + n + ". People in the thread may address you as @" + n + ".\n" + sys
+	}
 	userMsg, threadsRead := r.contextFor(ctx, t, tl, st, trig, decision, brief)
 	rec.Threads = threadsRead
 	msgs := []Message{{Role: "system", Content: sys}, {Role: "user", Content: userMsg}}
