@@ -25,6 +25,13 @@ type todayDecision struct {
 	Text    string   `json:"text"`
 	Options []string `json:"options,omitempty"`
 	TS      string   `json:"ts"`
+	// Connect is set when this is a Connect card rather than a question.
+	Connect *todayConnect `json:"connect,omitempty"`
+}
+
+type todayConnect struct {
+	Service string `json:"service"`
+	URL     string `json:"url"`
 }
 
 type todayRun struct {
@@ -88,6 +95,16 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 			case agent.KindDecision:
 				if !e.Resolved {
 					out.Decisions = append(out.Decisions, todayDecision{Thread: id, Title: title, ID: e.ID, Text: e.Text, Options: e.Options, TS: e.TS})
+				}
+			case agent.KindConnect:
+				if !e.Resolved {
+					var b struct {
+						Service string `json:"service"`
+						URL     string `json:"url"`
+					}
+					json.Unmarshal(e.Data, &b)
+					out.Decisions = append(out.Decisions, todayDecision{Thread: id, Title: title, ID: e.ID, Text: e.Text, TS: e.TS,
+						Connect: &todayConnect{Service: b.Service, URL: b.URL}})
 				}
 			case agent.KindRun:
 				t, err := time.Parse(time.RFC3339, e.TS)

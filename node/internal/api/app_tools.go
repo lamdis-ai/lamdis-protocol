@@ -15,6 +15,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 	"html/template"
 	"io"
 	"net"
@@ -505,4 +506,44 @@ func authClosePage(ok bool, detail string) string {
 <body><div class="notice"><h1>` + title + `</h1><p>` + body + `</p></div>
 <script>try{ if(window.opener){ window.opener.postMessage({lamdis:"tools-auth"}, location.origin); setTimeout(function(){window.close()}, 1200) } }catch(e){}</script>
 </body></html>`
+}
+
+// handleConnectReply records how a Connect card ended: connected (and with
+// how many tools), or not. The credential itself never passes through here;
+// it was saved by the sign-in or the tools form, into the vault.
+func (a *App) handleConnectReply(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ID    string `json:"id"`
+		OK    bool   `json:"ok"`
+		Name  string `json:"name"`
+		Tools int    `json:"tools"`
+		Note  string `json:"note"`
+	}
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<14)).Decode(&in) != nil || in.ID == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	thread, card := a.findEntry(ctx, in.ID)
+	if card == nil || card.Kind != agent.KindConnect {
+		http.Error(w, "no such card", http.StatusNotFound)
+		return
+	}
+	text := "Not now."
+	if in.OK {
+		text = "Connected " + in.Name + "."
+	} else if strings.TrimSpace(in.Note) != "" {
+		text = strings.TrimSpace(in.Note)
+	}
+	id, err := a.personAppend(ctx, thread, protolog.Draft{Kind: agent.KindConnectReply, Lane: protolog.LaneContent,
+		Refs: &protolog.Refs{RepliesTo: in.ID},
+		Body: map[string]any{"text": text, "ok": in.OK, "name": in.Name, "tools": in.Tools}})
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if a.Scheduler != nil {
+		a.Scheduler.Push(ctx)
+	}
+	writeJSON(w, map[string]any{"ok": true, "id": id, "thread": thread})
 }

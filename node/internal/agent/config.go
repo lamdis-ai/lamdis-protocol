@@ -117,6 +117,7 @@ func LoadConfig(dataDir string) (Config, error) {
 		if e := json.Unmarshal(raw, &c); e != nil {
 			perr = e
 		}
+		openSecrets(dataDir, &c)
 	}
 	if c.MaxToolCalls <= 0 {
 		c.MaxToolCalls = 12
@@ -155,6 +156,10 @@ func LoadConfig(dataDir string) (Config, error) {
 // SaveConfig writes agent.json. Only the owner's process can reach the data
 // directory, so the file is the permission boundary.
 func SaveConfig(dataDir string, c Config) error {
+	c, err := sealedCopy(dataDir, c)
+	if err != nil {
+		return err
+	}
 	raw, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err

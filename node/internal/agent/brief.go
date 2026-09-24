@@ -47,12 +47,12 @@ type Brief struct {
 
 // Rhythm is one time of day the agent thinks rather than reacts.
 type Rhythm struct {
-	Name   string `json:"name"`
-	At     string `json:"at"`             // "07:30", in Zone
-	Zone   string `json:"zone,omitempty"` // IANA name; empty means this machine's time
+	Name string `json:"name"`
+	At   string `json:"at"`             // "07:30", in Zone
+	Zone string `json:"zone,omitempty"` // IANA name; empty means this machine's time
 	// Paused keeps a rhythm written down without letting it fire, so turning
 	// one off for a holiday does not mean retyping the question afterwards.
-	Paused bool `json:"paused,omitempty"`
+	Paused bool   `json:"paused,omitempty"`
 	Prompt string `json:"prompt"`
 }
 

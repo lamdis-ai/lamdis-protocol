@@ -148,6 +148,7 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/thread/{id}/brief", a.owner(a.handleBriefSet))
 	mux.HandleFunc("POST /app/api/thread/{id}/run", a.owner(a.handleRunNow))
 	mux.HandleFunc("POST /app/api/decision", a.owner(a.handleDecision))
+	mux.HandleFunc("POST /app/api/connect", a.owner(a.handleConnectReply))
 	mux.HandleFunc("GET /app/api/agent", a.owner(a.handleAgent))
 	mux.HandleFunc("POST /app/api/agent/revoke", a.owner(a.handleAgentRevoke))
 	mux.HandleFunc("POST /app/api/agent/config", a.owner(a.handleAgentConfig))
@@ -290,7 +291,7 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 		}
 		answered := map[string]bool{}
 		for _, e := range entries {
-			if e.Kind == agent.KindDecisionReply && e.Refs != nil {
+			if (e.Kind == agent.KindDecisionReply || e.Kind == agent.KindConnectReply) && e.Refs != nil {
 				answered[e.Refs.RepliesTo] = true
 			}
 		}
@@ -300,7 +301,7 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 				t.Entries++
 				t.Last = e.TS
 			}
-			if e.Kind == agent.KindDecision && !answered[e.ID] {
+			if (e.Kind == agent.KindDecision || e.Kind == agent.KindConnect) && !answered[e.ID] {
 				t.Waiting++
 			}
 			if e.Lane == protolog.LaneSummary {
@@ -363,7 +364,7 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 	}
 	answered := map[string]bool{}
 	for _, e := range tl.Entries() {
-		if e.Kind == agent.KindDecisionReply && e.Refs != nil {
+		if (e.Kind == agent.KindDecisionReply || e.Kind == agent.KindConnectReply) && e.Refs != nil {
 			answered[e.Refs.RepliesTo] = true
 		}
 	}
@@ -415,7 +416,10 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 		switch e.Kind {
 		case agent.KindDecision:
 			ae.Resolved = answered[e.ID]
-		case agent.KindRun, agent.KindBrief, agent.KindDecisionReply:
+		case agent.KindConnect:
+			ae.Resolved = answered[e.ID]
+			ae.Data = e.Body
+		case agent.KindRun, agent.KindBrief, agent.KindDecisionReply, agent.KindConnectReply:
 			ae.Data = e.Body
 		}
 		out = append(out, ae)

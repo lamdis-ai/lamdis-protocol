@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -41,10 +42,14 @@ type OAuthConfig struct {
 	// a token minted for one service cannot be spent at another.
 	Resource string `json:"resource,omitempty"`
 
-	ClientID string    `json:"client_id,omitempty"`
-	Access   string    `json:"access_token,omitempty"`
-	Refresh  string    `json:"refresh_token,omitempty"`
-	Expiry   time.Time `json:"expiry,omitempty"`
+	ClientID string `json:"client_id,omitempty"`
+	// ClientSecret is set only for a client registered ahead of time with a
+	// service that does not let apps introduce themselves (no dynamic
+	// registration). Sealed like every other credential.
+	ClientSecret string    `json:"client_secret,omitempty"`
+	Access       string    `json:"access_token,omitempty"`
+	Refresh      string    `json:"refresh_token,omitempty"`
+	Expiry       time.Time `json:"expiry,omitempty"`
 }
 
 // Connected reports whether this server has granted anything yet.
@@ -182,8 +187,12 @@ func (o *OAuthConfig) Register(ctx context.Context, redirectURI, name string) er
 	if o.ClientID != "" {
 		return nil
 	}
+	if id, secret, ok := preregistered(o); ok {
+		o.ClientID, o.ClientSecret = id, secret
+		return nil
+	}
 	if o.RegisterURL == "" {
-		return fmt.Errorf("this server needs a client id arranged in advance; it does not accept new ones automatically")
+		return fmt.Errorf("this service only works with apps it has approved in advance, and Lamdis is not one of them yet")
 	}
 	body, _ := json.Marshal(map[string]any{
 		"client_name":                name,
@@ -256,6 +265,9 @@ func (o *OAuthConfig) token(ctx context.Context, form url.Values) error {
 		form.Set("resource", o.Resource)
 	}
 	form.Set("client_id", o.ClientID)
+	if o.ClientSecret != "" {
+		form.Set("client_secret", o.ClientSecret)
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", o.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
@@ -320,4 +332,39 @@ func (o *OAuthConfig) EnsureFresh(ctx context.Context) error {
 		return fmt.Errorf("the connection expired and there is nothing to renew it with; connect it again")
 	}
 	return o.token(ctx, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {o.Refresh}})
+}
+
+// preregistered finds a client this host registered with a service by hand,
+// for services that do not let an app introduce itself. One registration
+// serves every account on the host; each person still signs in and approves
+// on the service's own page, and gets their own tokens.
+//
+// LAMDIS_OAUTH_CLIENTS is JSON keyed by issuer URL or authorization host:
+//
+//	{"https://github.com": {"client_id": "...", "client_secret": "..."}}
+//
+// The value comes from the environment (a secrets manager on a hosted
+// machine), never from a request.
+func preregistered(o *OAuthConfig) (string, string, bool) {
+	raw := strings.TrimSpace(os.Getenv("LAMDIS_OAUTH_CLIENTS"))
+	if raw == "" {
+		return "", "", false
+	}
+	var m map[string]struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+	}
+	if json.Unmarshal([]byte(raw), &m) != nil {
+		return "", "", false
+	}
+	keys := []string{strings.TrimSuffix(o.Issuer, "/")}
+	if u, err := url.Parse(o.AuthURL); err == nil {
+		keys = append(keys, u.Host, u.Scheme+"://"+u.Host)
+	}
+	for _, k := range keys {
+		if c, ok := m[k]; ok && c.ClientID != "" {
+			return c.ClientID, c.ClientSecret, true
+		}
+	}
+	return "", "", false
 }

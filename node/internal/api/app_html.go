@@ -227,6 +227,24 @@ details.runcard summary:before,details.runcard[open] summary:before{content:none
 
 .decision{border:1px solid #F2D29B;background:linear-gradient(#FFF7E8,var(--panel));border-radius:14px;padding:1rem 1.15rem;display:flex;flex-direction:column;gap:.75rem;max-width:44rem}
 .decision .ask{font-size:.98rem;line-height:1.55;white-space:pre-wrap}
+.connect{border:1px solid var(--line2);background:var(--panel);border-radius:16px;padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.8rem;max-width:34rem;box-shadow:0 12px 30px -20px rgba(80,55,20,.3)}
+.cc-top{display:flex;align-items:center;gap:.75rem}
+.cc-logo{width:40px;height:40px;border-radius:12px;background:var(--blue-glow);color:var(--blue);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:1.15rem;flex:none}
+.cc-t{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.cc-t b{font-size:1rem;font-weight:700}
+.cc-t span{font:.76rem var(--mono);color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-why{font-size:.95rem;line-height:1.5;color:var(--ink)}
+.cc-act{display:flex;gap:.5rem;flex-wrap:wrap}
+.cc-act .btn{height:38px;border-radius:99px;padding:0 1.1rem}
+.cc-key{display:flex;gap:.5rem}
+.cc-status{font-size:.85rem;color:var(--ink2);display:flex;align-items:center;flex-wrap:wrap;gap:.3rem}
+.cc-status:empty{display:none}
+.cc-status.bad{color:var(--red)}
+.cc-fine{font-size:.76rem;color:var(--ink3);line-height:1.45}
+.cc-done{font-size:.86rem;font-weight:600;color:var(--ink3)}
+.cc-done.ok{color:var(--green)}
+.cc-done.ok:before{content:"✓ "}
+.dcard .connect{box-shadow:none;border:none;padding:0;background:none}
 .decision .done{font:.78rem/1.5 var(--mono);color:var(--ink3)}
 .nudge{display:flex;align-items:center;gap:.8rem;padding:.7rem .95rem;border:1px solid var(--gold-dim);border-radius:12px;background:var(--gold-glow);font-size:.86rem;color:var(--ink2);animation:rise .3s both}
 .nudge span{flex:1}
@@ -547,7 +565,7 @@ function today(){return Promise.all([loadToday(),threads()]).then(function(r){va
       '</div></div>';
     $("today").innerHTML=h;each("[data-starter]",function(b){b.onclick=function(){newThread(b.getAttribute("data-starter"))}});return}
   var left='<div class="col">';
-  if(n){left+='<span class="kick">Needs you</span>'+d.decisions.map(function(x){return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(x.thread)+'">'+esc(x.title)+'</a><span class="tag call">your call</span></div>'+
+  if(n){left+='<span class="kick">Needs you</span>'+d.decisions.map(function(x){if(x.connect)return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(x.thread)+'">'+esc(x.title)+'</a><span class="tag ai">connect</span></div>'+connectCard(x.id,x.connect.service,x.connect.url,x.text,null,x.thread)+'</div>';return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(x.thread)+'">'+esc(x.title)+'</a><span class="tag call">your call</span></div>'+
       '<div class="q">'+body(x.text)+'</div>'+decisionControls(x.id,x.options)+'</div>'}).join("")}
   left+='<span class="kick">'+(runs.length?"While you were away":"Recent")+'</span>';
   left+=runs.length?'<div class="card runs">'+runs.slice(0,12).map(function(x){var dd=parseData(x.data);var bad=dd.outcome==="error";
@@ -568,7 +586,7 @@ function today(){return Promise.all([loadToday(),threads()]).then(function(r){va
   each("[data-open]",function(b){b.onclick=function(){go("chan",b.getAttribute("data-open"))}},$("today"));
   each("[data-go-sched]",function(b){b.onclick=function(){go("sched")}},$("today"));
   each("[data-invite]",function(b){b.onclick=function(){cur=b.getAttribute("data-invite");shareSheet()}},$("today"));
-  wireDecisions($("today"),function(){today()})})}
+  wireDecisions($("today"),function(){today()});wireConnect($("today"))})}
 function trigLabel(t){t=String(t||"");if(t.indexOf("reflect:")===0)return (t.slice(8)?cap(t.slice(8))+" review":"review");
   return {chat:"you asked",entry:"something arrived",peer_entry:"someone wrote",schedule:"on schedule",manual:"run by hand",decision:"after your answer",code:"a task"}[t]||t||"ran"}
 function starter(t,s,pre){return '<button class="card starter" data-starter="'+esc(pre)+'"><b>'+esc(t)+'</b><span>'+esc(s)+'</span></button>'}
@@ -613,7 +631,9 @@ function runCard(e){var d=parseData(e.data);var bad=d.outcome==="error",wait=d.o
 function stepName(t){var m={search_threads:"Searched your channels",post_note:"Wrote a note",ask_person:"Asked you",fetch_url:"Opened a page",read_file:"Read a file",list_files:"Listed files",search_files:"Searched files",edit_file:"Edited a file",write_file:"Wrote a file",run:"Ran a command",open_path:"Asked to open a folder",where:"Checked where it may work"};return m[t]||("Used "+t)}
 function render(es){var out=[],prev=null;
   es.forEach(function(e){
-    if(e.kind==="thread.brief"||e.kind==="agent.decision_reply"||e.lane==="control")return;
+    if(e.kind==="thread.brief"||e.kind==="agent.decision_reply"||e.kind==="agent.connect_reply"||e.lane==="control")return;
+    if(e.kind==="agent.connect"){var cd=parseData(e.data);var rep=es.filter(function(x){return x.kind==="agent.connect_reply"&&x.replies_to===e.id})[0];
+      out.push('<div class="entry">'+avatar(e)+'<div class="c">'+metaLine(e)+connectCard(e.id,cd.service,cd.url,e.text,rep?parseData(rep.data):null,cur)+'</div></div>');prev={key:"bot:"+e.author,ts:e.ts};return}
     if(tab==="agent"&&!isBot(e))return;
     var key=(isBot(e)?"bot:":"")+e.author;
     var cont=prev&&prev.key===key&&(new Date(e.ts)-new Date(prev.ts))<5*60000&&e.kind!=="agent.decision";
@@ -644,7 +664,7 @@ function open(id){cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(cur!==id)return;if(d.error){note(d.error,"bad");$("stream").innerHTML='<div class="void"><h2>Not here</h2><p>That channel is not on this account.</p></div>';return}
     entries=d.entries;var lastE=d.entries[d.entries.length-1];window._sig=d.entries.length+":"+(lastE?lastE.id:"");$("title").innerHTML='<span class="hash">#</span>'+esc(d.title||"untitled");
     $("text").placeholder=(mode==="ask"?"Ask "+agentName()+" about #"+String(d.title||"this channel").replace(/…$/,"")+"…":"Write in #"+(d.title||"this channel")+" — @"+(agentName()==="your agent"?"agent":agentName())+" to ask");
-    var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"});
+    var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"&&e.kind!=="agent.connect_reply"});
     var t=threadOf(id);agentPill(t);members(t);$("more").hidden=!t.mine;if(t.last)seen(id,t.last);
     api("/app/api/thread/"+encodeURIComponent(id)+"/links").then(function(l){if(cur!==id)return;var b=$("linksbtn");b.hidden=!l.total;
       if(l.total){b.innerHTML='<span class="full">'+l.total+(l.total===1?" link":" links")+'</span><span class="short">⇄'+l.total+'</span>';window._links=l}});
@@ -657,7 +677,7 @@ function open(id){cur=id;$("share").disabled=false;threads();
     if($("void-agent"))$("void-agent").onclick=agentSheet;
     if(t.since_shared)$("nudge-go").onclick=shareSheet;
     each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},$("stream"));
-    wireDecisions($("stream"),function(){open(cur)});
+    wireDecisions($("stream"),function(){open(cur)});wireConnect($("stream"));
     $("feed").scrollTop=$("feed").scrollHeight;if(!busy&&window.innerWidth>860)$("text").focus();
     drawPanel(id)})}
 
@@ -678,6 +698,49 @@ function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
     $("p-on").onclick=function(){var nb=Object.assign({},b);nb.on_new_entry=on?"off":"others";if(!nb.rhythms)nb.rhythms=[];
       api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}threads().then(function(){agentPill(threadOf(id));drawPanel(id)});loadToday()})};
     $("p-sched").onclick=function(){scheduleSheet(id)};$("p-share").onclick=shareSheet;$("p-edit").onclick=agentSheet})}
+
+/* ---- connecting a service from a card the agent offered ----
+   The agent can only propose. Signing in happens on the service's own page
+   in a window of its own; a key, if one is needed, goes into this field and
+   straight to the vault, never into the channel or to the model. */
+function connectCard(id,service,url,text,reply,thread){var host="";try{host=new URL(url).host}catch(e){}
+  var h='<div class="connect" data-connect="'+esc(id)+'" data-service="'+esc(service||host)+'" data-url="'+esc(url||"")+'" data-thread="'+esc(thread||"")+'">'+
+    '<div class="cc-top"><div class="cc-logo">'+esc(String(service||host||"?").charAt(0).toUpperCase())+'</div><div class="cc-t"><b>'+esc(service||host)+'</b><span>'+esc(host)+'</span></div></div>'+
+    (text?'<p class="cc-why">'+body(text)+'</p>':'');
+  if(reply)return h+'<div class="cc-done'+(reply.ok?' ok':'')+'">'+(reply.ok?'Connected'+(reply.tools?' · '+reply.tools+(reply.tools===1?' thing':' things')+' it can do':''):esc(reply.text||"Not connected"))+'</div></div>';
+  return h+'<div class="cc-act"><button class="btn solid" data-cc-go>Connect '+esc(service||host)+'</button><button class="btn ghost" data-cc-no>Not now</button></div>'+
+    '<div class="cc-key" hidden><input type="password" autocomplete="off" placeholder="Paste the key from '+esc(service||host)+'’s settings"><button class="btn solid" data-cc-key>Save</button></div>'+
+    '<div class="cc-status" aria-live="polite"></div><p class="cc-fine">You sign in on '+esc(service||host)+'’s own page. '+esc(AgentName())+' never sees your password, and anything that changes something asks you first.</p></div>'}
+function wireConnect(root){each("[data-connect]",function(card){var go=card.querySelector("[data-cc-go]");if(!go)return;
+  var id=card.getAttribute("data-connect"),svc=card.getAttribute("data-service"),url=card.getAttribute("data-url"),thread=card.getAttribute("data-thread");
+  var st=card.querySelector(".cc-status"),keyBox=card.querySelector(".cc-key");
+  function say(t,bad){st.textContent=t||"";st.className="cc-status"+(bad?" bad":"")}
+  function allOf(tools){return {allow:tools.map(function(t){return t.name}),confirm:tools.filter(function(t){return t.writes}).map(function(t){return t.name}),known:tools}}
+  function finish(name,tools){var m=allOf(tools||[]);
+    return api("/app/api/tools",{name:name,url:url,allow:m.allow,confirm:m.confirm,known:m.known}).then(function(r){if(r.error){say(r.error,true);go.disabled=false;return}
+      return api("/app/api/connect",{id:id,ok:true,name:svc,tools:(tools||[]).length}).then(function(){loadToday();
+        say("Connected. "+AgentName()+" is picking up where you left off…");
+        return api("/app/api/chat",{thread:thread,text:"I've connected "+svc+". Carry on with what I asked."}).then(function(){if(view==="chan")open(cur);else today()})})})}
+  function needsAccount(msg){say(msg,true);if(window.show&&/email/i.test(msg)){var k=document.createElement("button");k.className="btn sm";k.textContent="Add your email";k.onclick=function(){window.show("gate")};st.appendChild(document.createTextNode(" "));st.appendChild(k)}}
+  go.onclick=function(){go.disabled=true;say("Looking at "+svc+"…");
+    api("/app/api/tools/probe",{name:"",url:url}).then(function(p){var name=p.name||svc.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+      if(p.needs_signin){
+        return api("/app/api/tools",{name:name,url:url,allow:[],confirm:[]}).then(function(r){if(r.error){needsAccount(r.error);go.disabled=false;return}
+          return api("/app/api/tools/auth/start",{name:name,url:url}).then(function(a){if(a.error){needsAccount(a.error);go.disabled=false;return}
+            var win=window.open(a.authorize,"lamdis-connect","width=520,height=700");
+            if(!win){say("Your browser blocked the sign-in window. Allow pop-ups for this site and press Connect again.",true);go.disabled=false;return}
+            say("Sign in to "+svc+" in the window that opened.");
+            var done=function(e){if(e.origin!==location.origin||!e.data||e.data.lamdis!=="tools-auth")return;window.removeEventListener("message",done);
+              say("Signed in. Reading what "+svc+" offers…");
+              api("/app/api/tools/probe",{name:name,url:url}).then(function(q){if(q.error){say(q.error,true);go.disabled=false;return}finish(name,q.tools)})};
+            window.addEventListener("message",done)})})}
+      if(p.error){say(svc+" wants a key rather than a sign-in. Paste it below; it goes straight into your vault.");keyBox.hidden=false;keyBox.querySelector("input").focus();
+        keyBox.querySelector("[data-cc-key]").onclick=function(){var k=keyBox.querySelector("input").value.trim();if(!k)return;
+          api("/app/api/tools/probe",{name:name,url:url,auth:k}).then(function(q){if(q.error){say(q.error,true);return}
+            api("/app/api/tools",{name:name,url:url,auth:k,allow:[],confirm:[]}).then(function(r){if(r.error){needsAccount(r.error);return}keyBox.querySelector("input").value="";finish(name,q.tools)})})};
+        return}
+      return finish(name,p.tools)})};
+  card.querySelector("[data-cc-no]").onclick=function(){api("/app/api/connect",{id:id,ok:false}).then(function(){loadToday();if(view==="chan")open(cur);else today()})}},root)}
 
 /* ---- the composer ---- */
 function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px";$("send").disabled=!t.value.trim()}
