@@ -40,6 +40,9 @@ type Brief struct {
 	// standing back and looking at the whole thing, and a person does both
 	// at different hours; this is how you say when and about what.
 	Rhythms []Rhythm `json:"rhythms,omitempty"`
+	// Autonomy overrides the agent's setting here: "" (same as everywhere),
+	// "ask", or "auto".
+	Autonomy string `json:"autonomy,omitempty"`
 
 	ID string `json:"-"`
 	TS string `json:"-"`

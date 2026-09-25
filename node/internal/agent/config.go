@@ -13,6 +13,9 @@ type Config struct {
 	// Name is what the person calls their agent. Empty means "your agent".
 	// It is a label for people; the agent's identity is still its key.
 	Name string `json:"name,omitempty"`
+	// Autonomy: "ask" (the default: it stops for your call and asks before
+	// changing anything) or "auto" (full auto: it decides and acts).
+	Autonomy string `json:"autonomy,omitempty"`
 	// AllowDomains are hosts the agent may fetch on its own (globs such as
 	// "*.sec.gov").
 	AllowDomains []string `json:"allow_domains"`
@@ -191,4 +194,16 @@ func domainAllowed(host string, globs []string) bool {
 		}
 	}
 	return false
+}
+
+// FullAuto resolves the autonomy for one channel: the channel's own setting
+// if it has one, otherwise the agent's.
+func FullAuto(cfg Config, b Brief) bool {
+	switch b.Autonomy {
+	case "auto":
+		return true
+	case "ask":
+		return false
+	}
+	return cfg.Autonomy == "auto"
 }

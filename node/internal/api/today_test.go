@@ -33,6 +33,13 @@ func TestTodayGathersSchedulesAndTheAgentsName(t *testing.T) {
 		t.Fatalf("brief: %d %s", w.Code, w.Body.String())
 	}
 
+	// A channel's own full-auto setting survives the round trip.
+	if w := call(handler, "POST", "/app/api/thread/"+th+"/brief", tok, strings.Replace(brief, `{"text":""`, `{"text":"","autonomy":"auto"`, 1)); w.Code != http.StatusOK {
+		t.Fatalf("brief with autonomy: %d %s", w.Code, w.Body.String())
+	}
+	if w := call(handler, "GET", "/app/api/threads", tok, ""); !strings.Contains(w.Body.String(), `"full_auto":true`) {
+		t.Fatalf("full auto was not kept: %s", w.Body.String())
+	}
 	w = call(handler, "GET", "/app/api/today", tok, "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("today: %d %s", w.Code, w.Body.String())

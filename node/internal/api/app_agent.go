@@ -124,7 +124,7 @@ func (a *App) reach() map[string]any {
 		"budget":           map[string]any{"runs": cfg.MaxRunsPerDay, "tokens": cfg.MaxTokensPerDay, "fetches": cfg.MaxFetchesPerDay},
 		"max_runs_per_day": cfg.MaxRunsPerDay, "max_fetches_per_day": cfg.MaxFetchesPerDay,
 		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json",
-		"auto_web": cfg.AutoWeb, "may_hold_secrets": a.mayHoldSecrets(),
+		"auto_web": cfg.AutoWeb, "may_hold_secrets": a.mayHoldSecrets(), "autonomy": firstNonEmpty(cfg.Autonomy, "ask"),
 		"model": modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
 		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != "", "has_url_key": cfg.ModelURLKey != ""}
 }
@@ -146,6 +146,11 @@ func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "schedule must be a duration of at least 10m, e.g. 6h", http.StatusBadRequest)
 			return
 		}
+	}
+	switch in.Autonomy {
+	case "", "ask", "auto":
+	default:
+		in.Autonomy = ""
 	}
 	rhythms := []agent.Rhythm{}
 	for _, rh := range in.Rhythms {
@@ -182,7 +187,7 @@ func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
 		refs = &protolog.Refs{Supersedes: prev.ID}
 	}
 	body := map[string]any{"text": strings.TrimSpace(in.Text), "on_new_entry": in.OnNewEntry, "every": in.Every,
-		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools, "rhythms": rhythms}
+		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools, "rhythms": rhythms, "autonomy": in.Autonomy}
 	e, err := a.personAppend(ctx, id, protolog.Draft{Kind: agent.KindBrief, Lane: protolog.LaneContent, Refs: refs, Body: body})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -324,6 +329,7 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		ModelURL      *string  `json:"model_url"`
 		ModelURLKey   *string  `json:"model_url_key"`
 		Name          *string  `json:"name"`
+		Autonomy      *string  `json:"autonomy"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil {
 		http.Error(w, "bad config", http.StatusBadRequest)
@@ -342,6 +348,15 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Brief != nil {
 		cfg.Brief = strings.TrimSpace(*in.Brief)
+	}
+	if in.Autonomy != nil {
+		switch *in.Autonomy {
+		case "ask", "auto":
+			cfg.Autonomy = *in.Autonomy
+		default:
+			http.Error(w, "autonomy is ask or auto", http.StatusBadRequest)
+			return
+		}
 	}
 	if in.Name != nil {
 		n := strings.TrimSpace(*in.Name)

@@ -149,6 +149,9 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/thread/{id}/run", a.owner(a.handleRunNow))
 	mux.HandleFunc("POST /app/api/decision", a.owner(a.handleDecision))
 	mux.HandleFunc("POST /app/api/connect", a.owner(a.handleConnectReply))
+	mux.HandleFunc("POST /app/api/projects", a.owner(a.handleCreateProject))
+	mux.HandleFunc("POST /app/api/project/{id}/channels", a.owner(a.handleCreateProjectChannel))
+	mux.HandleFunc("POST /app/api/project/move", a.owner(a.handleMoveToProject))
 	mux.HandleFunc("GET /app/api/agent", a.owner(a.handleAgent))
 	mux.HandleFunc("POST /app/api/agent/revoke", a.owner(a.handleAgentRevoke))
 	mux.HandleFunc("POST /app/api/agent/config", a.owner(a.handleAgentConfig))
@@ -266,6 +269,12 @@ type appThread struct {
 	// Auto says the agent works here on its own; Waiting counts questions
 	// the agent has asked and the person has not answered.
 	Auto    bool `json:"auto"`
+	// A project holds channels; a channel in one names it. FullAuto says
+	// the agent decides and acts here without asking.
+	Project   string `json:"project,omitempty"`
+	IsProject bool   `json:"is_project,omitempty"`
+	Children  int    `json:"children,omitempty"`
+	FullAuto  bool   `json:"full_auto,omitempty"`
 	Waiting int  `json:"waiting"`
 }
 
@@ -277,6 +286,8 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := []appThread{}
+	structure := agent.ReadStructure(ctx, a.Store, a.Self)
+	cfg, _ := agent.LoadConfig(a.DataDir)
 	for _, id := range ids {
 		tl, err := a.Store.Thread(ctx, id)
 		if err != nil {
@@ -286,9 +297,12 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 		st := perm.Fold(id, entries)
 		t := appThread{ID: id, Title: st.Title, Mine: st.Stewards[a.Self], Pending: len(st.PendingRequests())}
 		seen := map[string]bool{}
-		if b, has := agent.LoadBrief(tl, a.Self); has && (b.OnNewEntry != "off" || b.Every != "" || anyAwake(b.Rhythms)) {
+		b, has := agent.LoadBrief(tl, a.Self)
+		if has && (b.OnNewEntry != "off" || b.Every != "" || anyAwake(b.Rhythms)) {
 			t.Auto = true
 		}
+		t.FullAuto = agent.FullAuto(cfg, b)
+		t.Project, t.IsProject, t.Children = structure.Parent[id], structure.IsProject[id], len(structure.Children[id])
 		answered := map[string]bool{}
 		for _, e := range entries {
 			if (e.Kind == agent.KindDecisionReply || e.Kind == agent.KindConnectReply) && e.Refs != nil {
@@ -296,7 +310,7 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		for _, e := range entries {
-			bookkeeping := e.Kind == agent.KindRun || e.Kind == agent.KindBrief
+			bookkeeping := e.Kind == agent.KindRun || e.Kind == agent.KindBrief || e.Kind == agent.KindProjectMember || e.Kind == agent.KindProject
 			if e.Lane != protolog.LaneControl && !bookkeeping {
 				t.Entries++
 				t.Last = e.TS

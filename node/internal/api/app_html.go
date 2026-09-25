@@ -73,6 +73,29 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .chan[aria-current=true]{background:var(--raise);color:var(--ink)}
 .chan .dot{width:8px;height:8px;border-radius:99px;background:var(--gold);flex:none;box-shadow:0 0 0 3px var(--gold-glow)}
 .chan .ag{font-size:.66rem;color:var(--blue);flex:none}
+.chan.kid{padding-left:1.9rem;font-size:.87rem}
+.chan.proj{font-weight:600;color:var(--ink)}
+.chan .stk{flex:none;color:var(--gold-text)}
+.grp{display:flex;align-items:center;margin-left:-.35rem}
+.grp .chan{flex:1;min-width:0;padding-left:.2rem}
+.fold{width:20px;height:28px;display:grid;place-items:center;color:var(--ink4);flex:none}
+.fold svg{transition:transform .15s}
+.fold[aria-expanded=true] svg{transform:rotate(90deg)}
+.addkid{text-align:left;padding:.2rem .65rem .35rem 1.9rem;font-size:.78rem;color:var(--ink4)}
+.addkid:hover{color:var(--gold-text)}
+.chans .sep{height:1px;background:var(--line);margin:.45rem .65rem}
+.crumb{display:inline-flex;align-items:center;gap:.3rem;color:var(--ink3);font-weight:500;cursor:pointer}
+.crumb:hover{color:var(--ink)}
+.head h1 .stk{color:var(--gold-text);align-self:center}
+.head h1 .tag{margin-left:.4rem;align-self:center}
+.pill.fa{border-color:var(--blue);color:var(--blue);background:var(--blue-glow);font-weight:600}
+.kidlink{color:var(--ink);cursor:pointer}
+.kidlink:hover{color:var(--gold-text)}
+.panel select{font-size:.84rem;padding:.4rem .55rem}
+.walled{padding:.8rem .85rem;border-radius:12px;background:var(--blue-glow);margin:0 -.2rem}
+.seg3{display:flex;border:1px solid var(--line2);border-radius:10px;padding:2px;gap:2px}
+.seg3 button{flex:1;height:30px;border-radius:8px;font-size:.78rem;color:var(--ink3);display:inline-flex;align-items:center;justify-content:center;gap:.25rem}
+.seg3 button[aria-pressed=true]{background:var(--ink);color:#fff}
 .agentcard{display:flex;flex-direction:column;gap:.6rem;padding:.75rem;border:1px solid var(--line2);border-radius:12px;background:var(--panel);text-align:left;width:100%;transition:border-color .14s}
 .agentcard:hover{border-color:var(--ink4)}
 .agentcard .top{display:flex;align-items:center;gap:.6rem}
@@ -489,6 +512,8 @@ var ICON={
   x:'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   wait:'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M12 7v5l3 2"/></svg>',
   chev:'<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  stack:'<svg class="stk" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>',
+  bolt:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
   clock:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
 };
 
@@ -504,7 +529,8 @@ function drawAgentCard(){var a=agentInfo||{},st=a.status||{};var n=AgentName();
   $("ag-name").textContent=n;$("ag-av").textContent=initials(n==="Your agent"?"A":n);
   var live=$("ag-live");var problem=a.problem||(a.revoked?"revoked":"");
   live.className="live"+(problem?" bad":((todayData&&todayData.watching.length)||(todayData&&todayData.schedules.some(function(s){return !s.paused}))?" on":""));
-  $("ag-state").textContent=problem?"needs setting up":(live.className.indexOf("on")>0?"working on its own":"answers when asked");
+  var fa=((a.reach&&a.reach.autonomy)==="auto");
+  $("ag-state").textContent=problem?"needs setting up":(fa?"full auto":(live.className.indexOf("on")>0?"working on its own":"answers when asked"));
   var runs=todayRunsToday(),spent=0;runs.forEach(function(r){spent+=costOf(r.data||{})});
   $("ag-spend").innerHTML='<span>today</span><b>'+runs.length+(runs.length===1?" run":" runs")+(spent?" · "+money(spent):"")+'</b>';
   var m=(a.reach&&a.reach.model)||a.model||"";$("model").textContent=m}
@@ -515,16 +541,26 @@ function parseData(d){if(!d)return {};if(typeof d==="string"){try{return JSON.pa
 function threads(){return api("/app/api/threads").then(function(d){threadList=d.threads||[];window._threads=threadList;
   titles={};threadList.forEach(function(t){titles[t.title.toLowerCase()]=t.id});
   var el=$("threads");
-  el.innerHTML=threadList.length?threadList.map(function(t){
-    var unread=t.last&&t.id!==cur&&seen(t.id)&&t.last>seen(t.id);
-    var right=t.waiting?'<span class="dot" title="Needs you"></span>':(t.auto?'<span class="ag">agent</span>':'');
-    return '<button class="chan'+(unread?' unread':'')+'" data-id="'+esc(t.id)+'" aria-current="'+(view==="chan"&&t.id===cur)+'"><span class="hash">#</span><span class="nm">'+esc(t.title)+'</span>'+right+'</button>'}).join("")
-    :'<p class="hint" style="padding:0 .65rem">No channels yet.</p>';
+  function row(t,kid){var unread=t.last&&t.id!==cur&&seen(t.id)&&t.last>seen(t.id);
+    var right=t.waiting?'<span class="dot" title="Needs you"></span>':(t.full_auto?'<span class="ag">auto</span>':(t.auto?'<span class="ag">agent</span>':''));
+    var mark=t.is_project?ICON.stack:'<span class="hash">#</span>';
+    return '<button class="chan'+(unread?' unread':'')+(kid?' kid':'')+(t.is_project?' proj':'')+'" data-id="'+esc(t.id)+'" aria-current="'+(view==="chan"&&t.id===cur)+'">'+mark+'<span class="nm">'+esc(t.title)+'</span>'+right+'</button>'}
+  var projects=threadList.filter(function(t){return t.is_project}),loose=threadList.filter(function(t){return !t.is_project&&!t.project});
+  var h="";
+  projects.forEach(function(p){var kids=threadList.filter(function(t){return t.project===p.id});var open=!folded(p.id);
+    h+='<div class="grp"><button class="fold" data-fold="'+esc(p.id)+'" aria-label="'+(open?"Collapse":"Expand")+'" aria-expanded="'+open+'">'+ICON.chev+'</button>'+row(p,false)+'</div>';
+    if(open)h+=kids.map(function(k){return row(k,true)}).join("")+'<button class="addkid" data-addkid="'+esc(p.id)+'">+ channel</button>'});
+  if(projects.length&&loose.length)h+='<div class="sep"></div>';
+  h+=loose.map(function(t){return row(t,false)}).join("");
+  el.innerHTML=threadList.length?h:'<p class="hint" style="padding:0 .65rem">No channels yet.</p>';
   each(".chan",function(n){n.onclick=function(){go("chan",n.getAttribute("data-id"))}},el);
+  each("[data-fold]",function(b){b.onclick=function(){var id=b.getAttribute("data-fold");folded(id,!folded(id));threads()}},el);
+  each("[data-addkid]",function(b){b.onclick=function(){newThread("",b.getAttribute("data-addkid"))}},el);
   var w=threadList.reduce(function(s,t){return s+(t.waiting||0)},0);
   $("nav-today-n").hidden=!w;$("nav-today-n").textContent=w;
   document.title=(w?"("+w+") ":"")+"Lamdis";
   return threadList})}
+function folded(id,v){try{var f=JSON.parse(localStorage.getItem("lamdis.folded")||"{}");if(v===undefined)return !!f[id];f[id]=v;localStorage.setItem("lamdis.folded",JSON.stringify(f))}catch(e){return false}}
 function drawNav(){each(".navi[data-view]",function(n){n.setAttribute("aria-current",String(n.getAttribute("data-view")===view))});
   each(".chan",function(n){n.setAttribute("aria-current",String(view==="chan"&&n.getAttribute("data-id")===cur))})}
 
@@ -631,7 +667,7 @@ function runCard(e){var d=parseData(e.data);var bad=d.outcome==="error",wait=d.o
 function stepName(t){var m={search_threads:"Searched your channels",post_note:"Wrote a note",ask_person:"Asked you",fetch_url:"Opened a page",read_file:"Read a file",list_files:"Listed files",search_files:"Searched files",edit_file:"Edited a file",write_file:"Wrote a file",run:"Ran a command",open_path:"Asked to open a folder",where:"Checked where it may work"};return m[t]||("Used "+t)}
 function render(es){var out=[],prev=null;
   es.forEach(function(e){
-    if(e.kind==="thread.brief"||e.kind==="agent.decision_reply"||e.kind==="agent.connect_reply"||e.lane==="control")return;
+    if(e.kind==="thread.brief"||e.kind==="agent.decision_reply"||e.kind==="agent.connect_reply"||e.kind==="project.member"||e.kind==="project.is"||e.lane==="control")return;
     if(e.kind==="agent.connect"){var cd=parseData(e.data);var rep=es.filter(function(x){return x.kind==="agent.connect_reply"&&x.replies_to===e.id})[0];
       out.push('<div class="entry">'+avatar(e)+'<div class="c">'+metaLine(e)+connectCard(e.id,cd.service,cd.url,e.text,rep?parseData(rep.data):null,cur)+'</div></div>');prev={key:"bot:"+e.author,ts:e.ts};return}
     if(tab==="agent"&&!isBot(e))return;
@@ -655,6 +691,7 @@ function thinking(t){
   window._thinkTimer=setInterval(function(){if(!document.getElementById("thinking")){clearInterval(window._thinkTimer);return}
     var s=Math.round((Date.now()-t0)/1000);lbl.textContent=s<3?base:base+" · "+s+"s"+(s>25?" · this one is taking a while":"")},500)}
 function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.waiting>0;
+  if(t.full_auto&&!wait){b.className="pill fa";b.title=AgentName()+" decides and acts here without asking";b.innerHTML=ICON.bolt+'<span class="full">Full auto</span><span class="short"></span>';return}
   b.className="pill"+(wait?" wait":(on?" on":" off"));
   b.title=on?"What "+agentName()+" does here on its own":AgentName()+" only answers when asked. Click to let it work on its own.";
   b.innerHTML='<i></i><span class="full">'+(wait?AgentName()+" needs you":(on?AgentName()+" is on":AgentName()+" is off"))+'</span><span class="short">'+(wait?"you":"")+'</span>'}
@@ -662,9 +699,12 @@ function members(t){var a='<div class="av you">'+esc(initials(me?me.name:"you"))
   var n=(t.shared||0);if(n)a+='<span class="more">+'+n+'</span>';$("avs").innerHTML=a}
 function open(id){cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(cur!==id)return;if(d.error){note(d.error,"bad");$("stream").innerHTML='<div class="void"><h2>Not here</h2><p>That channel is not on this account.</p></div>';return}
-    entries=d.entries;var lastE=d.entries[d.entries.length-1];window._sig=d.entries.length+":"+(lastE?lastE.id:"");$("title").innerHTML='<span class="hash">#</span>'+esc(d.title||"untitled");
-    $("text").placeholder=(mode==="ask"?"Ask "+agentName()+" about #"+String(d.title||"this channel").replace(/…$/,"")+"…":"Write in #"+(d.title||"this channel")+" — @"+(agentName()==="your agent"?"agent":agentName())+" to ask");
-    var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"&&e.kind!=="agent.connect_reply"});
+    entries=d.entries;var lastE=d.entries[d.entries.length-1];window._sig=d.entries.length+":"+(lastE?lastE.id:"");
+    var tt=threadOf(id),par=tt.project?threadOf(tt.project):null;
+    $("title").innerHTML=(par?'<a class="crumb" data-go="'+esc(par.id)+'">'+ICON.stack+esc(par.title)+'</a><span class="dim">/</span>':'')+(tt.is_project?ICON.stack:'<span class="hash">#</span>')+esc(d.title||"untitled")+(tt.is_project?'<span class="tag">project · '+(tt.children||0)+'</span>':'');
+    each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},$("title"));
+    $("text").placeholder=(tt.is_project&&mode==="ask"?"Ask "+agentName()+" across all "+(tt.children||0)+" channels in "+d.title+"…":mode==="ask"?"Ask "+agentName()+" about #"+String(d.title||"this channel").replace(/…$/,"")+"…":"Write in #"+(d.title||"this channel")+" — @"+(agentName()==="your agent"?"agent":agentName())+" to ask");
+    var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"&&e.kind!=="agent.connect_reply"&&e.kind!=="project.member"&&e.kind!=="project.is"});
     var t=threadOf(id);agentPill(t);members(t);$("more").hidden=!t.mine;if(t.last)seen(id,t.last);
     api("/app/api/thread/"+encodeURIComponent(id)+"/links").then(function(l){if(cur!==id)return;var b=$("linksbtn");b.hidden=!l.total;
       if(l.total){b.innerHTML='<span class="full">'+l.total+(l.total===1?" link":" links")+'</span><span class="short">⇄'+l.total+'</span>';window._links=l}});
@@ -686,18 +726,35 @@ function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
   Promise.all([api("/app/api/thread/"+encodeURIComponent(id)+"/brief"),api("/app/api/thread/"+encodeURIComponent(id)+"/access")]).then(function(r){if(cur!==id)return;
     var b=(r[0]&&r[0].brief)||{},acc=r[1]||{};var on=b.on_new_entry&&b.on_new_entry!=="off";
     var rh=(b.rhythms||[]);var tools=(b.tools||[]);
-    var h='<div class="blk"><span class="kick">'+esc(AgentName())+' here</span><div class="ln"><span>Works on its own</span><button class="switch" role="switch" aria-checked="'+on+'" id="p-on" aria-label="Works on its own"></button></div>'+
+    var me2=threadOf(id),h="";
+    if(me2.is_project){var kids=threadList.filter(function(x){return x.project===id}),loose=threadList.filter(function(x){return !x.is_project&&!x.project});
+      h+='<div class="blk"><span class="kick">Channels in this project</span>'+(kids.length?kids.map(function(k){return '<div class="ln"><a class="kidlink" data-go="'+esc(k.id)+'"># '+esc(k.title)+'</a><span class="small muted">'+(k.shared||k.ever_shared?"shared":"just you")+'</span></div>'}).join(""):'<span class="sub">None yet. Give each vendor or partner their own.</span>')+
+        '<button class="edit" id="p-addkid">+ New channel here</button>'+(loose.length?'<select id="p-movein"><option value="">Move a channel in…</option>'+loose.map(function(x){return '<option value="'+esc(x.id)+'">#'+esc(x.title)+'</option>'}).join("")+'</select>':'')+
+        '<span class="sub">Only you see this project. '+esc(AgentName())+' here reads every channel in it and can write into each one. Nobody in those channels can see the others.</span></div>'}
+    if(me2.project){var pp=threadOf(me2.project);
+      h+='<div class="blk walled"><span class="kick">Walled</span><span class="sub">Part of <a class="kidlink" data-go="'+esc(pp.id)+'">'+esc(pp.title||"a project")+'</a>. '+esc(AgentName())+' here sees only this channel, so nothing from the other channels can reach the people in this one.</span><button class="edit" id="p-moveout">Take it out of the project</button></div>'}
+    h+='<div class="blk"><span class="kick">'+esc(AgentName())+' here</span><div class="ln"><span>Works on its own</span><button class="switch" role="switch" aria-checked="'+on+'" id="p-on" aria-label="Works on its own"></button></div>'+
       '<span class="sub">'+(on?"Wakes when "+(b.on_new_entry==="all"?"anyone":"someone else")+" writes here, and asks before anything leaves Lamdis.":"Answers when you ask. Turn this on and it reads what arrives and acts on its own.")+'</span></div>';
     h+='<div class="blk"><span class="kick">Schedules</span>'+(rh.length?rh.map(function(x){return '<div class="ln"><span'+(x.paused?' class="dim"':'')+'>'+esc(x.name?cap(x.name)+" review":"Check-in")+'</span><span class="mono small muted">'+(x.paused?"paused":esc(x.at))+'</span></div>'+(x.prompt?'<span class="sub">“'+esc(x.prompt)+'”</span>':'')}).join(""):'<span class="sub">None. A morning review is the usual first one.</span>')+
       (b.every?'<div class="ln"><span>Check-in</span><span class="mono small muted">every '+esc(b.every)+'</span></div>':'')+'<button class="edit" id="p-sched">+ Add a schedule</button></div>';
     h+='<div class="blk"><span class="kick">On its own it may use</span>'+(tools.length||b.web?(b.web?'<div class="ln"><span>The web</span><span class="tag">'+((b.allow_domains||[]).length?(b.allow_domains.length+" sites"):"listed sites")+'</span></div>':'')+tools.map(function(t){return '<div class="ln"><span>'+esc(t)+'</span></div>'}).join(""):'<span class="sub">Only this record. When you ask it yourself, it may use everything you have connected.</span>')+'</div>';
     var links=(acc.links||[]),grants=(acc.grants||[]);
     h+='<div class="blk"><span class="kick">Who sees what</span>'+(links.length||grants.length?grants.map(function(g){return '<div class="ln"><span>'+esc(g.name)+'</span><span class="small muted">'+esc(g.scopes.join(", "))+'</span></div>'}).join("")+links.map(function(l){return '<div class="ln"><span>'+esc(l.label||"A link")+'</span><span class="small muted">'+(l.lanes.indexOf("content")>=0?"everything":"summaries")+'</span></div>'}).join(""):'<span class="sub">Only you and '+esc(agentName())+'.</span>')+'<button class="edit" id="p-share">Share…</button></div>';
+    var au=b.autonomy||"";var glob=(agentInfo&&agentInfo.reach&&agentInfo.reach.autonomy)||"ask";
+    h+='<div class="blk"><span class="kick">When it has a choice</span><div class="seg3" role="group" aria-label="Autonomy here">'+
+      '<button data-au="" aria-pressed="'+(au==="")+'">Default</button><button data-au="ask" aria-pressed="'+(au==="ask")+'">Ask me</button><button data-au="auto" aria-pressed="'+(au==="auto")+'">'+ICON.bolt+' Full auto</button></div>'+
+      '<span class="sub">'+(au==="auto"||(au===""&&glob==="auto")?"Full auto: it decides and acts without stopping, including actions in connected services. Daily limits still apply.":"It stops for your call and asks before changing anything.")+(au===""?" (Same as everywhere: "+(glob==="auto"?"full auto":"ask me")+".)":"")+'</span></div>';
     h+='<button class="btn sm ghost" id="p-edit" style="align-self:flex-start">Everything it does here…</button>';
     p.innerHTML=h;
     $("p-on").onclick=function(){var nb=Object.assign({},b);nb.on_new_entry=on?"off":"others";if(!nb.rhythms)nb.rhythms=[];
       api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}threads().then(function(){agentPill(threadOf(id));drawPanel(id)});loadToday()})};
-    $("p-sched").onclick=function(){scheduleSheet(id)};$("p-share").onclick=shareSheet;$("p-edit").onclick=agentSheet})}
+    $("p-sched").onclick=function(){scheduleSheet(id)};
+    each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},p);
+    each("[data-au]",function(x){x.onclick=function(){var nb=Object.assign({},b);nb.autonomy=x.getAttribute("data-au");if(!nb.rhythms)nb.rhythms=[];if(!nb.on_new_entry)nb.on_new_entry="off";
+      api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}threads().then(function(){agentPill(threadOf(id));drawPanel(id)})})}},p);
+    if($("p-addkid"))$("p-addkid").onclick=function(){newThread("",id)};
+    if($("p-movein"))$("p-movein").onchange=function(){var v=this.value;if(!v)return;api("/app/api/project/move",{thread:v,project:id}).then(function(){threads().then(function(){drawPanel(id);open(id)})})};
+    if($("p-moveout"))$("p-moveout").onclick=function(){api("/app/api/project/move",{thread:id,project:""}).then(function(){threads().then(function(){open(id)})})};$("p-share").onclick=shareSheet;$("p-edit").onclick=agentSheet})}
 
 /* ---- connecting a service from a card the agent offered ----
    The agent can only propose. Signing in happens on the service's own page
@@ -767,12 +824,24 @@ function sheet(html){closeSheet();sheetEl=document.createElement("div");sheetEl.
   sheetEl.onclick=function(e){if(e.target===sheetEl)closeSheet()};return sheetEl.firstChild}
 function closeSheet(){if(sheetEl){sheetEl.remove();sheetEl=null}}
 
-function newThread(prefill){var s=sheet('<header><h2>New channel</h2><p>One subject per channel: a deal, a project, a person, a decision. '+esc(AgentName())+' reads all of it.</p></header>'+
+function newThread(prefill,project){var pj=project?threadOf(project):null;
+  var s=sheet('<header><h2>'+(pj?'New channel in '+esc(pj.title):'New channel')+'</h2><p>'+(pj?'Give each vendor, contractor or partner their own channel. They see only theirs; you see them all in the project.':'One subject per channel: a deal, a person, a decision. '+esc(AgentName())+' reads all of it.')+'</p></header>'+
   '<section><input id="nt" placeholder="What is it about?" value="'+esc(typeof prefill==="string"?prefill:"")+'" autofocus></section>'+
   '<footer><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" data-go>Create</button></footer>');
   s.querySelector("[data-x]").onclick=closeSheet;var inp=s.querySelector("#nt");setTimeout(function(){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)},30);
-  var gogo=function(){var t=inp.value.trim();if(!t)return;api("/app/api/threads",{title:t}).then(function(d){if(d.error){alert(d.error);return}closeSheet();threads().then(function(){go("chan",d.id)})})};
+  var gogo=function(){var t=inp.value.trim();if(!t)return;(project?api("/app/api/project/"+encodeURIComponent(project)+"/channels",{title:t}):api("/app/api/threads",{title:t})).then(function(d){if(d.error){alert(d.error);return}closeSheet();threads().then(function(){go("chan",d.id)})})};
   s.querySelector("[data-go]").onclick=gogo;inp.onkeydown=function(e){if(e.key==="Enter")gogo()}}
+
+function newProject(){var s=sheet('<header><h2>New project</h2><p>A project holds several channels: one per vendor, contractor or partner. Each of them sees only their own channel. Here, you and '+esc(agentName())+' see all of them and coordinate.</p></header>'+
+  '<section><input id="np" placeholder="Kitchen renovation, Q4 vendor search…" autofocus></section>'+
+  '<footer><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" data-go>Create project</button></footer>');
+  s.querySelector("[data-x]").onclick=closeSheet;var inp=s.querySelector("#np");setTimeout(function(){inp.focus()},30);
+  var gogo=function(){var t=inp.value.trim();if(!t)return;api("/app/api/projects",{title:t}).then(function(d){if(d.error){alert(d.error);return}closeSheet();threads().then(function(){go("chan",d.id)})})};
+  s.querySelector("[data-go]").onclick=gogo;inp.onkeydown=function(e){if(e.key==="Enter")gogo()}}
+function newChooser(){var s=sheet('<header><h2>New</h2></header><section><div class="choices">'+
+  '<button class="choice" data-k="c"><b># Channel</b><span>One subject, with '+esc(agentName())+' and anyone you invite.</span></button>'+
+  '<button class="choice" data-k="p"><b>'+ICON.stack+' Project</b><span>Several channels, one per vendor or partner. They each see only theirs.</span></button></div></section>');
+  s.querySelector('[data-k="c"]').onclick=function(){newThread()};s.querySelector('[data-k="p"]').onclick=newProject}
 
 /* A schedule in one line: when, and what to think about. */
 function scheduleSheet(id){id=id||cur;var zone="";try{zone=Intl.DateTimeFormat().resolvedOptions().timeZone||""}catch(e){}
@@ -834,19 +903,25 @@ function openPal(){if(palEl)return;palEl=document.createElement("div");palEl.cla
 function closePal(){if(palEl){palEl.remove();palEl=null}}
 function drawPal(){var q=($("pal-q").value||"").toLowerCase().trim();
   var all=[{t:"Today",k:"view",run:function(){go("today")}},{t:"Scheduled",k:"view",run:function(){go("sched")}}]
-    .concat(threadList.map(function(t){return {t:"#"+t.title,k:t.waiting?"needs you":"channel",run:function(){go("chan",t.id)}}}))
-    .concat([{t:"New channel",k:"create",run:function(){newThread()}},{t:"Schedule a review",k:"create",run:function(){scheduleSheet()}},{t:"Name "+agentName(),k:"agent",run:nameSheet},{t:"Settings",k:"settings",run:settings}]);
+    .concat(threadList.map(function(t){return {t:(t.is_project?"":"#")+t.title,k:t.waiting?"needs you":(t.is_project?"project":"channel"),run:function(){go("chan",t.id)}}}))
+    .concat([{t:"New channel",k:"create",run:function(){newThread()}},{t:"New project",k:"create",run:newProject},{t:"Schedule a review",k:"create",run:function(){scheduleSheet()}},{t:"Name "+agentName(),k:"agent",run:nameSheet},{t:"Settings",k:"settings",run:settings}]);
   palItems=q?all.filter(function(x){return x.t.toLowerCase().indexOf(q)>=0}):all;
   $("pal-res").innerHTML=palItems.length?palItems.map(function(x,i){return '<button class="it" role="option" data-i="'+i+'" aria-selected="'+(i===palSel)+'">'+esc(x.t)+'<small>'+esc(x.k)+'</small></button>'}).join(""):'<p class="hint" style="padding:.6rem .75rem">Nothing matches.</p>';
   each(".it",function(b){b.onclick=function(){var it=palItems[+b.getAttribute("data-i")];closePal();it.run()}},$("pal-res"))}
 
 /* ---- naming the agent ---- */
 function nameSheet(){var a=agentInfo||{};var curName=agentName()==="your agent"?"":agentName();
-  var s=sheet('<header><h2>What do you call it?</h2><p>A name makes it easy to address in a channel: write @name and it answers. Other people in a shared channel see this name next to everything it writes. Its identity is still its own signed key.</p></header>'+
-    '<section><input id="an" maxlength="32" placeholder="Juniper, Atlas, Friday…" value="'+esc(curName)+'"><p class="hint">'+(a.problem?esc(a.problem):"Runs on "+esc((a.reach&&a.reach.model)||a.model||"")+".")+'</p></section>'+
+  var glob=(a.reach&&a.reach.autonomy)||"ask";
+  var s=sheet('<header><h2>Your agent</h2><p>Write @name in any channel and it answers. People in a shared channel see this name next to everything it writes.</p></header>'+
+    '<section><label class="f" for="an">Name</label><input id="an" maxlength="32" placeholder="Juniper, Atlas, Friday…" value="'+esc(curName)+'">'+
+    '<label class="f">When it has a choice to make</label><div class="choices">'+
+    '<button class="choice" data-au="ask" aria-pressed="'+(glob!=="auto")+'"><b>Ask me first</b><span>It stops for your call and asks before changing anything in your connected services. Recommended.</span></button>'+
+    '<button class="choice" data-au="auto" aria-pressed="'+(glob==="auto")+'"><b>'+ICON.bolt+' Full auto</b><span>It decides and acts, and tells you what it chose and why. Daily limits still apply, and it can never share or grant access.</span></button></div>'+
+    '<p class="hint">Any channel can override this in its side panel.'+(a.problem?' '+esc(a.problem):' Runs on '+esc((a.reach&&a.reach.model)||a.model||"")+'.')+'</p></section>'+
     '<footer><button class="btn ghost" id="an-set">Settings</button><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" id="an-go">Save</button></footer>');
   s.querySelector("[data-x]").onclick=closeSheet;s.querySelector("#an-set").onclick=settings;var inp=s.querySelector("#an");setTimeout(function(){inp.focus()},30);
-  var save=function(){api("/app/api/agent/config",{name:inp.value}).then(function(r){if(r.error){alert(r.error);return}closeSheet();loadAgent().then(function(){drawMode();if(view==="chan")open(cur);else if(view==="today")today();else scheduled()})})};
+  var pick=glob;each("[data-au]",function(x){x.onclick=function(){pick=x.getAttribute("data-au");each("[data-au]",function(y){y.setAttribute("aria-pressed",String(y===x))},s)}},s);
+  var save=function(){api("/app/api/agent/config",{name:inp.value,autonomy:pick}).then(function(r){if(r.error){alert(r.error);return}closeSheet();loadAgent().then(function(){drawMode();if(view==="chan")open(cur);else if(view==="today")today();else scheduled()})})};
   s.querySelector("#an-go").onclick=save;inp.onkeydown=function(e){if(e.key==="Enter")save()}}
 
 /* The agent sheet: what it should do here on its own, and what it may reach. */
@@ -1201,7 +1276,7 @@ function drawer(o){var sh=$("shell");if(sh)sh.classList.toggle("open",!!o)}
 each("[data-menu]",function(b){b.onclick=function(){$("shell").classList.toggle("open")}});
 $("scrim").onclick=function(){drawer(false)};
 $("send").onclick=send;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("linksbtn").onclick=linksSheet;$("more").onclick=moreSheet;
-$("new").onclick=function(){newThread()};$("gear").onclick=settings;$("jump").onclick=openPal;$("agentcard").onclick=nameSheet;$("schedbtn").onclick=function(){scheduleSheet(cur)};
+$("new").onclick=newChooser;$("gear").onclick=settings;$("jump").onclick=openPal;$("agentcard").onclick=nameSheet;$("schedbtn").onclick=function(){scheduleSheet(cur)};
 each(".navi[data-view]",function(b){b.onclick=function(){go(b.getAttribute("data-view"))}});
 each(".seg button",function(b){b.onclick=function(){mode=b.getAttribute("data-mode");drawMode();$("text").focus()}});
 each(".tabs button",function(b){b.onclick=function(){tab=b.getAttribute("data-tab");open(cur)}});
@@ -1235,7 +1310,7 @@ function arriving(){var q="";try{q=(new URLSearchParams(location.search).get("q"
     threads().then(function(){go("chan",d.id).then(function(){$("text").value=q;grow();
       if(me&&me.can_ask){mode="ask";drawMode();ask()}else{mode="note";drawMode();post()}})})});
   return true}
-Promise.all([loadMe(),loadAgent().catch(function(){}),loadModels().catch(function(){})]).then(function(){drawMode();if(!arriving())return fromHash()});
+Promise.all([loadMe(),loadAgent().catch(function(){}),loadModels().catch(function(){}),loadToday().catch(function(){})]).then(function(){drawMode();if(!arriving())return fromHash()});
 setInterval(refresh,15000);
 `
 

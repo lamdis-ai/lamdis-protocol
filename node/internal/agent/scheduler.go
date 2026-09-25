@@ -31,6 +31,14 @@ type Scheduler struct {
 	Logf func(format string, args ...any)
 
 	wake chan struct{}
+	// projPending: news in a project's channel that the project's own agent
+	// should hear about, keyed by the channel, debounced like any other.
+	projPending map[string]projNews
+}
+
+type projNews struct {
+	project, entry string
+	at             time.Time
 }
 
 const (
@@ -112,6 +120,17 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 	}
 	now := r.now()
 	var fire []Trigger
+	structure := ReadStructure(ctx, r.Store, r.Person)
+	projBriefs := map[string]Brief{}
+	projHas := map[string]bool{}
+	for pid := range structure.IsProject {
+		if ptl, err := r.Store.Thread(ctx, pid); err == nil {
+			projBriefs[pid], projHas[pid] = LoadBrief(ptl, r.Person)
+		}
+	}
+	if s.projPending == nil {
+		s.projPending = map[string]projNews{}
+	}
 	for _, id := range ids {
 		tl, err := r.Store.Thread(ctx, id)
 		if err != nil {
@@ -143,6 +162,10 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 				for _, e := range tl.After(k, seen) {
 					if s.qualifies(e, st, brief, has) && (newest == nil || e.Lamport > newest.Lamport) {
 						newest = e
+					}
+					// The project above this channel may want to hear it too.
+					if p := structure.Parent[id]; p != "" && s.qualifies(e, st, projBriefs[p], projHas[p]) {
+						s.projPending[id] = projNews{project: p, entry: e.ID, at: now}
 					}
 				}
 				ts.Heads[hk] = seq
@@ -204,6 +227,17 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 				if now.Sub(last) >= every {
 					fire = append(fire, Trigger{Kind: TriggerSchedule, Thread: id})
 				}
+			}
+		}
+	}
+	if !first {
+		for child, n := range s.projPending {
+			if now.Sub(n.at) < debounce {
+				continue
+			}
+			delete(s.projPending, child)
+			if structure.Parent[child] == n.project {
+				fire = append(fire, Trigger{Kind: TriggerEntry, Thread: n.project, Entry: n.entry, From: child})
 			}
 		}
 	}
