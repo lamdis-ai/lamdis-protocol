@@ -398,7 +398,7 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.OpenRouterKey != nil && strings.TrimSpace(*in.OpenRouterKey) != "" {
 		if !a.mayHoldSecrets() {
-			writeJSON(w, map[string]any{"error": "Add your email first. This node will not keep a key for an account nobody can recover."})
+			writeJSON(w, map[string]any{"error": "Keep your account first (save it with a passkey). A credential is only stored for an account that can be signed back into."})
 			return
 		}
 		cfg.OpenRouterKey = strings.TrimSpace(*in.OpenRouterKey)
@@ -417,7 +417,7 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.ModelURLKey != nil && strings.TrimSpace(*in.ModelURLKey) != "" {
 		if !a.mayHoldSecrets() {
-			writeJSON(w, map[string]any{"error": "Add your email first before storing a credential."})
+			writeJSON(w, map[string]any{"error": "Keep your account first (save it with a passkey) before storing a credential."})
 			return
 		}
 		cfg.ModelURLKey = strings.TrimSpace(*in.ModelURLKey)

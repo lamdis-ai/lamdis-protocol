@@ -115,7 +115,7 @@ func (a *App) server(in toolIn, existing *agent.ToolServer) (agent.ToolServer, e
 	switch {
 	case strings.TrimSpace(in.Auth) != "":
 		if !a.mayHoldSecrets() {
-			return s, errText("Add your email first. A credential stored against a browser tab is one nobody could revoke if that tab were lost, so this node will not keep one until there is an account behind it.")
+			return s, errText("Keep your account first (save it with a passkey). A credential is only stored for an account that can be signed back into.")
 		}
 		s.Auth = strings.TrimSpace(in.Auth)
 	case existing != nil:
@@ -393,7 +393,7 @@ func (a *App) handleToolsAuthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !a.mayHoldSecrets() {
-		writeJSON(w, map[string]any{"error": "Add your email first. Signing in to a service leaves a credential here, and this node will not keep one for an account nobody can recover."})
+		writeJSON(w, map[string]any{"error": "Keep your account first (save it with a passkey). A credential is only stored for an account that can be signed back into."})
 		return
 	}
 	cfg, _ := agent.LoadConfig(a.DataDir)

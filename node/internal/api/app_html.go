@@ -97,6 +97,12 @@ body.dragging .sect{box-shadow:inset 0 0 0 1px var(--line2);border-radius:8px}
 .kidlink:hover{color:var(--gold-text)}
 .panel select{font-size:.84rem;padding:.4rem .55rem}
 .walled{padding:.8rem .85rem;border-radius:12px;background:var(--blue-glow);margin:0 -.2rem}
+.pp{display:flex;gap:.5rem}
+.or{margin:1.1rem 0 .3rem;font-size:.78rem;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em}
+.invs{display:flex;flex-direction:column;gap:.6rem;margin-top:1.6rem}
+.inv{display:flex;align-items:center;gap:.8rem;padding:.9rem 1.1rem;border-color:var(--gold-dim);background:linear-gradient(#FFF7E8,var(--panel))}
+.inv .t{flex:1;min-width:0;font-size:.95rem}
+.inv .t span{display:block;font-size:.78rem;color:var(--ink3)}
 .chips{display:flex;flex-wrap:wrap;gap:.35rem}
 .achip{display:inline-flex;align-items:center;gap:.35rem;height:28px;padding:0 .6rem;border-radius:99px;background:var(--panel);border:1px solid var(--line2);font-size:.82rem;font-weight:500}
 .achip i{width:8px;height:8px;border-radius:99px;flex:none}
@@ -600,7 +606,7 @@ window.onpopstate=fromHash;
 function loadToday(){return api("/app/api/today").then(function(d){if(!d.error){todayData=d;drawAgentCard()}return d})}
 function greeting(){var h=new Date().getHours();return h<5?"Still up.":h<12?"Good morning.":h<18?"Good afternoon.":"Good evening."}
 function words(n){return ["No","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten"][n]||String(n)}
-function today(){return Promise.all([loadToday(),threads()]).then(function(r){var d=r[0]||{};if(d.error){$("today").innerHTML='<div class="void"><p>'+esc(d.error)+'</p></div>';return}
+function today(){return Promise.all([loadToday(),threads(),api("/app/api/invites").catch(function(){return {}})]).then(function(r){var d=r[0]||{};var invs=(r[2]&&r[2].invites)||[];if(d.error){$("today").innerHTML='<div class="void"><p>'+esc(d.error)+'</p></div>';return}
   window._tsig=JSON.stringify([d.decisions.length,d.runs.length&&d.runs[0].id,d.schedules.length]);
   var n=d.decisions.length, runs=d.runs, chans={}, spent=0, reads=0;
   runs.forEach(function(x){chans[x.thread]=1;var dd=parseData(x.data);spent+=costOf(dd);reads+=(dd.threads_read||[]).length});
@@ -610,6 +616,7 @@ function today(){return Promise.all([loadToday(),threads()]).then(function(r){va
   var lede=runs.length?"Since yesterday "+esc(agentName())+" worked "+(runs.length===1?"once":runs.length+" times")+" across "+nc+(nc===1?" channel":" channels")+(spent?", and spent "+money(spent):"")+".":
     (threadList.length?esc(AgentName())+" has not worked on its own yet. Give a channel a morning review, or let it react when someone writes.":"A channel is a place for one subject: you, "+esc(agentName())+", and anyone you bring in. Everything written there is the record the agent reads.");
   var h='<span class="kick">'+esc(date)+'</span><h1 class="hello">'+head+'</h1><p class="lede">'+lede+'</p>';
+  if(invs.length)h+='<div class="invs">'+invs.map(function(v){return '<div class="card inv"><div class="av peer">'+esc(initials(v.from_name||v.from_handle))+'</div><div class="t"><b>'+esc(v.from_name||("@"+v.from_handle))+'</b> invited you to <b>#'+esc(v.title)+'</b><span>@'+esc(v.from_handle)+'</span></div><button class="btn solid" data-inv="'+esc(v.id)+'" data-yes="1">Join</button><button class="btn ghost" data-inv="'+esc(v.id)+'">Decline</button></div>'}).join("")+'</div>';
   if(!threadList.length){
     h+='<div style="margin-top:2.4rem" class="col"><span class="kick">Start with one</span><div class="starters">'+
       starter("A decision I'm making","Quotes, options, who said what. It keeps the numbers straight.","A decision: ")+
@@ -639,6 +646,9 @@ function today(){return Promise.all([loadToday(),threads()]).then(function(r){va
   each("[data-open]",function(b){b.onclick=function(){go("chan",b.getAttribute("data-open"))}},$("today"));
   each("[data-go-sched]",function(b){b.onclick=function(){go("sched")}},$("today"));
   each("[data-invite]",function(b){b.onclick=function(){cur=b.getAttribute("data-invite");shareSheet()}},$("today"));
+  each("[data-inv]",function(b){b.onclick=function(){var yes=!!b.getAttribute("data-yes");b.disabled=true;b.textContent=yes?"Joining…":"Declining…";
+    api("/app/api/invites/answer",{id:b.getAttribute("data-inv"),accept:yes}).then(function(r){if(r.error){alert(r.error);today();return}
+      if(yes&&r.thread){threads().then(function(){go("chan",r.thread)})}else today()})}},$("today"));
   wireDecisions($("today"),function(){today()});wireConnect($("today"))})}
 function trigLabel(t){t=String(t||"");if(t.indexOf("reflect:")===0)return (t.slice(8)?cap(t.slice(8))+" review":"review");
   return {chat:"you asked",entry:"something arrived",peer_entry:"someone wrote",schedule:"on schedule",manual:"run by hand",decision:"after your answer",code:"a task"}[t]||t||"ran"}
@@ -808,12 +818,20 @@ function wireConnect(root){each("[data-connect]",function(card){var go=card.quer
       return api("/app/api/connect",{id:id,ok:true,name:svc,tools:(tools||[]).length}).then(function(){loadToday();
         say("Connected. "+AgentName()+" is picking up where you left off…");
         return api("/app/api/chat",{thread:thread,text:"I've connected "+svc+". Carry on with what I asked."}).then(function(){if(view==="chan")open(cur);else today()})})})}
-  function needsAccount(msg){say(msg,true);if(window.show&&/email/i.test(msg)){var k=document.createElement("button");k.className="btn sm";k.textContent="Add your email";k.onclick=function(){window.show("gate")};st.appendChild(document.createTextNode(" "));st.appendChild(k)}}
+  function needsAccount(msg){say(msg,true);if(window.show&&/passkey|email/i.test(msg)){var k=document.createElement("button");k.className="btn sm solid";k.textContent="Keep your account";k.onclick=function(){window.show("gate")};st.appendChild(document.createTextNode(" "));st.appendChild(k)}}
+  /* A service that only admits apps it approved in advance (GitHub, until
+     Lamdis is registered there) still takes a personal token pasted here. */
+  function tokenInstead(msg){say(svc+" only lets in apps it has approved, and Lamdis is not one yet. You can paste a personal access token from "+svc+"'s settings instead; it goes straight into your vault.");keyBox.hidden=false;
+    keyBox.querySelector("input").placeholder="Paste a personal access token from "+svc;keyBox.querySelector("input").focus();wireKey()}
+  var name=svc.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+  function wireKey(){keyBox.querySelector("[data-cc-key]").onclick=function(){var k=keyBox.querySelector("input").value.trim();if(!k)return;
+    api("/app/api/tools/probe",{name:name,url:url,auth:k}).then(function(q){if(q.error){say(q.error,true);return}
+      api("/app/api/tools",{name:name,url:url,auth:k,allow:[],confirm:[]}).then(function(r){if(r.error){needsAccount(r.error);return}keyBox.querySelector("input").value="";finish(name,q.tools)})})}}
   go.onclick=function(){go.disabled=true;say("Looking at "+svc+"…");
-    api("/app/api/tools/probe",{name:"",url:url}).then(function(p){var name=p.name||svc.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+    api("/app/api/tools/probe",{name:"",url:url}).then(function(p){name=p.name||name;
       if(p.needs_signin){
         return api("/app/api/tools",{name:name,url:url,allow:[],confirm:[]}).then(function(r){if(r.error){needsAccount(r.error);go.disabled=false;return}
-          return api("/app/api/tools/auth/start",{name:name,url:url}).then(function(a){if(a.error){needsAccount(a.error);go.disabled=false;return}
+          return api("/app/api/tools/auth/start",{name:name,url:url}).then(function(a){if(a.error){if(/approved/i.test(a.error)){tokenInstead(a.error)}else needsAccount(a.error);go.disabled=false;return}
             var win=window.open(a.authorize,"lamdis-connect","width=520,height=700");
             if(!win){say("Your browser blocked the sign-in window. Allow pop-ups for this site and press Connect again.",true);go.disabled=false;return}
             say("Sign in to "+svc+" in the window that opened.");
@@ -821,11 +839,7 @@ function wireConnect(root){each("[data-connect]",function(card){var go=card.quer
               say("Signed in. Reading what "+svc+" offers…");
               api("/app/api/tools/probe",{name:name,url:url}).then(function(q){if(q.error){say(q.error,true);go.disabled=false;return}finish(name,q.tools)})};
             window.addEventListener("message",done)})})}
-      if(p.error){say(svc+" wants a key rather than a sign-in. Paste it below; it goes straight into your vault.");keyBox.hidden=false;keyBox.querySelector("input").focus();
-        keyBox.querySelector("[data-cc-key]").onclick=function(){var k=keyBox.querySelector("input").value.trim();if(!k)return;
-          api("/app/api/tools/probe",{name:name,url:url,auth:k}).then(function(q){if(q.error){say(q.error,true);return}
-            api("/app/api/tools",{name:name,url:url,auth:k,allow:[],confirm:[]}).then(function(r){if(r.error){needsAccount(r.error);return}keyBox.querySelector("input").value="";finish(name,q.tools)})})};
-        return}
+      if(p.error){say(svc+" wants a key rather than a sign-in. Paste it below; it goes straight into your vault.");keyBox.hidden=false;keyBox.querySelector("input").focus();wireKey();return}
       return finish(name,p.tools)})};
   card.querySelector("[data-cc-no]").onclick=function(){api("/app/api/connect",{id:id,ok:false}).then(function(){loadToday();if(view==="chan")open(cur);else today()})}},root)}
 
@@ -1071,10 +1085,26 @@ function moreSheet(){if(!cur)return;var t=(window._threads||[]).filter(function(
     d.disabled=true;api("/app/api/thread/"+tid()+"/delete",{}).then(function(r){if(r.error){alert(r.error);d.disabled=false;return}closeSheet();cur=null;go("today")})}}
 
 /* Share: one button, two choices, one link. */
+/* People: find someone here by @handle and bring them into this channel,
+   or make a one-time invite link for somebody who is not here yet. */
+function drawPeople(s){var box=s.querySelector("#ppl");if(!box)return;var th=cur;
+  api("/app/api/handle").then(function(h){if(!h||h.error||!h.handle)return;
+    box.innerHTML='<label class="f" for="pp-q">Add people</label><div class="pp"><input id="pp-q" placeholder="Search by @handle" autocomplete="off" spellcheck="false"><button class="btn" id="pp-link">Invite link</button></div>'+
+      '<div id="pp-res" class="list"></div><p class="hint" id="pp-note">They join this channel only. In a project, the other channels stay out of sight. You are <b>@'+esc(h.handle)+'</b>.</p><div class="or">or share it as a read-only link</div>';
+    var q=box.querySelector("#pp-q"),res=box.querySelector("#pp-res"),t=null;
+    q.oninput=function(){clearTimeout(t);var v=q.value.trim();if(v.replace("@","").length<2){res.innerHTML="";return}
+      t=setTimeout(function(){api("/app/api/people?q="+encodeURIComponent(v)).then(function(d){var ps=(d&&d.people)||[];
+        res.innerHTML=ps.length?ps.map(function(p){return '<div class="row"><div class="av peer">'+esc(initials(p.name||p.handle))+'</div><div class="t"><b>'+esc(p.name||("@"+p.handle))+'</b><span>@'+esc(p.handle)+'</span></div><button class="btn sm solid" data-add="'+esc(p.handle)+'">Add</button></div>'}).join("")
+          :'<p class="hint">Nobody here by that name. Send them an invite link instead.</p>';
+        each("[data-add]",function(b){b.onclick=function(){b.disabled=true;api("/app/api/invite",{thread:th,handle:b.getAttribute("data-add")}).then(function(r){
+          if(r.error){b.disabled=false;alert(r.error);return}b.textContent="Invited ✓";drawPanel(th)})}},res)})},180)};
+    box.querySelector("#pp-link").onclick=function(){var b=this;b.disabled=true;api("/app/api/joinlink",{thread:th}).then(function(r){b.disabled=false;
+      if(r.error){alert(r.error);return}copy(r.url);b.textContent="Copied";box.querySelector("#pp-note").innerHTML='Copied a one-time link for this channel. It works for one person for 7 days: <span class="mono small">'+esc(r.url)+'</span>'})};
+  }).catch(function(){})}
 function shareSheet(){if(!cur)return;var mode="summary";
   api("/app/api/thread/"+tid()+"/access").then(function(d){
     var s=sheet('<header><h2>Share #'+esc((threadOf(cur).title)||"this channel")+'</h2><p>Anyone with the link reads what you have shared, as dated updates. No account needed. Stop sharing any time.</p></header>'+
-    '<section><div class="choices"><button class="choice" data-m="summary" aria-pressed="true"><b>A summary</b><span>'+esc(AgentName())+' drafts it, you edit it. That is all they see.</span></button>'+
+    '<section><div id="ppl"></div><div class="choices"><button class="choice" data-m="summary" aria-pressed="true"><b>A summary</b><span>'+esc(AgentName())+' drafts it, you edit it. That is all they see.</span></button>'+
     '<button class="choice" data-m="read" aria-pressed="false"><b>Everything</b><span>Your messages, your questions, and what '+esc(agentName())+' wrote.</span></button></div>'+
     '<div id="sum"><label class="f" for="draft">What they will read</label><textarea id="draft" rows="5" placeholder="Drafting…"></textarea><p class="hint" id="drafthint"></p></div>'+
     '<label class="f">Who is it for? <span class="dim">(only you see this)</span></label><input id="label" placeholder="The lender, my accountant, Sam…">'+
@@ -1083,7 +1113,7 @@ function shareSheet(){if(!cur)return;var mode="summary";
       (l.lanes.indexOf("content")>=0?"everything":"a summary")+' · until '+esc(when(l.expires))+'</span></div><button class="btn sm" data-copy="'+esc(location.origin+l.path)+'">Copy link</button>'+
       '<button class="btn sm danger" data-kill="'+esc(l.id)+'">Stop</button></div>'}).join("")+'</div>':'')+
     '</section><footer><span class="spacer"></span><button class="btn" data-x>Done</button></footer>');
-    s.querySelector("[data-x]").onclick=closeSheet;
+    s.querySelector("[data-x]").onclick=closeSheet;drawPeople(s);
     var draft=s.querySelector("#draft"),hint=s.querySelector("#drafthint");
     function setMode(m){mode=m;Array.prototype.forEach.call(s.querySelectorAll(".choice"),function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-m")===m))});
       s.querySelector("#sum").hidden=(m!=="summary")}
@@ -1111,6 +1141,7 @@ function settings(){var m=me||{};var origin=location.origin;
   if(!known&&curModel)opts='<option value="'+esc(curModel)+'" selected>'+esc(curModel)+' (current)</option>'+opts;
   var s=sheet('<header><h2>Settings</h2></header><section>'+
   '<label class="f">Your name</label><div style="display:flex;gap:.5rem"><input id="c-name" value="'+esc(m.name==="you"?"":m.name)+'" placeholder="How others will see you"><button class="btn" id="c-save">Save</button></div>'+
+  '<div id="c-handlewrap" hidden><label class="f" for="c-handle">Your @handle</label><div style="display:flex;gap:.5rem"><input id="c-handle" autocomplete="off" spellcheck="false"><button class="btn" id="c-handlesave">Change</button></div><p class="hint">How people find you to add you to a channel. It finds you; it grants nothing on its own.</p></div>'+
   '<label class="f">Model</label><select id="c-model">'+opts+'<option value="__custom">Another id…</option></select><input id="c-model-custom" placeholder="vendor/model-id as OpenRouter names it" hidden style="margin-top:.4rem">'+
   '<p class="hint">Any model OpenRouter serves that can call tools. Prices are live from OpenRouter; each run shows what it cost. Switching takes effect on the next question.</p>'+
   '<div class="grid2" style="margin-top:.5rem"><div><label class="f" style="margin-top:.3rem">OpenRouter key</label><input id="c-key" type="password" placeholder="'+(reach.has_key?(reach.key_from_env?"set in the environment":"saved on this machine"):"sk-or-…")+'"></div>'+
@@ -1149,6 +1180,8 @@ function settings(){var m=me||{};var origin=location.origin;
   s.querySelector("[data-x]").onclick=closeSheet;
   Array.prototype.forEach.call(s.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="copied"}});
   s.querySelector("#c-save").onclick=function(){api("/app/api/me",{name:s.querySelector("#c-name").value}).then(loadMe)};
+  api("/app/api/handle").then(function(h){if(!h||!h.handle)return;s.querySelector("#c-handlewrap").hidden=false;var hi=s.querySelector("#c-handle");hi.value="@"+h.handle;
+    s.querySelector("#c-handlesave").onclick=function(){var b=this;api("/app/api/handle",{handle:hi.value}).then(function(r){if(r.error){alert(r.error);return}hi.value="@"+r.handle;b.textContent="Saved"})}}).catch(function(){});
   s.querySelector("#c-anamesave").onclick=function(){var b=s.querySelector("#c-anamesave");api("/app/api/agent/config",{name:s.querySelector("#c-aname").value}).then(function(r){b.textContent=r.error?"Failed":"Saved";loadAgent().then(drawMode)})};
   var conns=[];
   // A connection shows what it is and one decision: how much of it the
@@ -1383,7 +1416,9 @@ function refresh(){if(sheetEl||busy||palEl||document.hidden)return;
 /* Arriving with something to do (the landing page's box sends ?q=): make it
    a channel and put the question to the agent straight away, so the first
    thing a new person sees is their own work being done. */
-function arriving(){var q="";try{q=(new URLSearchParams(location.search).get("q")||"").trim().slice(0,2000)}catch(e){}
+function arriving(){var q="",jn="";try{var sp0=new URLSearchParams(location.search);q=(sp0.get("q")||"").trim().slice(0,2000);jn=(sp0.get("join")||"").trim()}catch(e){}
+  if(jn){history.replaceState(null,"",location.pathname+"#today");
+    api("/app/api/join",{code:jn}).then(function(r){if(r.error){go("today").then(function(){note("")});alert(r.error);return}threads().then(function(){go("chan",r.thread)})});return true}
   if(!q)return false;history.replaceState(null,"",location.pathname+"#today");
   var title=q.replace(/\s+/g," ");if(title.length>48){title=title.slice(0,48);var sp=title.lastIndexOf(" ");if(sp>24)title=title.slice(0,sp);title+="…"}
   api("/app/api/threads",{title:title}).then(function(d){if(d.error){go("today");return}

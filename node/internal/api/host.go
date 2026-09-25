@@ -427,6 +427,12 @@ func (h *Host) resolve(r *http.Request) (*Account, error) {
 	if id, ok := h.readGuest(tok); ok {
 		return h.load(id, "")
 	}
+	if id, ok := h.readSession(tok); ok {
+		return h.load(id, "")
+	}
+	if h.Cognito == nil {
+		return nil, fmt.Errorf("sign in again")
+	}
 	claims, err := h.Cognito.Verify(tok)
 	if err != nil {
 		return nil, err
@@ -475,6 +481,22 @@ func (h *Host) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write([]byte(appJS))
 	})
+
+	// People on this host: handles, finding, inviting, joining. These see
+	// more than one account, so they live here rather than in one node.
+	mux.HandleFunc("GET /app/api/passkey", h.handlePasskeyStatus)
+	mux.HandleFunc("POST /app/api/passkey/register/begin", h.handlePasskeyRegisterBegin)
+	mux.HandleFunc("POST /app/api/passkey/register/finish", h.handlePasskeyRegisterFinish)
+	mux.HandleFunc("POST /app/api/passkey/login/begin", h.handlePasskeyLoginBegin)
+	mux.HandleFunc("POST /app/api/passkey/login/finish", h.handlePasskeyLoginFinish)
+	mux.HandleFunc("GET /app/api/handle", h.handleHandle)
+	mux.HandleFunc("POST /app/api/handle", h.handleHandle)
+	mux.HandleFunc("GET /app/api/people", h.handlePeople)
+	mux.HandleFunc("POST /app/api/invite", h.handleInvite)
+	mux.HandleFunc("GET /app/api/invites", h.handleInvites)
+	mux.HandleFunc("POST /app/api/invites/answer", h.handleInviteAnswer)
+	mux.HandleFunc("POST /app/api/joinlink", h.handleJoinLink)
+	mux.HandleFunc("POST /app/api/join", h.handleJoin)
 
 	// Everything under /app/api belongs to one person.
 	mux.HandleFunc("/app/api/", func(w http.ResponseWriter, r *http.Request) {

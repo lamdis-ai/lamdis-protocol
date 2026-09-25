@@ -48,12 +48,14 @@ func hostedAppHTML(cfg SignIn) string {
 <div class="gate" id="gate" hidden>
   <div class="box">
     <div class="glyphwrap">` + hostMark + `</div>
-    <h1>Keep this</h1>
-    <p>You have been using this without an account. Add your email and the same channels, and your agent, follow you to any browser.</p>
-    <button class="btn solid" id="go">Continue with email</button>
-    <button class="btn" id="back" style="width:100%;justify-content:center;margin-top:.5rem">Not now</button>
+    <h1 id="gate-h">Keep your account</h1>
+    <p id="gate-p">Save it with a passkey: Face ID, Touch ID, your phone or a security key. Then sign in on any device with the same passkey. No password, and nothing here that could leak one.</p>
+    <button class="btn solid" id="pk-save">Save with a passkey</button>
+    <button class="btn" id="pk-login" style="width:100%;justify-content:center;margin-top:.5rem">I already have an account: sign in</button>
+    <button class="btn" id="go" style="width:100%;justify-content:center;margin-top:.5rem" hidden>Continue with email</button>
+    <button class="btn ghost" id="back" style="width:100%;justify-content:center;margin-top:.5rem;border:none">Not now</button>
     <div class="err" id="err"></div>
-    <div class="fine">Nothing moves. The node you have been writing in simply gains a way back to it.</div>
+    <div class="fine">Your channels stay exactly where they are. The passkey stays on your device; this site keeps only its public half.</div>
   </div>
 </div>
 <div class="booting" id="booting">opening your record…</div>
@@ -183,10 +185,16 @@ function startAsGuest(){
 function boot(){
   show("app");
   var signedIn = sess && sess.id;
-  document.getElementById("who-email").textContent = signedIn ? (sess.email || "signed in") : "Not saved to an account";
-  var b = document.getElementById("signout");
+  var who = document.getElementById("who-email"), b = document.getElementById("signout");
+  who.textContent = signedIn ? (sess.email || "signed in") : "Not saved yet";
   b.textContent = signedIn ? "Sign out" : "Keep this";
   b.onclick = signedIn ? signOut : function(){ show("gate") };
+  // Kept with a passkey: say whose account this is, and offer sign-out.
+  if(!signedIn){
+    fetch("/app/api/passkey").then(function(r){ return r.json() }).then(function(d){
+      if(d && d.passkeys > 0){ who.textContent = "@" + d.handle + " · passkey"; b.textContent = "Sign out"; b.onclick = passkeySignOut }
+    }).catch(function(){});
+  }
   if(!window._appLoaded){
     window._appLoaded = true;
     var el = document.createElement("script");
@@ -196,6 +204,59 @@ function boot(){
 }
 
 document.getElementById("go").onclick = signIn;
+document.getElementById("go").hidden = !(CFG.domain && CFG.clientId);
+
+/* ---- passkeys: WebAuthn wants bytes, the server speaks base64url ---- */
+function b64u(s){ s = s.replace(/-/g,"+").replace(/_/g,"/"); while(s.length % 4) s += "="; var b = atob(s), a = new Uint8Array(b.length); for(var i=0;i<b.length;i++) a[i] = b.charCodeAt(i); return a.buffer }
+function u64(buf){ var b = new Uint8Array(buf), s = ""; for(var i=0;i<b.length;i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"") }
+function creationOptions(o){ var p = o.publicKey; p.challenge = b64u(p.challenge); p.user.id = b64u(p.user.id);
+  (p.excludeCredentials||[]).forEach(function(c){ c.id = b64u(c.id) }); return { publicKey: p } }
+function requestOptions(o){ var p = o.publicKey; p.challenge = b64u(p.challenge);
+  (p.allowCredentials||[]).forEach(function(c){ c.id = b64u(c.id) }); return { publicKey: p } }
+function credJSON(c){
+  var r = c.response, out = { id: c.id, rawId: u64(c.rawId), type: c.type, response: { clientDataJSON: u64(r.clientDataJSON) } };
+  if(r.attestationObject){ out.response.attestationObject = u64(r.attestationObject); if(r.getTransports) out.response.transports = r.getTransports() }
+  if(r.authenticatorData){ out.response.authenticatorData = u64(r.authenticatorData); out.response.signature = u64(r.signature); if(r.userHandle) out.response.userHandle = u64(r.userHandle) }
+  if(c.authenticatorAttachment) out.authenticatorAttachment = c.authenticatorAttachment;
+  out.clientExtensionResults = c.getClientExtensionResults ? c.getClientExtensionResults() : {};
+  return out }
+function gateErr(t){ document.getElementById("err").textContent = t || "" }
+function noPasskeys(){ if(!window.PublicKeyCredential){ gateErr("This browser cannot use passkeys. Try Safari, Chrome, Edge or Firefox on a recent device."); return true } return false }
+
+function passkeySave(){
+  if(noPasskeys()) return; gateErr("");
+  fetch("/app/api/passkey/register/begin", {method:"POST"}).then(function(r){ return r.json() }).then(function(d){
+    if(d.error) throw new Error(d.error);
+    return navigator.credentials.create(creationOptions(d.options)).then(function(c){
+      return fetch("/app/api/passkey/register/finish?ceremony=" + encodeURIComponent(d.ceremony), {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(credJSON(c))})
+    })
+  }).then(function(r){ return r.json() }).then(function(d){
+    if(d.error) throw new Error(d.error);
+    boot();
+  }).catch(function(e){ gateErr(e && e.name === "NotAllowedError" ? "Cancelled. Press the button again when you're ready." : (e.message || "That did not work")) });
+}
+
+function passkeyLogin(){
+  if(noPasskeys()) return; gateErr("");
+  rawFetch("/app/api/passkey/login/begin", {method:"POST"}).then(function(r){ return r.json() }).then(function(d){
+    if(d.error) throw new Error(d.error);
+    return navigator.credentials.get(requestOptions(d.options)).then(function(c){
+      return rawFetch("/app/api/passkey/login/finish?ceremony=" + encodeURIComponent(d.ceremony), {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(credJSON(c))})
+    })
+  }).then(function(r){ return r.json() }).then(function(d){
+    if(d.error) throw new Error(d.error);
+    try{ localStorage.setItem("lamdis.guest", d.token) }catch(e){}
+    saveSession({ guest: d.token });
+    location.href = location.pathname + "#today"; location.reload();
+  }).catch(function(e){ gateErr(e && e.name === "NotAllowedError" ? "Cancelled, or no passkey for this site on this device." : (e.message || "That did not work")) });
+}
+
+function passkeySignOut(){
+  clearSession(); try{ localStorage.removeItem("lamdis.guest") }catch(e){}
+  location.reload();
+}
+document.getElementById("pk-save").onclick = passkeySave;
+document.getElementById("pk-login").onclick = passkeyLogin;
 document.getElementById("back").onclick = function(){ show("app") };
 
 sess = loadSession();
