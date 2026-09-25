@@ -49,6 +49,9 @@ type Brief struct {
 	// Chime are the team members here who speak up on their own when a
 	// person writes, in their role, rather than only when mentioned.
 	Chime []string `json:"chime,omitempty"`
+	// MainQuiet stops the main agent replying to messages on its own; by
+	// default it replies when it has something to add.
+	MainQuiet bool `json:"main_quiet,omitempty"`
 
 	ID string `json:"-"`
 	TS string `json:"-"`

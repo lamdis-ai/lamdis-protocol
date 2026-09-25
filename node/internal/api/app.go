@@ -504,7 +504,11 @@ func (a *App) handlePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"id": e.ID, "lane": string(lane)})
+	responders := 0
+	if lane == protolog.LaneContent {
+		responders = a.replyAsTheySeeFit(in.Thread, e.ID)
+	}
+	writeJSON(w, map[string]any{"id": e.ID, "lane": string(lane), "responders": responders})
 }
 
 // --- sharing ------------------------------------------------------------
@@ -766,4 +770,52 @@ func anyAwake(rs []agent.Rhythm) bool {
 		}
 	}
 	return false
+}
+
+// replyAsTheySeeFit lets the agents in a channel answer a message nobody
+// addressed to them, now rather than on the scheduler's next round: the main
+// agent unless told to keep quiet, and each team member set to chime in.
+// Each one decides whether it has anything to add and says NOTHING if not.
+// It returns how many were asked, so the page knows to watch for replies.
+func (a *App) replyAsTheySeeFit(thread, entry string) int {
+	if a.Runner == nil {
+		return 0
+	}
+	if _, ok := a.agentReady(); !ok {
+		return 0
+	}
+	tl, err := a.Store.Thread(context.Background(), thread)
+	if err != nil {
+		return 0
+	}
+	b, _ := agent.LoadBrief(tl, a.Self)
+	cfg, _ := agent.LoadConfig(a.DataDir)
+	var who []string
+	if !b.MainQuiet {
+		who = append(who, "")
+	}
+	for _, pid := range b.Chime {
+		if cfg.PersonaByID(pid) != nil && len(who) < 4 {
+			who = append(who, pid)
+		}
+	}
+	if len(who) == 0 {
+		return 0
+	}
+	// The scheduler must not pick this message up again on its next round.
+	if a.Scheduler != nil {
+		a.Scheduler.Consume(context.Background(), thread)
+	}
+	go func() {
+		for _, pid := range who {
+			ctx, cancel := runCtx()
+			a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerMessage, Thread: thread, Entry: entry, Persona: pid})
+			if a.Scheduler != nil {
+				a.Scheduler.Consume(ctx, thread)
+				a.Scheduler.Push(ctx)
+			}
+			cancel()
+		}
+	}()
+	return len(who)
 }

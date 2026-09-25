@@ -31,6 +31,9 @@ const (
 	TriggerDecision = "decision"
 	TriggerCode     = "code"    // a task at the terminal, in a workspace
 	TriggerReflect  = "reflect" // a time of day it stands back and thinks
+	// TriggerMessage: the person wrote in the channel, not to anyone in
+	// particular; agents here reply only if they have something to add.
+	TriggerMessage = "message"
 )
 
 // Runner is the agent. One instance per node; runs are serialised.
@@ -93,6 +96,9 @@ type Trigger struct {
 	From string
 	// Persona is which member of the team answers; empty is the main agent.
 	Persona string
+	// Chime marks a run that should reply only if it has something to add
+	// (someone else's message, heard on the next round).
+	Chime bool
 }
 
 // Result is what a run produced.
@@ -503,9 +509,9 @@ func derived(trig *protolog.Entry) *protolog.Refs {
 func (r *Runner) gateFor(t Trigger, b Brief, cfg Config) gate {
 	g := gate{tools: map[string]bool{}}
 	switch t.Kind {
-	case TriggerChat, TriggerManual, TriggerDecision, TriggerCode:
+	case TriggerChat, TriggerManual, TriggerDecision, TriggerCode, TriggerMessage:
 		g.web, g.anyHost, g.allTools, g.postOther = true, true, true, true
-		g.connect = t.Kind != TriggerCode
+		g.connect = t.Kind != TriggerCode && t.Kind != TriggerMessage
 	default:
 		// On its own the agent reaches as far as the person said it may,
 		// and no further. A thread can narrow that, never widen it.
@@ -738,11 +744,16 @@ func (r *Runner) contextFor(ctx context.Context, t Trigger, tl *protolog.ThreadL
 				where += ":\n" + bodyText(trig) + "\n"
 			}
 		}
-		if r.persona != nil {
+		if t.Chime {
+			sb.WriteString(chimePrompt(who, where, t.Entry, trig, r.persona))
+		} else if r.persona != nil {
 			sb.WriteString(who + " just wrote" + where + " (entry " + t.Entry + "). You are in this channel to chime in as " + r.persona.Name + ", in your role. If you have something genuinely useful to add from that role, say it in a few sentences. If not, reply NOTHING. Do not repeat what others have said.")
 		} else {
 			sb.WriteString("A new entry arrived from " + who + where + " (entry " + t.Entry + "). Follow your standing instructions. If they do not apply, reply NOTHING.")
 		}
+	case TriggerMessage:
+		who := r.name(r.Person)
+		sb.WriteString(chimePrompt(who, "", t.Entry, trig, r.persona))
 	case TriggerSchedule:
 		sb.WriteString("This is a scheduled run. Follow your standing instructions. If there is nothing to do, reply NOTHING.")
 	case TriggerReflect:
@@ -1298,4 +1309,21 @@ func sharedLink(u string) (string, bool) {
 		return p.Scheme + "://" + p.Host, true
 	}
 	return "", false
+}
+
+// chimePrompt asks an agent to speak only if it has something to add: the
+// difference between a colleague in a channel and one who answers every
+// message.
+func chimePrompt(who, where, entry string, trig *protolog.Entry, p *Persona) string {
+	text := ""
+	if trig != nil {
+		text = bodyText(trig)
+	}
+	role := "one of the agents in this channel"
+	if p != nil {
+		role = p.Name + ", one of the agents in this channel, in your role (" + trunc(p.About, 200) + ")"
+	}
+	return who + " just wrote" + where + " (entry " + entry + "):\n" + text + "\n\n" +
+		"They wrote to the channel, not to you in particular. You are " + role + ". Reply only if you have something genuinely useful: an answer to a question, a fact from the record or the web, a correction, a risk, or doing what they asked for. " +
+		"If it is addressed to a person rather than the agents, is small talk, or needs nothing from you, reply exactly NOTHING. Keep any reply short, and do not repeat what another agent already said."
 }

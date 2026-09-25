@@ -524,7 +524,7 @@ select{background:var(--bg);border:1px solid var(--line2);border-radius:10px;pad
 const appJS = `
 "use strict";
 var cur=null, me=null, entries=[], sheetEl=null, titles={}, agentInfo=null, busy=false, prices={}, modelList=null;
-var view="today", tab="all", mode="ask", todayData=null, threadList=[], team=[], here=[], target="";
+var view="today", tab="all", mode="note", todayData=null, threadList=[], team=[], here=[], target="";
 var $=function(i){return document.getElementById(i)};
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function when(ts){var d=new Date(ts);if(isNaN(d))return ts||"";var n=new Date();
@@ -758,7 +758,7 @@ function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=fals
     var tt=threadOf(id),par=tt.project?threadOf(tt.project):null;
     $("title").innerHTML=(par?'<a class="crumb" data-go="'+esc(par.id)+'">'+ICON.stack+esc(par.title)+'</a><span class="dim">/</span>':'')+(tt.is_project?ICON.stack:'<span class="hash">#</span>')+esc(d.title||"untitled")+(tt.is_project?'<span class="tag">project · '+(tt.children||0)+'</span>':'');
     each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},$("title"));
-    $("text").placeholder=(tt.is_project&&mode==="ask"?"Ask "+agentName()+" across all "+(tt.children||0)+" channels in "+d.title+"…":mode==="ask"?"Ask "+agentName()+" about #"+String(d.title||"this channel").replace(/…$/,"")+"…":"Write in #"+(d.title||"this channel")+" — @"+(agentName()==="your agent"?"agent":agentName())+" to ask");
+    $("text").placeholder=(tt.is_project&&mode==="ask"?"Ask "+agentName()+" across all "+(tt.children||0)+" channels in "+d.title+"…":mode==="ask"?"Ask "+agentName()+" about #"+String(d.title||"this channel").replace(/…$/,"")+"…":"Message #"+String(d.title||"this channel").replace(/…$/,"")+" — agents here reply if they have something to add");
     var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"&&e.kind!=="agent.connect_reply"&&e.kind!=="project.member"&&e.kind!=="project.is"});
     var t=threadOf(id);agentPill(t);members(t);$("more").hidden=!t.mine;if(t.last)seen(id,t.last);
     api("/app/api/thread/"+encodeURIComponent(id)+"/links").then(function(l){if(cur!==id)return;var b=$("linksbtn");b.hidden=!l.total;
@@ -875,15 +875,23 @@ function wireConnect(root){each("[data-connect]",function(card){var go=card.quer
 function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px";$("send").disabled=!t.value.trim()}
 function drawMode(){each(".seg button",function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-mode")===mode))});
   var an=agentName()==="your agent"?"agent":agentName();$("mode-ask").textContent="Ask "+(an==="agent"?"agent":an);
-  if(cur&&view==="chan"){var t=threadOf(cur);$("text").placeholder=mode==="ask"?"Ask "+agentName()+" about #"+String(t.title||"this channel").replace(/…$/,"")+"…":"Write in #"+(t.title||"this channel")+" — @"+an+" to ask"}}
+  if(cur&&view==="chan"){var t=threadOf(cur);$("text").placeholder=mode==="ask"?"Ask "+agentName()+" about #"+String(t.title||"this channel").replace(/…$/,"")+"…":"Message #"+String(t.title||"this channel").replace(/…$/,"")+" — agents here reply if they have something to add"}}
 function mentionsAgent(t){var n=agentName()==="your agent"?"agent":agentName();var re=new RegExp("(^|\\s)@("+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"|agent)\\b","i");return re.test(t)}
 function send(){var t=$("text").value.trim();if(!cur||!t)return;
   var at=team.filter(function(p){return new RegExp("(^|\\s)@"+p.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i").test(t)})[0];if(at){target=at.id;return ask()}
   if(mode==="ask"||mentionsAgent(t)){if(me&&!me.can_ask){note(AgentName()+" is off until a model key is set.","warn");return}ask();return}
   post()}
-function post(){var t=$("text").value.trim();if(!cur||!t)return;
+function post(){var t=$("text").value.trim();if(!cur||!t)return;var th=cur;
   api("/app/api/post",{thread:cur,text:t,lane:"content"}).then(function(d){if(d.error){note(d.error,"bad");return}
-    $("text").value="";grow();note("");open(cur)})}
+    $("text").value="";grow();note("");open(cur).then(function(){if(d.responders)watchReplies(th,d.responders)})})}
+/* After a message, the agents here are deciding whether to reply: say so,
+   and look often until they have, rather than leaving a silence. */
+function watchReplies(th,n){if(cur!==th)return;var before=entries.length;thinking(n>1?"The agents here are reading…":AgentName()+" is reading…");
+  var t0=Date.now();busy=true;
+  (function tick(){api("/app/api/thread/"+encodeURIComponent(th)).then(function(d){if(cur!==th){busy=false;return}
+    var runs=(d.entries||[]).slice(before).filter(function(e){return e.kind==="agent.run"}).length;
+    if(runs>=n||Date.now()-t0>120000){busy=false;open(th);return}
+    setTimeout(tick,2500)}).catch(function(){busy=false})})()}
 function ask(){var q=$("text").value.trim();if(!cur||!q||busy)return;busy=true;note("");
   $("text").value="";grow();var el=document.createElement("div");el.className="entry q";
   el.innerHTML='<div class="av you">'+esc(initials(me?me.name:"you"))+'</div><div class="c"><div class="meta"><span class="auth">'+esc(me?me.name:"you")+'</span><span class="tag">asked</span></div><div class="body">'+body(q)+'</div></div>';
@@ -936,13 +944,15 @@ function membersSheet(){if(!cur)return;var id=cur;
       grants.map(function(g){return '<div class="mrow"><span class="av peer">'+esc(initials(g.name))+'</span><div class="t"><b>'+esc(g.name)+'</b><span>'+(g.scopes.indexOf("contribute")>=0?"can read and write":"can read")+'</span></div><button class="btn sm ghost" data-revoke="'+esc(g.principal)+'">Remove</button></div>'}).join("")+
       (links.length?'<p class="hint">'+links.length+(links.length===1?" read-only link is":" read-only links are")+' out. Manage them in Share.</p>':'');
     var mine=team.filter(function(p){return inCh.indexOf(p.id)>=0}),others=team.filter(function(p){return inCh.indexOf(p.id)<0});
-    var ags='<div class="mrow"><span class="av bot">'+esc(initials(AgentName()==="Your agent"?"A":AgentName()))+'</span><div class="t"><b>'+esc(AgentName())+'</b><span>main agent · answers when asked'+(t.auto?' and works on its own here':'')+'</span></div></div>'+
+    var mq=!!b.main_quiet;
+    var ags='<div class="mrow"><span class="av bot">'+esc(initials(AgentName()==="Your agent"?"A":AgentName()))+'</span><div class="t"><b>'+esc(AgentName())+'</b><span>main agent'+(t.auto?' · works on its own here':'')+'</span></div>'+
+      '<div class="seg2" role="group" aria-label="How '+esc(AgentName())+' takes part"><button data-mainq="1" aria-pressed="'+mq+'">When @mentioned</button><button data-mainq="0" aria-pressed="'+(!mq)+'">Replies as it sees fit</button></div></div>'+
       mine.map(function(p){var c=chime.indexOf(p.id)>=0;return '<div class="mrow"><span class="av bot" style="background:'+hueOf(p.id)+'">'+esc(initials(p.name))+'</span><div class="t"><b>'+esc(p.name)+'</b><span>'+esc(p.about)+'</span></div>'+
-        '<div class="seg2" role="group" aria-label="How '+esc(p.name)+' takes part"><button data-mode2="'+esc(p.id)+'" data-v="mention" aria-pressed="'+(!c)+'">When @mentioned</button><button data-mode2="'+esc(p.id)+'" data-v="chime" aria-pressed="'+c+'">Chimes in</button></div>'+
+        '<div class="seg2" role="group" aria-label="How '+esc(p.name)+' takes part"><button data-mode2="'+esc(p.id)+'" data-v="mention" aria-pressed="'+(!c)+'">When @mentioned</button><button data-mode2="'+esc(p.id)+'" data-v="chime" aria-pressed="'+c+'">Replies as it sees fit</button></div>'+
         '<button class="btn sm ghost" data-rmag="'+esc(p.id)+'" aria-label="Remove '+esc(p.name)+' from this channel">×</button></div>'}).join("")+
       (others.length?'<div class="addag">'+others.map(function(p){return '<button class="achip addable" data-addag="'+esc(p.id)+'"><i style="background:'+hueOf(p.id)+'"></i>+ '+esc(p.name)+'</button>'}).join("")+'</div>':'')+
       '<button class="edit" id="m-newag">'+(team.length?'+ Create another agent':'+ Create an agent with its own expertise')+'</button>';
-    var s=sheet('<header><h2>In #'+esc(t.title||"this channel")+'</h2><p>People you add see this channel only'+(t.project?', never the rest of the project':'')+'. Agents answer when you @mention them, or chime in on their own.</p></header><section>'+
+    var s=sheet('<header><h2>In #'+esc(t.title||"this channel")+'</h2><p>People you add see this channel only'+(t.project?', never the rest of the project':'')+'. Write to the channel and the agents here reply when they have something to add, or only when you @mention them: your choice, per agent.</p></header><section>'+
       '<label class="f">People</label>'+ppl+'<div id="ppl"></div>'+
       '<label class="f">Agents</label>'+ags+
       '</section><footer><span class="spacer"></span><button class="btn solid" data-x>Done</button></footer>');
@@ -953,6 +963,8 @@ function membersSheet(){if(!cur)return;var id=cur;
     each("[data-rmag]",function(x){x.onclick=function(){var v=x.getAttribute("data-rmag");save(inCh.filter(function(y){return y!==v}),chime)}},s);
     each("[data-mode2]",function(x){x.onclick=function(){var pid=x.getAttribute("data-mode2"),on=x.getAttribute("data-v")==="chime";
       save(inCh,on?chime.concat(chime.indexOf(pid)<0?[pid]:[]):chime.filter(function(y){return y!==pid}))}},s);
+    each("[data-mainq]",function(x){x.onclick=function(){var nb=Object.assign({},b);nb.main_quiet=x.getAttribute("data-mainq")==="1";if(!nb.rhythms)nb.rhythms=[];if(!nb.on_new_entry)nb.on_new_entry="off";
+      api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}membersSheet()})}},s);
     each("[data-revoke]",function(x){x.onclick=function(){if(!x.getAttribute("data-armed")){x.setAttribute("data-armed","1");x.textContent="Sure?";return}
       api("/app/api/thread/"+encodeURIComponent(id)+"/revoke",{principal:x.getAttribute("data-revoke")}).then(function(){membersSheet()})}},s);
     s.querySelector("#m-newag").onclick=function(){teamSheet()};
@@ -1553,7 +1565,7 @@ func appShell(extra string) string {
           <div class="composer"><div class="cbox">
             <textarea id="text" rows="1" placeholder="Ask your agent…"></textarea>
             <div class="crow">
-              <div class="seg" role="group" aria-label="Send as"><button data-mode="ask" id="mode-ask" aria-pressed="true">Ask agent</button><button data-mode="note" aria-pressed="false">Message</button></div>
+              <div class="seg" role="group" aria-label="Send as"><button data-mode="note" aria-pressed="true">Message</button><button data-mode="ask" id="mode-ask" aria-pressed="false">Ask agent</button></div>
               <select class="who" id="who" hidden aria-label="Who to ask"></select>
               <button class="chip" id="schedbtn" title="Schedule a review">` + clockIcon + `<span class="lbl">Schedule</span></button>
               <span class="model" id="model"></span>

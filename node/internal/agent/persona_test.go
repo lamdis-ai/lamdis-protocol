@@ -68,7 +68,7 @@ func TestATeamMemberChimesInOnItsOwn(t *testing.T) {
 	cfg, _ := LoadConfig(f.dir)
 	cfg.Agents = []Persona{{ID: "pd", Name: "Devil", About: "A devil's advocate."}}
 	SaveConfig(f.dir, cfg)
-	f.post(t, KindBrief, map[string]any{"text": "", "on_new_entry": "off", "agents": []string{"pd"}, "chime": []string{"pd"}}, nil)
+	f.post(t, KindBrief, map[string]any{"text": "", "on_new_entry": "off", "agents": []string{"pd"}, "chime": []string{"pd"}, "main_quiet": true}, nil)
 	s := &Scheduler{Runner: f.r, State: f.r.State}
 	ctx := context.Background()
 	s.poll(ctx, true)
@@ -91,7 +91,7 @@ func TestATeamMemberChimesInOnItsOwn(t *testing.T) {
 	if !said {
 		t.Fatal("the devil's advocate did not chime in")
 	}
-	if !m.saw("chime in as Devil") {
+	if !m.saw("You are Devil, one of the agents in this channel") {
 		t.Fatal("it was not told it was chiming in")
 	}
 	// Its own words do not set it off again.

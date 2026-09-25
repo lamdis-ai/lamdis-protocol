@@ -169,7 +169,7 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 						newest = e
 					}
 					// Team members who chime in hear what people write here.
-					if has && len(brief.Chime) > 0 && e.Lane == protolog.LaneContent && e.OnBehalfOf == "" && e.Author != r.Agent && !st.IsAgent(e.Author) {
+					if e.Lane == protolog.LaneContent && e.OnBehalfOf == "" && e.Author != r.Agent && !st.IsAgent(e.Author) && (len(brief.Chime) > 0 || !brief.MainQuiet) {
 						switch e.Kind {
 						case KindRun, KindBrief, KindDecision, KindDecisionReply, KindConnect, KindConnectReply, KindProject, KindProjectMember:
 						default:
@@ -257,11 +257,16 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 			if !has {
 				continue
 			}
+			// Somebody else's words: the main agent too, unless it already
+			// reacts through "works on its own", or has been told to keep quiet.
+			if !b.MainQuiet && (b.OnNewEntry == "" || b.OnNewEntry == "off") {
+				fire = append(fire, Trigger{Kind: TriggerEntry, Thread: id, Entry: n.entry, Chime: true})
+			}
 			for i, pid := range b.Chime {
 				if i == 3 {
 					break // a crowd is not a team
 				}
-				fire = append(fire, Trigger{Kind: TriggerEntry, Thread: id, Entry: n.entry, Persona: pid})
+				fire = append(fire, Trigger{Kind: TriggerEntry, Thread: id, Entry: n.entry, Persona: pid, Chime: true})
 			}
 		}
 		for child, n := range s.projPending {
