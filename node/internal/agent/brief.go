@@ -46,6 +46,9 @@ type Brief struct {
 	// Agents are the team members who work in this channel besides the
 	// main agent, by persona id.
 	Agents []string `json:"agents,omitempty"`
+	// Chime are the team members here who speak up on their own when a
+	// person writes, in their role, rather than only when mentioned.
+	Chime []string `json:"chime,omitempty"`
 
 	ID string `json:"-"`
 	TS string `json:"-"`

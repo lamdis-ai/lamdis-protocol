@@ -198,7 +198,7 @@ func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
 		refs = &protolog.Refs{Supersedes: prev.ID}
 	}
 	body := map[string]any{"text": strings.TrimSpace(in.Text), "on_new_entry": in.OnNewEntry, "every": in.Every,
-		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools, "rhythms": rhythms, "autonomy": in.Autonomy, "agents": in.Agents}
+		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools, "rhythms": rhythms, "autonomy": in.Autonomy, "agents": in.Agents, "chime": in.Chime}
 	e, err := a.personAppend(ctx, id, protolog.Draft{Kind: agent.KindBrief, Lane: protolog.LaneContent, Refs: refs, Body: body})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)

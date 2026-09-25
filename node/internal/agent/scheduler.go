@@ -34,6 +34,8 @@ type Scheduler struct {
 	// projPending: news in a project's channel that the project's own agent
 	// should hear about, keyed by the channel, debounced like any other.
 	projPending map[string]projNews
+	// chimePending: a person wrote in a channel where team members chime in.
+	chimePending map[string]projNews
 }
 
 type projNews struct {
@@ -131,6 +133,9 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 	if s.projPending == nil {
 		s.projPending = map[string]projNews{}
 	}
+	if s.chimePending == nil {
+		s.chimePending = map[string]projNews{}
+	}
 	for _, id := range ids {
 		tl, err := r.Store.Thread(ctx, id)
 		if err != nil {
@@ -162,6 +167,14 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 				for _, e := range tl.After(k, seen) {
 					if s.qualifies(e, st, brief, has) && (newest == nil || e.Lamport > newest.Lamport) {
 						newest = e
+					}
+					// Team members who chime in hear what people write here.
+					if has && len(brief.Chime) > 0 && e.Lane == protolog.LaneContent && e.OnBehalfOf == "" && e.Author != r.Agent && !st.IsAgent(e.Author) {
+						switch e.Kind {
+						case KindRun, KindBrief, KindDecision, KindDecisionReply, KindConnect, KindConnectReply, KindProject, KindProjectMember:
+						default:
+							s.chimePending[id] = projNews{project: id, entry: e.ID, at: now}
+						}
 					}
 					// The project above this channel may want to hear it too.
 					if p := structure.Parent[id]; p != "" && s.qualifies(e, st, projBriefs[p], projHas[p]) {
@@ -231,6 +244,26 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 		}
 	}
 	if !first {
+		for id, n := range s.chimePending {
+			if now.Sub(n.at) < debounce {
+				continue
+			}
+			delete(s.chimePending, id)
+			tl, err := r.Store.Thread(ctx, id)
+			if err != nil {
+				continue
+			}
+			b, has := LoadBrief(tl, r.Person)
+			if !has {
+				continue
+			}
+			for i, pid := range b.Chime {
+				if i == 3 {
+					break // a crowd is not a team
+				}
+				fire = append(fire, Trigger{Kind: TriggerEntry, Thread: id, Entry: n.entry, Persona: pid})
+			}
+		}
 		for child, n := range s.projPending {
 			if now.Sub(n.at) < debounce {
 				continue

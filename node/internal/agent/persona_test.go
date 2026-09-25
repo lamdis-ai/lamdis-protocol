@@ -3,18 +3,20 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestAMentionPicksTheTeamMember(t *testing.T) {
 	c := Config{Agents: []Persona{{ID: "p1", Name: "Scout"}, {ID: "p2", Name: "Haggler"}}}
 	for text, want := range map[string]string{
 		"@Scout find tilers near Ortonville": "p1",
-		"hey @haggler, counter at 25%":        "p2",
-		"@Haggler then @Scout":                "p2",
-		"email scout@example.com":             "",
-		"@Scouting is not a name":             "",
-		"no one in particular":                "",
+		"hey @haggler, counter at 25%":       "p2",
+		"@Haggler then @Scout":               "p2",
+		"email scout@example.com":            "",
+		"@Scouting is not a name":            "",
+		"no one in particular":               "",
 	} {
 		if got := PersonaMentioned(c, text); got != want {
 			t.Fatalf("%q -> %q, want %q", text, got, want)
@@ -53,5 +55,51 @@ func TestATeamMemberAnswersAsItself(t *testing.T) {
 	}
 	if f.r.persona != nil {
 		t.Fatal("the persona outlived its run")
+	}
+}
+
+// A team member set to chime in speaks up after a person writes, in its own
+// name, and does not answer itself or the agent.
+func TestATeamMemberChimesInOnItsOwn(t *testing.T) {
+	m := &seeing{script: script{turns: []Message{say("What if Rival's deposit is lost? Ask for staged payments.")}}}
+	f := setup(t, m)
+	clock := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	f.r.Now = func() time.Time { return clock }
+	cfg, _ := LoadConfig(f.dir)
+	cfg.Agents = []Persona{{ID: "pd", Name: "Devil", About: "A devil's advocate."}}
+	SaveConfig(f.dir, cfg)
+	f.post(t, KindBrief, map[string]any{"text": "", "on_new_entry": "off", "agents": []string{"pd"}, "chime": []string{"pd"}}, nil)
+	s := &Scheduler{Runner: f.r, State: f.r.State}
+	ctx := context.Background()
+	s.poll(ctx, true)
+
+	f.post(t, KindNote, map[string]any{"text": "Going with Rival, 50% deposit up front."}, nil)
+	s.poll(ctx, false)
+	clock = clock.Add(debounce + time.Second)
+	s.poll(ctx, false)
+
+	var said bool
+	for _, e := range f.entries(t) {
+		var b struct {
+			Text, Persona string
+		}
+		json.Unmarshal(e.Body, &b)
+		if e.Author == f.r.Agent && b.Persona == "Devil" && strings.Contains(b.Text, "staged payments") {
+			said = true
+		}
+	}
+	if !said {
+		t.Fatal("the devil's advocate did not chime in")
+	}
+	if !m.saw("chime in as Devil") {
+		t.Fatal("it was not told it was chiming in")
+	}
+	// Its own words do not set it off again.
+	calls := m.calls
+	s.poll(ctx, false)
+	clock = clock.Add(debounce + time.Second)
+	s.poll(ctx, false)
+	if m.calls != calls {
+		t.Fatal("the team member answered itself")
 	}
 }

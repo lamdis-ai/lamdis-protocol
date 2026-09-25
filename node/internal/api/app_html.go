@@ -103,6 +103,28 @@ body.dragging .sect{box-shadow:inset 0 0 0 1px var(--line2);border-radius:8px}
 .inv{display:flex;align-items:center;gap:.8rem;padding:.9rem 1.1rem;border-color:var(--gold-dim);background:linear-gradient(#FFF7E8,var(--panel))}
 .inv .t{flex:1;min-width:0;font-size:.95rem}
 .inv .t span{display:block;font-size:.78rem;color:var(--ink3)}
+button.avs{display:flex;align-items:center;gap:0;padding:.2rem .35rem;border-radius:99px;border:1px solid transparent;transition:border-color .15s}
+button.avs:hover{border-color:var(--line2);background:var(--panel)}
+.avs .addp{margin-left:.5rem;font-size:.8rem;font-weight:600;color:var(--ink2);padding-right:.3rem}
+.mrow{display:flex;align-items:center;gap:.7rem;padding:.55rem 0;border-bottom:1px solid var(--line)}
+.mrow .av{width:32px;height:32px;font-size:.75rem}
+.mrow .t{flex:1;min-width:0}
+.mrow .t b{display:block;font-size:.92rem}
+.mrow .t span{display:block;font-size:.78rem;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg2{display:inline-flex;border:1px solid var(--line2);border-radius:99px;padding:2px;flex:none}
+.seg2 button{height:26px;padding:0 .6rem;border-radius:99px;font-size:.74rem;color:var(--ink3);white-space:nowrap}
+.seg2 button[aria-pressed=true]{background:var(--ink);color:#fff}
+.addag{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.7rem}
+.achip.addable{cursor:pointer}
+.achip.addable:hover{border-color:var(--ink)}
+.mpop{position:absolute;left:.8rem;bottom:calc(100% + .4rem);width:min(24rem,90%);background:var(--panel);border:1px solid var(--line2);border-radius:14px;box-shadow:0 20px 50px -20px rgba(80,55,20,.35);padding:.3rem;z-index:30}
+.mpop button{display:flex;align-items:center;gap:.55rem;width:100%;text-align:left;padding:.5rem .6rem;border-radius:9px}
+.mpop button[aria-selected=true],.mpop button:hover{background:var(--raise)}
+.mpop i{width:9px;height:9px;border-radius:99px;flex:none}
+.mpop b{font-size:.9rem}
+.mpop span{font-size:.76rem;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cbox{position:relative}
+@media(max-width:860px){.seg2 button{padding:0 .45rem;font-size:.7rem}.mrow{flex-wrap:wrap}}
 .chips{display:flex;flex-wrap:wrap;gap:.35rem}
 .achip{display:inline-flex;align-items:center;gap:.35rem;height:28px;padding:0 .6rem;border-radius:99px;background:var(--panel);border:1px solid var(--line2);font-size:.82rem;font-weight:500}
 .achip i{width:8px;height:8px;border-radius:99px;flex:none}
@@ -363,7 +385,7 @@ details.runcard summary:before,details.runcard[open] summary:before{content:none
 .pal .it[aria-selected=true]{background:var(--raise);color:var(--ink)}
 .pal .it small{margin-left:auto;font:.7rem var(--mono);color:var(--ink4)}
 
-/* ---- sheets ---- */
+/* ---- sheet styles ---- */
 .veil{position:fixed;inset:0;background:rgba(60,45,25,.32);backdrop-filter:blur(6px);display:grid;place-items:center;padding:1.5rem;z-index:50;animation:fade .18s both}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 .sheet{width:min(640px,100%);max-height:88vh;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:20px;box-shadow:0 40px 90px -30px rgba(80,55,20,.28);animation:pop .22s cubic-bezier(.2,.8,.3,1) both}
@@ -449,7 +471,8 @@ select{background:var(--bg);border:1px solid var(--line2);border-radius:10px;pad
   .menu{display:inline-grid;place-items:center;width:40px;height:40px;flex:none;border:1px solid var(--line2);border-radius:11px;color:var(--ink2)}
   .mbar{display:flex!important}
   .head{padding:0 .8rem;gap:.5rem;height:56px;position:sticky;top:0}
-  .tabs,.avs{display:none}
+  .tabs{display:none}
+  .avs .addp{display:none}
   .head .pill .full{display:none}
   .head .pill .short{display:inline}
   .head .pill{padding:0 .6rem}
@@ -702,7 +725,7 @@ function render(es){var out=[],prev=null;
     if(tab==="agent"&&!isBot(e))return;
     var key=(isBot(e)?"bot:":"")+e.author;
     var cont=prev&&prev.key===key&&(new Date(e.ts)-new Date(prev.ts))<5*60000&&e.kind!=="agent.decision";
-    if(e.kind==="agent.run"){out.push('<div class="entry'+(cont?' cont':'')+'">'+avatar(e)+'<div class="c">'+(cont?'':metaLine(e,'<span class="tag ai">agent</span>'))+runCard(e)+'</div></div>');prev={key:key,ts:e.ts};return}
+    if(e.kind==="agent.run"){out.push('<div class="entry'+(cont?' cont':'')+'">'+avatar(e)+'<div class="c">'+(cont?'':metaLine(e))+runCard(e)+'</div></div>');prev={key:key,ts:e.ts};return}
     if(e.kind==="agent.decision"){var reply=es.filter(function(x){return x.kind==="agent.decision_reply"&&x.replies_to===e.id})[0];
       var inner='<div class="decision"><div style="display:flex;gap:.5rem;align-items:center"><span class="tag call">your call</span><span class="small muted">'+esc(AgentName())+' will not guess on this one</span></div><div class="ask">'+body(e.text)+'</div>';
       if(reply){var r=parseData(reply.data);inner+='<div class="done">You answered: '+esc((r.choice||"")+(r.text?" "+r.text:""))+'</div>'}else inner+=decisionControls(e.id,e.options);
@@ -724,8 +747,9 @@ function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.
   b.className="pill"+(wait?" wait":(on?" on":" off"));
   b.title=on?"What "+agentName()+" does here on its own":AgentName()+" only answers when asked. Click to let it work on its own.";
   b.innerHTML='<i></i><span class="full">'+(wait?AgentName()+" needs you":(on?AgentName()+" is on":AgentName()+" is off"))+'</span><span class="short">'+(wait?"you":"")+'</span>'}
-function members(t){var a='<div class="av you">'+esc(initials(me?me.name:"you"))+'</div><div class="av bot">'+esc(initials(AgentName()==="Your agent"?"A":AgentName()))+'</div>';
-  var n=(t.shared||0);if(n)a+='<span class="more">+'+n+'</span>';$("avs").innerHTML=a}
+function members(t){var a='<span class="av you">'+esc(initials(me?me.name:"you"))+'</span><span class="av bot">'+esc(initials(AgentName()==="Your agent"?"A":AgentName()))+'</span>';
+  team.filter(function(p){return here.indexOf(p.id)>=0}).slice(0,3).forEach(function(p){a+='<span class="av bot" style="background:'+hueOf(p.id)+'">'+esc(initials(p.name))+'</span>'});
+  var n=(t.shared||0);if(n)a+='<span class="more">+'+n+'</span>';a+='<span class="addp">+ Add</span>';$("avs").innerHTML=a}
 function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(cur!==id)return;if(d.error){note(d.error,"bad");$("stream").innerHTML='<div class="void"><h2>Not here</h2><p>That channel is not on this account.</p></div>';return}
     entries=d.entries;var lastE=d.entries[d.entries.length-1];window._sig=d.entries.length+":"+(lastE?lastE.id:"");
@@ -769,12 +793,12 @@ function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
     h+='<div class="blk"><span class="kick">On its own it may use</span>'+(tools.length||b.web?(b.web?'<div class="ln"><span>The web</span><span class="tag">'+((b.allow_domains||[]).length?(b.allow_domains.length+" sites"):"listed sites")+'</span></div>':'')+tools.map(function(t){return '<div class="ln"><span>'+esc(t)+'</span></div>'}).join(""):'<span class="sub">Only this record. When you ask it yourself, it may use everything you have connected.</span>')+'</div>';
     var links=(acc.links||[]),grants=(acc.grants||[]);
     h+='<div class="blk"><span class="kick">Who sees what</span>'+(links.length||grants.length?grants.map(function(g){return '<div class="ln"><span>'+esc(g.name)+'</span><span class="small muted">'+esc(g.scopes.join(", "))+'</span></div>'}).join("")+links.map(function(l){return '<div class="ln"><span>'+esc(l.label||"A link")+'</span><span class="small muted">'+(l.lanes.indexOf("content")>=0?"everything":"summaries")+'</span></div>'}).join(""):'<span class="sub">Only you and '+esc(agentName())+'.</span>')+'<button class="edit" id="p-share">Share…</button></div>';
-    here=(b.agents||[]).slice();drawWho();
+    here=(b.agents||[]).slice();drawWho();members(threadOf(id));
     var inTeam=team.filter(function(p){return here.indexOf(p.id)>=0}),notHere=team.filter(function(p){return here.indexOf(p.id)<0});
     h+='<div class="blk"><span class="kick">Agents here</span><div class="chips"><span class="achip"><i style="background:var(--blue)"></i>'+esc(AgentName())+'</span>'+
       inTeam.map(function(p){return '<span class="achip"><i style="background:'+hueOf(p.id)+'"></i>'+esc(p.name)+'<button data-unhere="'+esc(p.id)+'" aria-label="Remove '+esc(p.name)+'">×</button></span>'}).join("")+'</div>'+
       (notHere.length?'<select id="p-addagent"><option value="">Add an agent here…</option>'+notHere.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'}).join("")+'</select>':'')+
-      '<button class="edit" id="p-team">'+(team.length?'Edit your team':'+ Create agents with their own expertise')+'</button></div>';
+      '<button class="edit" id="p-team">'+(team.length?'Who takes part, and how…':'+ Create agents with their own expertise')+'</button></div>';
     var au=b.autonomy||"";var glob=(agentInfo&&agentInfo.reach&&agentInfo.reach.autonomy)||"ask";
     h+='<div class="blk"><span class="kick">When it has a choice</span><div class="seg3" role="group" aria-label="Autonomy here">'+
       '<button data-au="" aria-pressed="'+(au==="")+'">Default</button><button data-au="ask" aria-pressed="'+(au==="ask")+'">Ask me</button><button data-au="auto" aria-pressed="'+(au==="auto")+'">'+ICON.bolt+' Full auto</button></div>'+
@@ -792,7 +816,7 @@ function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
       api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}drawPanel(id)})};
     if($("p-addagent"))$("p-addagent").onchange=function(){if(this.value)saveHere(here.concat([this.value]))};
     each("[data-unhere]",function(x){x.onclick=function(){var v=x.getAttribute("data-unhere");saveHere(here.filter(function(y){return y!==v}))}},p);
-    $("p-team").onclick=function(){teamSheet()};
+    $("p-team").onclick=function(){team.length?membersSheet():teamSheet()};
     if($("p-movein"))$("p-movein").onchange=function(){var v=this.value;if(!v)return;api("/app/api/project/move",{thread:v,project:id}).then(function(){threads().then(function(){drawPanel(id);open(id)})})};
     if($("p-moveout"))$("p-moveout").onclick=function(){api("/app/api/project/move",{thread:id,project:""}).then(function(){threads().then(function(){open(id)})})};$("p-share").onclick=shareSheet;$("p-edit").onclick=agentSheet})}
 
@@ -898,6 +922,54 @@ function teamSheet(editId){loadTeam().then(function(){var ed=editId?team.filter(
   s.querySelector("#tm-go").onclick=function(){var m=s.querySelector("#tm-model");
     api("/app/api/agents",{id:ed?ed.id:"",name:s.querySelector("#tm-name").value,about:s.querySelector("#tm-about").value,model:m?m.value:""}).then(function(r){if(r.error){alert(r.error);return}
       loadTeam().then(function(){if(view==="chan")open(cur);teamSheet()})})}})}
+
+/* Everyone in a channel, people and agents, and how to add more. */
+function membersSheet(){if(!cur)return;var id=cur;
+  Promise.all([api("/app/api/thread/"+encodeURIComponent(id)+"/brief"),api("/app/api/thread/"+encodeURIComponent(id)+"/access"),loadTeam()]).then(function(r){
+    var b=(r[0]&&r[0].brief)||{},acc=r[1]||{},inCh=(b.agents||[]).slice(),chime=(b.chime||[]).slice();var t=threadOf(id);
+    var grants=acc.grants||[],links=acc.links||[];
+    var ppl='<div class="mrow"><span class="av you">'+esc(initials(me?me.name:"you"))+'</span><div class="t"><b>'+esc(me?me.name:"You")+'</b><span>owner</span></div></div>'+
+      grants.map(function(g){return '<div class="mrow"><span class="av peer">'+esc(initials(g.name))+'</span><div class="t"><b>'+esc(g.name)+'</b><span>'+(g.scopes.indexOf("contribute")>=0?"can read and write":"can read")+'</span></div><button class="btn sm ghost" data-revoke="'+esc(g.principal)+'">Remove</button></div>'}).join("")+
+      (links.length?'<p class="hint">'+links.length+(links.length===1?" read-only link is":" read-only links are")+' out. Manage them in Share.</p>':'');
+    var mine=team.filter(function(p){return inCh.indexOf(p.id)>=0}),others=team.filter(function(p){return inCh.indexOf(p.id)<0});
+    var ags='<div class="mrow"><span class="av bot">'+esc(initials(AgentName()==="Your agent"?"A":AgentName()))+'</span><div class="t"><b>'+esc(AgentName())+'</b><span>main agent · answers when asked'+(t.auto?' and works on its own here':'')+'</span></div></div>'+
+      mine.map(function(p){var c=chime.indexOf(p.id)>=0;return '<div class="mrow"><span class="av bot" style="background:'+hueOf(p.id)+'">'+esc(initials(p.name))+'</span><div class="t"><b>'+esc(p.name)+'</b><span>'+esc(p.about)+'</span></div>'+
+        '<div class="seg2" role="group" aria-label="How '+esc(p.name)+' takes part"><button data-mode2="'+esc(p.id)+'" data-v="mention" aria-pressed="'+(!c)+'">When @mentioned</button><button data-mode2="'+esc(p.id)+'" data-v="chime" aria-pressed="'+c+'">Chimes in</button></div>'+
+        '<button class="btn sm ghost" data-rmag="'+esc(p.id)+'" aria-label="Remove '+esc(p.name)+' from this channel">×</button></div>'}).join("")+
+      (others.length?'<div class="addag">'+others.map(function(p){return '<button class="achip addable" data-addag="'+esc(p.id)+'"><i style="background:'+hueOf(p.id)+'"></i>+ '+esc(p.name)+'</button>'}).join("")+'</div>':'')+
+      '<button class="edit" id="m-newag">'+(team.length?'+ Create another agent':'+ Create an agent with its own expertise')+'</button>';
+    var s=sheet('<header><h2>In #'+esc(t.title||"this channel")+'</h2><p>People you add see this channel only'+(t.project?', never the rest of the project':'')+'. Agents answer when you @mention them, or chime in on their own.</p></header><section>'+
+      '<label class="f">People</label>'+ppl+'<div id="ppl"></div>'+
+      '<label class="f">Agents</label>'+ags+
+      '</section><footer><span class="spacer"></span><button class="btn solid" data-x>Done</button></footer>');
+    s.querySelector("[data-x]").onclick=function(){closeSheet();open(cur)};
+    var save=function(agents,ch){var nb=Object.assign({},b);nb.agents=agents;nb.chime=ch.filter(function(x){return agents.indexOf(x)>=0});if(!nb.rhythms)nb.rhythms=[];if(!nb.on_new_entry)nb.on_new_entry="off";
+      return api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}membersSheet();drawPanel(id)})};
+    each("[data-addag]",function(x){x.onclick=function(){save(inCh.concat([x.getAttribute("data-addag")]),chime)}},s);
+    each("[data-rmag]",function(x){x.onclick=function(){var v=x.getAttribute("data-rmag");save(inCh.filter(function(y){return y!==v}),chime)}},s);
+    each("[data-mode2]",function(x){x.onclick=function(){var pid=x.getAttribute("data-mode2"),on=x.getAttribute("data-v")==="chime";
+      save(inCh,on?chime.concat(chime.indexOf(pid)<0?[pid]:[]):chime.filter(function(y){return y!==pid}))}},s);
+    each("[data-revoke]",function(x){x.onclick=function(){if(!x.getAttribute("data-armed")){x.setAttribute("data-armed","1");x.textContent="Sure?";return}
+      api("/app/api/thread/"+encodeURIComponent(id)+"/revoke",{principal:x.getAttribute("data-revoke")}).then(function(){membersSheet()})}},s);
+    s.querySelector("#m-newag").onclick=function(){teamSheet()};
+    drawPeople(s,function(){});
+  })}
+
+/* @ in the composer lists who can be mentioned. */
+var popEl=null,popItems=[],popSel=0;
+function mentionPop(){var ta=$("text"),v=ta.value.slice(0,ta.selectionStart),m=v.match(/(^|\s)@([\w.\- ]{0,24})$/);
+  if(!m||view!=="chan"){closePop();return}
+  var q=m[2].toLowerCase(),all=[{name:AgentName()==="Your agent"?"agent":AgentName(),about:"main agent",hue:"var(--blue)"}].concat(team.map(function(p){return {name:p.name,about:(here.indexOf(p.id)>=0?"in this channel · ":"")+p.about,hue:hueOf(p.id)}}));
+  popItems=all.filter(function(x){return x.name.toLowerCase().indexOf(q)===0});
+  if(!popItems.length){closePop();return}popSel=0;
+  if(!popEl){popEl=document.createElement("div");popEl.className="mpop";$("text").parentNode.appendChild(popEl)}
+  popEl.innerHTML=popItems.map(function(x,i){return '<button data-mi="'+i+'" aria-selected="'+(i===0)+'"><i style="background:'+x.hue+'"></i><b>'+esc(x.name)+'</b><span>'+esc(x.about)+'</span></button>'}).join("")+
+    (team.length?'':'<button data-newag="1"><b>+ Create an agent</b><span>with its own expertise, like a devil\u2019s advocate</span></button>');
+  each("[data-mi]",function(b){b.onmousedown=function(e){e.preventDefault();pickMention(+b.getAttribute("data-mi"))}},popEl);
+  each("[data-newag]",function(b){b.onmousedown=function(e){e.preventDefault();closePop();teamSheet()}},popEl)}
+function pickMention(i){var x=popItems[i];if(!x)return;var ta=$("text"),pos=ta.selectionStart,v=ta.value;
+  var start=v.slice(0,pos).search(/@[\w.\- ]{0,24}$/);ta.value=v.slice(0,start)+"@"+x.name+" "+v.slice(pos);var np=start+x.name.length+2;ta.setSelectionRange(np,np);closePop();grow();ta.focus()}
+function closePop(){if(popEl){popEl.remove();popEl=null}popItems=[]}
 
 /* ---- sheets ---- */
 function sheet(html){closeSheet();sheetEl=document.createElement("div");sheetEl.className="veil";
@@ -1087,7 +1159,7 @@ function moreSheet(){if(!cur)return;var t=(window._threads||[]).filter(function(
 /* Share: one button, two choices, one link. */
 /* People: find someone here by @handle and bring them into this channel,
    or make a one-time invite link for somebody who is not here yet. */
-function drawPeople(s){var box=s.querySelector("#ppl");if(!box)return;var th=cur;
+function drawPeople(s,after){var box=s.querySelector("#ppl");if(!box)return;var th=cur;
   api("/app/api/handle").then(function(h){if(!h||h.error||!h.handle)return;
     box.innerHTML='<label class="f" for="pp-q">Add people</label><div class="pp"><input id="pp-q" placeholder="Search by @handle" autocomplete="off" spellcheck="false"><button class="btn" id="pp-link">Invite link</button></div>'+
       '<div id="pp-res" class="list"></div><p class="hint" id="pp-note">They join this channel only. In a project, the other channels stay out of sight. You are <b>@'+esc(h.handle)+'</b>.</p><div class="or">or share it as a read-only link</div>';
@@ -1097,7 +1169,7 @@ function drawPeople(s){var box=s.querySelector("#ppl");if(!box)return;var th=cur
         res.innerHTML=ps.length?ps.map(function(p){return '<div class="row"><div class="av peer">'+esc(initials(p.name||p.handle))+'</div><div class="t"><b>'+esc(p.name||("@"+p.handle))+'</b><span>@'+esc(p.handle)+'</span></div><button class="btn sm solid" data-add="'+esc(p.handle)+'">Add</button></div>'}).join("")
           :'<p class="hint">Nobody here by that name. Send them an invite link instead.</p>';
         each("[data-add]",function(b){b.onclick=function(){b.disabled=true;api("/app/api/invite",{thread:th,handle:b.getAttribute("data-add")}).then(function(r){
-          if(r.error){b.disabled=false;alert(r.error);return}b.textContent="Invited ✓";drawPanel(th)})}},res)})},180)};
+          if(r.error){b.disabled=false;alert(r.error);return}b.textContent="Invited ✓";drawPanel(th);if(after)after()})}},res)})},180)};
     box.querySelector("#pp-link").onclick=function(){var b=this;b.disabled=true;api("/app/api/joinlink",{thread:th}).then(function(r){b.disabled=false;
       if(r.error){alert(r.error);return}copy(r.url);b.textContent="Copied";box.querySelector("#pp-note").innerHTML='Copied a one-time link for this channel. It works for one person for 7 days: <span class="mono small">'+esc(r.url)+'</span>'})};
   }).catch(function(){})}
@@ -1393,10 +1465,15 @@ each(".navi[data-view]",function(b){b.onclick=function(){go(b.getAttribute("data
 each(".seg button",function(b){b.onclick=function(){mode=b.getAttribute("data-mode");drawMode();drawWho();$("text").focus()}});
 $("who").onchange=function(){target=this.value;drawWho();$("text").focus()};
 each(".tabs button",function(b){b.onclick=function(){tab=b.getAttribute("data-tab");open(cur)}});
-$("text").oninput=grow;
+$("text").oninput=function(){grow();mentionPop()};
+$("avs").onclick=membersSheet;
 /* Enter sends in the chosen mode, Shift+Enter is a new line, and Command or
    Control Enter keeps it as a message without asking. What every chat box does. */
 $("text").onkeydown=function(e){
+  if(popEl&&popItems.length){
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();popSel=(popSel+(e.key==="ArrowDown"?1:popItems.length-1))%popItems.length;each("[data-mi]",function(b){b.setAttribute("aria-selected",String(+b.getAttribute("data-mi")===popSel))},popEl);return}
+    if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();pickMention(popSel);return}
+    if(e.key==="Escape"){closePop();return}}
   if(e.key!=="Enter"||e.isComposing)return;
   if(e.shiftKey)return;
   e.preventDefault();
@@ -1454,7 +1531,7 @@ func appShell(extra string) string {
     <section class="view" id="v-chan" hidden>
       <header class="head"><button class="menu" data-menu aria-label="Channels">` + menuIcon + `</button><h1 id="title"></h1>
         <div class="tabs"><button data-tab="all" aria-pressed="true">Conversation</button><button data-tab="agent">Agent activity</button></div>
-        <span class="spacer"></span><div class="avs" id="avs"></div>
+        <span class="spacer"></span><button class="avs" id="avs" title="People and agents in this channel"></button>
         <button class="pill" id="agentbtn" hidden></button><button class="pill" id="linksbtn" hidden></button>
         <button class="btn solid sm" id="share" disabled>Share</button><button class="icon" id="more" aria-label="More" title="More" hidden>⋯</button></header>
       <div class="body2">

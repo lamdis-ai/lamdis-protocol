@@ -738,7 +738,11 @@ func (r *Runner) contextFor(ctx context.Context, t Trigger, tl *protolog.ThreadL
 				where += ":\n" + bodyText(trig) + "\n"
 			}
 		}
-		sb.WriteString("A new entry arrived from " + who + where + " (entry " + t.Entry + "). Follow your standing instructions. If they do not apply, reply NOTHING.")
+		if r.persona != nil {
+			sb.WriteString(who + " just wrote" + where + " (entry " + t.Entry + "). You are in this channel to chime in as " + r.persona.Name + ", in your role. If you have something genuinely useful to add from that role, say it in a few sentences. If not, reply NOTHING. Do not repeat what others have said.")
+		} else {
+			sb.WriteString("A new entry arrived from " + who + where + " (entry " + t.Entry + "). Follow your standing instructions. If they do not apply, reply NOTHING.")
+		}
 	case TriggerSchedule:
 		sb.WriteString("This is a scheduled run. Follow your standing instructions. If there is nothing to do, reply NOTHING.")
 	case TriggerReflect:
