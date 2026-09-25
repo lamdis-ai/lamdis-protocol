@@ -112,19 +112,8 @@ func cmdListen(ctx context.Context, dataDir string, s store.Store, args []string
 	}
 
 	syncNow := func(ctx context.Context) error {
-		peers, err := loadPeers(dataDir)
-		if err != nil || len(peers) == 0 {
-			return nil
-		}
-		var first error
-		for name, p := range peers {
-			c := &syncp.Client{Store: s, Peer: api.NewHTTPTransport(p.URL, priv), Self: pid,
-				SelfKeys: map[string]bool{agentPID: true}}
-			if _, err := c.SyncAll(ctx); err != nil && first == nil {
-				first = fmt.Errorf("%s: %w", name, err)
-			}
-		}
-		return first
+		_, err := syncPeers(ctx, dataDir, s, priv, pid, agentPID)
+		return err
 	}
 
 	// Asking for a directory is a decision like any other, so it arrives
@@ -334,4 +323,36 @@ func ensureListenBrief(ctx context.Context, s store.Store, priv ed25519.PrivateK
 		return err
 	}
 	return s.AppendEntries(ctx, []*protolog.Entry{e})
+}
+
+// syncPeers exchanges with every host this machine is linked to, and says
+// which ones it reached, so a terminal can tell the person where their
+// words went.
+func syncPeers(ctx context.Context, dataDir string, s store.Store, priv ed25519.PrivateKey, pid, agentPID string) ([]string, error) {
+	peers, err := loadPeers(dataDir)
+	if err != nil || len(peers) == 0 {
+		return nil, nil
+	}
+	var first error
+	var reached []string
+	for name, p := range peers {
+		c := &syncp.Client{Store: s, Peer: api.NewHTTPTransport(p.URL, priv), Self: pid,
+			SelfKeys: map[string]bool{agentPID: true}}
+		if _, err := c.SyncAll(ctx); err != nil {
+			if first == nil {
+				first = fmt.Errorf("%s: %w", name, err)
+			}
+			continue
+		}
+		reached = append(reached, hostOf(p.URL))
+	}
+	return reached, first
+}
+
+func hostOf(u string) string {
+	u = strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
+	if i := strings.IndexAny(u, "/"); i >= 0 {
+		u = u[:i]
+	}
+	return u
 }

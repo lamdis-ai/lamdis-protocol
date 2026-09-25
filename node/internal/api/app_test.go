@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/ed25519"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,4 +83,20 @@ func cut(s, sep string) (string, string, bool) {
 		}
 	}
 	return s, "", false
+}
+
+// Script that lands in the stylesheet is not a syntax error anywhere, so no
+// checker catches it: the page just loads without it. Both halves of the
+// page share comment markers, which is how it happened once.
+func TestTheStylesheetHoldsNoScript(t *testing.T) {
+	for _, bad := range []string{"function ", "=function(", "api(\"/app"} {
+		if strings.Contains(appCSS, bad) {
+			t.Fatalf("appCSS contains %q: script was pasted into the stylesheet", bad)
+		}
+	}
+	for _, fn := range []string{"function loadTeam(", "function teamSheet(", "function drawWho(", "function moveTo(", "function connectCard("} {
+		if !strings.Contains(appJS, fn) {
+			t.Fatalf("appJS is missing %s", fn)
+		}
+	}
 }

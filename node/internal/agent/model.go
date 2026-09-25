@@ -192,6 +192,10 @@ func friendly(err error) error {
 
 func (o *OpenRouter) complete(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, Usage, error) {
 	req := map[string]any{"model": o.Model, "messages": msgs, "temperature": 0.2}
+	if o.isOpenRouter() {
+		// Only providers that neither store prompts nor train on them.
+		req["provider"] = map[string]any{"data_collection": "deny"}
+	}
 	if len(tools) > 0 {
 		var ts []map[string]any
 		for _, t := range tools {
@@ -266,4 +270,73 @@ func (o *OpenRouter) complete(ctx context.Context, msgs []Message, tools []ToolS
 	m := out.Choices[0].Message
 	m.Role = "assistant"
 	return m, Usage{Prompt: out.Usage.Prompt, Completion: out.Usage.Completion}, nil
+}
+
+func (o *OpenRouter) isOpenRouter() bool {
+	b := strings.TrimRight(o.BaseURL, "/")
+	return b == "" || b == openRouterURL
+}
+
+// SearchCostFetches is how much of the day's fetch budget one web search
+// uses: a search costs about what five page fetches do.
+const SearchCostFetches = 5
+
+// WebSearch asks OpenRouter's web plugin for current results. It only works
+// against OpenRouter itself; a local model server has no search.
+func (o *OpenRouter) WebSearch(ctx context.Context, query string) (string, []string, error) {
+	if !o.isOpenRouter() || o.Key == "" {
+		return "", nil, fmt.Errorf("web search needs an OpenRouter model; this node runs a local one")
+	}
+	req := map[string]any{
+		"model": o.Model,
+		"messages": []map[string]string{{"role": "user", "content": "Search the web for: " + query +
+			"\nReport what you find as a short list: each result's name, one line on what it is, and its web address or phone number. Only include things the search results actually show."}},
+		"plugins":     []map[string]any{{"id": "web", "max_results": 6}},
+		"provider":    map[string]any{"data_collection": "deny"},
+		"temperature": 0,
+	}
+	body, _ := json.Marshal(req)
+	hr, err := http.NewRequestWithContext(ctx, "POST", o.Endpoint(), bytes.NewReader(body))
+	if err != nil {
+		return "", nil, err
+	}
+	hr.Header.Set("Authorization", "Bearer "+o.Key)
+	hr.Header.Set("Content-Type", "application/json")
+	hr.Header.Set("HTTP-Referer", "https://lamdis.ai")
+	hr.Header.Set("X-Title", "Lamdis")
+	resp, err := o.HTTP.Do(hr)
+	if err != nil {
+		return "", nil, friendly(err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content     string `json:"content"`
+				Annotations []struct {
+					URLCitation struct {
+						URL string `json:"url"`
+					} `json:"url_citation"`
+				} `json:"annotations"`
+			} `json:"message"`
+		} `json:"choices"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(raw, &out) != nil {
+		return "", nil, fmt.Errorf("the search returned something unreadable")
+	}
+	if out.Error.Message != "" || len(out.Choices) == 0 {
+		return "", nil, fmt.Errorf("search failed: %s", out.Error.Message)
+	}
+	m := out.Choices[0].Message
+	var urls []string
+	for _, a := range m.Annotations {
+		if u := strings.Replace(a.URLCitation.URL, "?utm_source=openai", "", 1); u != "" {
+			urls = append(urls, u)
+		}
+	}
+	return strings.ReplaceAll(m.Content, "?utm_source=openai", ""), urls, nil
 }

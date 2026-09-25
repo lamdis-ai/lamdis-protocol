@@ -150,6 +150,9 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /app/api/decision", a.owner(a.handleDecision))
 	mux.HandleFunc("POST /app/api/connect", a.owner(a.handleConnectReply))
 	mux.HandleFunc("POST /app/api/projects", a.owner(a.handleCreateProject))
+	mux.HandleFunc("GET /app/api/agents", a.owner(a.handleAgentsGet))
+	mux.HandleFunc("POST /app/api/agents", a.owner(a.handleAgentsSave))
+	mux.HandleFunc("POST /app/api/agents/remove", a.owner(a.handleAgentsRemove))
 	mux.HandleFunc("POST /app/api/project/{id}/channels", a.owner(a.handleCreateProjectChannel))
 	mux.HandleFunc("POST /app/api/project/move", a.owner(a.handleMoveToProject))
 	mux.HandleFunc("GET /app/api/agent", a.owner(a.handleAgent))
@@ -268,14 +271,14 @@ type appThread struct {
 	EverShared  bool   `json:"ever_shared"`
 	// Auto says the agent works here on its own; Waiting counts questions
 	// the agent has asked and the person has not answered.
-	Auto    bool `json:"auto"`
+	Auto bool `json:"auto"`
 	// A project holds channels; a channel in one names it. FullAuto says
 	// the agent decides and acts here without asking.
 	Project   string `json:"project,omitempty"`
 	IsProject bool   `json:"is_project,omitempty"`
 	Children  int    `json:"children,omitempty"`
 	FullAuto  bool   `json:"full_auto,omitempty"`
-	Waiting int  `json:"waiting"`
+	Waiting   int    `json:"waiting"`
 }
 
 func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
@@ -359,6 +362,8 @@ type appEntry struct {
 	Options   []string        `json:"options,omitempty"`
 	Resolved  bool            `json:"resolved,omitempty"`
 	Data      json.RawMessage `json:"data,omitempty"`
+	// Persona is the team member who wrote this, when not the main agent.
+	Persona string `json:"persona,omitempty"`
 }
 
 // entriesFor reads a thread through one principal's eyes.
@@ -394,6 +399,8 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 			Summary string   `json:"summary"`
 			Options []string `json:"options"`
 			Choice  string   `json:"choice"`
+			Persona string   `json:"persona"`
+			PID     string   `json:"persona_id"`
 		}
 		json.Unmarshal(e.Body, &b)
 		txt := b.Text
@@ -416,6 +423,9 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 		}
 		if e.OnBehalfOf != "" {
 			ae.Agent = "agent"
+			if e.Author == a.AgentSelf && b.Persona != "" {
+				ae.Who, ae.Persona = b.Persona, b.PID
+			}
 			if e.Author != a.AgentSelf {
 				// Someone else's agent: name it by the person it acts for.
 				ae.Who = a.displayName(e.OnBehalfOf) + "'s agent"

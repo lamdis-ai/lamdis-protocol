@@ -67,6 +67,9 @@ func (a *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		Thread string `json:"thread"`
 		Text   string `json:"text"`
 		Scope  string `json:"scope"`
+		// Persona picks a member of the team; left empty, an @Name in the
+		// text picks one, and otherwise the main agent answers.
+		Persona string `json:"persona"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in) != nil || strings.TrimSpace(in.Text) == "" || in.Thread == "" {
 		http.Error(w, "thread and text are required", http.StatusBadRequest)
@@ -84,7 +87,15 @@ func (a *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such thread", http.StatusNotFound)
 		return
 	}
-	res := a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerChat, Thread: in.Thread, Entry: q.ID})
+	pcfg, _ := agent.LoadConfig(a.DataDir)
+	persona := in.Persona
+	if persona == "" {
+		persona = agent.PersonaMentioned(pcfg, in.Text)
+	}
+	if persona != "" && pcfg.PersonaByID(persona) == nil {
+		persona = ""
+	}
+	res := a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerChat, Thread: in.Thread, Entry: q.ID, Persona: persona})
 	if a.Scheduler != nil {
 		a.Scheduler.Consume(ctx, in.Thread)
 	}
@@ -187,7 +198,7 @@ func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
 		refs = &protolog.Refs{Supersedes: prev.ID}
 	}
 	body := map[string]any{"text": strings.TrimSpace(in.Text), "on_new_entry": in.OnNewEntry, "every": in.Every,
-		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools, "rhythms": rhythms, "autonomy": in.Autonomy}
+		"web": in.Web, "allow_domains": in.AllowDomains, "tools": in.Tools, "rhythms": rhythms, "autonomy": in.Autonomy, "agents": in.Agents}
 	e, err := a.personAppend(ctx, id, protolog.Draft{Kind: agent.KindBrief, Lane: protolog.LaneContent, Refs: refs, Body: body})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -563,4 +574,86 @@ func pricedSubset(ids []string) []map[string]any {
 		out = append(out, map[string]any{"id": id, "name": id, "in_per_m": p[0], "out_per_m": p[1], "context": 0})
 	}
 	return out
+}
+
+// The team. GET lists it; POST saves one member (new when id is empty);
+// POST /remove takes one out and out of every channel's brief is not needed:
+// a brief naming a persona that no longer exists is simply ignored.
+func (a *App) handleAgentsGet(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := agent.LoadConfig(a.DataDir)
+	list := cfg.Agents
+	if list == nil {
+		list = []agent.Persona{}
+	}
+	writeJSON(w, map[string]any{"main": a.displayName(a.AgentSelf), "agents": list})
+}
+
+func (a *App) handleAgentsSave(w http.ResponseWriter, r *http.Request) {
+	var in agent.Persona
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil {
+		http.Error(w, "bad agent", http.StatusBadRequest)
+		return
+	}
+	in.Name = strings.TrimPrefix(strings.TrimSpace(in.Name), "@")
+	in.About = strings.TrimSpace(in.About)
+	if in.Name == "" || len([]rune(in.Name)) > 32 || strings.ContainsAny(in.Name, "<>\"\n") {
+		writeJSON(w, map[string]any{"error": "Give it a short name: a word or two."})
+		return
+	}
+	if len(in.About) > 4000 {
+		in.About = in.About[:4000]
+	}
+	cfg, _ := agent.LoadConfig(a.DataDir)
+	if in.Model != "" && a.Runner != nil && !a.Runner.MayChoose(cfg, in.Model) {
+		writeJSON(w, map[string]any{"error": "That model is not available on this node."})
+		return
+	}
+	for _, p := range cfg.Agents {
+		if p.ID != in.ID && strings.EqualFold(p.Name, in.Name) {
+			writeJSON(w, map[string]any{"error": "There is already an agent called " + p.Name + "."})
+			return
+		}
+	}
+	if strings.EqualFold(in.Name, cfg.Name) {
+		writeJSON(w, map[string]any{"error": "That is your main agent's name."})
+		return
+	}
+	if in.ID == "" {
+		if len(cfg.Agents) >= 12 {
+			writeJSON(w, map[string]any{"error": "Twelve agents is the most one account keeps."})
+			return
+		}
+		in.ID = agent.NewPersonaID()
+		cfg.Agents = append(cfg.Agents, in)
+	} else if p := cfg.PersonaByID(in.ID); p != nil {
+		*p = in
+	} else {
+		http.Error(w, "no such agent", http.StatusNotFound)
+		return
+	}
+	if err := agent.SaveConfig(a.DataDir, cfg); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "agent": in})
+}
+
+func (a *App) handleAgentsRemove(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ID string `json:"id"`
+	}
+	json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in)
+	cfg, _ := agent.LoadConfig(a.DataDir)
+	out := cfg.Agents[:0]
+	for _, p := range cfg.Agents {
+		if p.ID != in.ID {
+			out = append(out, p)
+		}
+	}
+	cfg.Agents = out
+	if err := agent.SaveConfig(a.DataDir, cfg); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }

@@ -154,6 +154,9 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		}
 		retry = text
 		spin.Start("thinking")
+		// Linked to a host: start from what is there now, so the agent is
+		// not answering about a stale copy.
+		syncPeers(ctx, dataDir, s, priv, pid, agentPID)
 		res := runner.Run(ctx, agent.Trigger{Kind: agent.TriggerCode, Thread: thread, Entry: q.ID})
 		spin.Stop()
 		for res.Outcome == "waiting" {
@@ -177,6 +180,13 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		}
 		retry = ""
 		fmt.Println(res.Answer)
+		// And send what was written, so it shows up wherever the person is
+		// looking, then say so rather than leaving them to wonder.
+		if reached, err := syncPeers(ctx, dataDir, s, priv, pid, agentPID); err != nil {
+			fmt.Fprintf(os.Stderr, "\033[33m  could not send this to %v yet: %v\033[0m\n", reached, err)
+		} else if len(reached) > 0 {
+			fmt.Fprintf(os.Stderr, "\033[2m  ↑ sent to %s\033[0m\n", strings.Join(reached, ", "))
+		}
 		return nil
 	}
 

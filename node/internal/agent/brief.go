@@ -43,6 +43,9 @@ type Brief struct {
 	// Autonomy overrides the agent's setting here: "" (same as everywhere),
 	// "ask", or "auto".
 	Autonomy string `json:"autonomy,omitempty"`
+	// Agents are the team members who work in this channel besides the
+	// main agent, by persona id.
+	Agents []string `json:"agents,omitempty"`
 
 	ID string `json:"-"`
 	TS string `json:"-"`
@@ -55,8 +58,10 @@ type Rhythm struct {
 	Zone string `json:"zone,omitempty"` // IANA name; empty means this machine's time
 	// Paused keeps a rhythm written down without letting it fire, so turning
 	// one off for a holiday does not mean retyping the question afterwards.
-	Paused bool   `json:"paused,omitempty"`
-	Prompt string `json:"prompt"`
+	Paused bool `json:"paused,omitempty"`
+	// Persona is who does this review; empty means the main agent.
+	Persona string `json:"persona,omitempty"`
+	Prompt  string `json:"prompt"`
 }
 
 // Due reports whether this rhythm should run now, given the date string of

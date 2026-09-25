@@ -215,7 +215,7 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 				s.State.Update(now, func(st *State) { last = st.thread(id).Rhythms[name] })
 				if due, today := rh.Due(now, last); due {
 					s.State.Update(now, func(st *State) { st.thread(id).Rhythms[name] = today })
-					fire = append(fire, Trigger{Kind: TriggerReflect, Thread: id, Rhythm: name, Prompt: rh.Prompt})
+					fire = append(fire, Trigger{Kind: TriggerReflect, Thread: id, Rhythm: name, Prompt: rh.Prompt, Persona: rh.Persona})
 				}
 			}
 		}

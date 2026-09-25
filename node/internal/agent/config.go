@@ -16,6 +16,8 @@ type Config struct {
 	// Autonomy: "ask" (the default: it stops for your call and asks before
 	// changing anything) or "auto" (full auto: it decides and acts).
 	Autonomy string `json:"autonomy,omitempty"`
+	// Agents is the rest of the team, beyond the main agent.
+	Agents []Persona `json:"agents,omitempty"`
 	// AllowDomains are hosts the agent may fetch on its own (globs such as
 	// "*.sec.gov").
 	AllowDomains []string `json:"allow_domains"`
