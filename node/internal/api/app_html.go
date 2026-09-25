@@ -83,6 +83,10 @@ input::placeholder,textarea::placeholder{color:var(--ink4)}
 .fold[aria-expanded=true] svg{transform:rotate(90deg)}
 .addkid{text-align:left;padding:.2rem .65rem .35rem 1.9rem;font-size:.78rem;color:var(--ink4)}
 .addkid:hover{color:var(--gold-text)}
+.chan[draggable]{cursor:grab}
+.drop-on{background:var(--gold-glow)!important;box-shadow:inset 0 0 0 2px var(--gold);border-radius:8px}
+body.dragging .chan.proj{box-shadow:inset 0 0 0 1px var(--gold-dim)}
+body.dragging .sect{box-shadow:inset 0 0 0 1px var(--line2);border-radius:8px}
 .chans .sep{height:1px;background:var(--line);margin:.45rem .65rem}
 .crumb{display:inline-flex;align-items:center;gap:.3rem;color:var(--ink3);font-weight:500;cursor:pointer}
 .crumb:hover{color:var(--ink)}
@@ -544,7 +548,7 @@ function threads(){return api("/app/api/threads").then(function(d){threadList=d.
   function row(t,kid){var unread=t.last&&t.id!==cur&&seen(t.id)&&t.last>seen(t.id);
     var right=t.waiting?'<span class="dot" title="Needs you"></span>':(t.full_auto?'<span class="ag">auto</span>':(t.auto?'<span class="ag">agent</span>':''));
     var mark=t.is_project?ICON.stack:'<span class="hash">#</span>';
-    return '<button class="chan'+(unread?' unread':'')+(kid?' kid':'')+(t.is_project?' proj':'')+'" data-id="'+esc(t.id)+'" aria-current="'+(view==="chan"&&t.id===cur)+'">'+mark+'<span class="nm">'+esc(t.title)+'</span>'+right+'</button>'}
+    return '<button class="chan'+(unread?' unread':'')+(kid?' kid':'')+(t.is_project?' proj':'')+'" data-id="'+esc(t.id)+'"'+(t.is_project?' data-drop="'+esc(t.id)+'"':' draggable="true"')+' aria-current="'+(view==="chan"&&t.id===cur)+'">'+mark+'<span class="nm">'+esc(t.title)+'</span>'+right+'</button>'}
   var projects=threadList.filter(function(t){return t.is_project}),loose=threadList.filter(function(t){return !t.is_project&&!t.project});
   var h="";
   projects.forEach(function(p){var kids=threadList.filter(function(t){return t.project===p.id});var open=!folded(p.id);
@@ -554,6 +558,13 @@ function threads(){return api("/app/api/threads").then(function(d){threadList=d.
   h+=loose.map(function(t){return row(t,false)}).join("");
   el.innerHTML=threadList.length?h:'<p class="hint" style="padding:0 .65rem">No channels yet.</p>';
   each(".chan",function(n){n.onclick=function(){go("chan",n.getAttribute("data-id"))}},el);
+  each("[draggable]",function(n){n.ondragstart=function(e){e.dataTransfer.setData("text/lamdis-channel",n.getAttribute("data-id"));e.dataTransfer.effectAllowed="move";document.body.classList.add("dragging")};
+    n.ondragend=function(){document.body.classList.remove("dragging");each(".drop-on",function(x){x.classList.remove("drop-on")})}},el);
+  function target(n,project){n.ondragover=function(e){if(Array.prototype.indexOf.call(e.dataTransfer.types,"text/lamdis-channel")<0)return;e.preventDefault();n.classList.add("drop-on")};
+    n.ondragleave=function(){n.classList.remove("drop-on")};
+    n.ondrop=function(e){e.preventDefault();n.classList.remove("drop-on");var id=e.dataTransfer.getData("text/lamdis-channel");if(!id)return;var t=threadOf(id);if((t.project||"")===project)return;moveTo(id,project)}}
+  each("[data-drop]",function(n){target(n,n.getAttribute("data-drop"))},el);
+  var ls=document.querySelector(".sect");if(ls)target(ls,"");
   each("[data-fold]",function(b){b.onclick=function(){var id=b.getAttribute("data-fold");folded(id,!folded(id));threads()}},el);
   each("[data-addkid]",function(b){b.onclick=function(){newThread("",b.getAttribute("data-addkid"))}},el);
   var w=threadList.reduce(function(s,t){return s+(t.waiting||0)},0);
@@ -826,11 +837,20 @@ function closeSheet(){if(sheetEl){sheetEl.remove();sheetEl=null}}
 
 function newThread(prefill,project){var pj=project?threadOf(project):null;
   var s=sheet('<header><h2>'+(pj?'New channel in '+esc(pj.title):'New channel')+'</h2><p>'+(pj?'Give each vendor, contractor or partner their own channel. They see only theirs; you see them all in the project.':'One subject per channel: a deal, a person, a decision. '+esc(AgentName())+' reads all of it.')+'</p></header>'+
-  '<section><input id="nt" placeholder="What is it about?" value="'+esc(typeof prefill==="string"?prefill:"")+'" autofocus></section>'+
+  '<section><input id="nt" placeholder="'+(pj?'Who or what is it for? e.g. tiler-acme':'What is it about?')+'" value="'+esc(typeof prefill==="string"?prefill:"")+'" autofocus>'+
+  (pj?(function(){var others=threadList.filter(function(x){return !x.is_project&&x.project!==project});if(!others.length)return "";
+    return '<label class="f">Or add channels you already have</label><div class="list">'+others.map(function(x){var inP=x.project?threadOf(x.project):null;
+      return '<div class="row"><div class="t"><b># '+esc(x.title)+'</b><span>'+(inP?'now in '+esc(inP.title):(x.shared||x.ever_shared?'shared':'just you'))+'</span></div><button class="btn sm" data-addin="'+esc(x.id)+'">Add</button></div>'}).join("")+'</div>'+
+      '<p class="hint">Once it is in the project, '+esc(agentName())+' in that channel sees only that channel, and the project sees it.</p>'})():'')+'</section>'+
   '<footer><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" data-go>Create</button></footer>');
   s.querySelector("[data-x]").onclick=closeSheet;var inp=s.querySelector("#nt");setTimeout(function(){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)},30);
   var gogo=function(){var t=inp.value.trim();if(!t)return;(project?api("/app/api/project/"+encodeURIComponent(project)+"/channels",{title:t}):api("/app/api/threads",{title:t})).then(function(d){if(d.error){alert(d.error);return}closeSheet();threads().then(function(){go("chan",d.id)})})};
-  s.querySelector("[data-go]").onclick=gogo;inp.onkeydown=function(e){if(e.key==="Enter")gogo()}}
+  s.querySelector("[data-go]").onclick=gogo;inp.onkeydown=function(e){if(e.key==="Enter")gogo()};
+  each("[data-addin]",function(b){b.onclick=function(){b.disabled=true;moveTo(b.getAttribute("data-addin"),project).then(function(){b.textContent="Added ✓";var sp=b.parentNode.querySelector(".t span");if(sp)sp.textContent="in "+pj.title})}},s)}
+
+/* Put a channel in a project (or take it out with project ""), from anywhere. */
+function moveTo(thread,project){return api("/app/api/project/move",{thread:thread,project:project||""}).then(function(r){if(r&&r.error){alert(r.error);return r}
+  return threads().then(function(){if(view==="chan"&&cur)open(cur);return r})})}
 
 function newProject(){var s=sheet('<header><h2>New project</h2><p>A project holds several channels: one per vendor, contractor or partner. Each of them sees only their own channel. Here, you and '+esc(agentName())+' see all of them and coordinate.</p></header>'+
   '<section><input id="np" placeholder="Kitchen renovation, Q4 vendor search…" autofocus></section>'+
@@ -985,9 +1005,12 @@ function linksSheet(){var l=window._links;if(!l)return;
 /* Delete: only a steward can, and only from this node. */
 function moreSheet(){if(!cur)return;var t=(window._threads||[]).filter(function(x){return x.id===cur})[0]||{};
   var s=sheet('<header><h2>'+esc(t.title||"This channel")+'</h2><p>You own this channel. Deleting removes it and everything in it from your node and stops every link you shared. Anyone who already pulled a copy to their own node keeps theirs; the record is append-only between nodes.</p></header>'+
-  '<section><p class="hint">'+esc(String(t.entries||0))+' messages'+(t.shared?' · shared with '+t.shared+(t.shared===1?' person':' people'):'')+'</p></section>'+
+  '<section><p class="hint">'+esc(String(t.entries||0))+' messages'+(t.shared?' · shared with '+t.shared+(t.shared===1?' person':' people'):'')+'</p>'+
+  (!t.is_project?'<label class="f" for="mv">Project</label><select id="mv"><option value="">Not in a project</option>'+threadList.filter(function(x){return x.is_project}).map(function(x){return '<option value="'+esc(x.id)+'"'+(t.project===x.id?" selected":"")+'>'+esc(x.title)+'</option>'}).join("")+'</select>'+
+    '<p class="hint">In a project, '+esc(agentName())+' here sees only this channel, and the project sees it along with the others.</p>':'')+'</section>'+
   '<footer><button class="btn danger" id="del">Delete this channel</button><span class="spacer"></span><button class="btn" data-x>Cancel</button></footer>');
   s.querySelector("[data-x]").onclick=closeSheet;var d=s.querySelector("#del");
+  var mv=s.querySelector("#mv");if(mv)mv.onchange=function(){mv.disabled=true;moveTo(cur,mv.value).then(function(){mv.disabled=false})};
   d.onclick=function(){if(!d.getAttribute("data-armed")){d.setAttribute("data-armed","1");d.textContent="Click again to delete for good";return}
     d.disabled=true;api("/app/api/thread/"+tid()+"/delete",{}).then(function(r){if(r.error){alert(r.error);d.disabled=false;return}closeSheet();cur=null;go("today")})}}
 
