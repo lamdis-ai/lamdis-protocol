@@ -298,14 +298,17 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	r.State.Update(start, func(s *State) {
 		s.Running = t.Thread
 		if s.Tokens >= cfg.MaxTokensPerDay {
-			over = "today's token budget is used up"
+			over = "Today's allowance for thinking is used up. It resets tomorrow; with your own model key in Settings there is no shared limit"
 		} else if t.Kind != TriggerChat && s.Runs >= cfg.MaxRunsPerDay {
-			over = "today's run budget is used up"
+			over = "Today's allowance of runs is used up. It resets tomorrow; with your own model key in Settings there is no shared limit"
 		}
 	})
 	defer r.State.Update(r.now(), func(s *State) { s.Running = "" })
 	if over != "" {
-		return fail(over + " (raise it in agent.json)")
+		if !r.NoCommands { // a person's own machine, where agent.json is theirs to edit
+			over += " (on your own machine, raise it in agent.json)"
+		}
+		return fail(over + ".")
 	}
 
 	tl, err := r.Store.Thread(ctx, t.Thread)
