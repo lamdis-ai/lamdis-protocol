@@ -538,7 +538,7 @@ function api(p,body){var o=body?{method:"POST",headers:{"content-type":"applicat
   return fetch(p,o).then(function(r){return r.text().then(function(t){var d;try{d=JSON.parse(t)}catch(e){d={error:t||("HTTP "+r.status)}}
     if(!r.ok&&!d.error)d.error="HTTP "+r.status;return d})})}
 function copy(t){if(navigator.clipboard)navigator.clipboard.writeText(t)}
-function initials(n){return (n&&n!=="you"&&n!=="your agent")?n.split(/\s+/).map(function(w){return w[0]}).join("").slice(0,2).toUpperCase():(n==="your agent"?"A":"Y")}
+function initials(n){if(n&&n.charAt(0)==="@")n=n.slice(1).replace(/[._]+/g," ");return (n&&n!=="you"&&n!=="your agent")?n.split(/\s+/).filter(Boolean).map(function(w){return w[0]}).join("").slice(0,2).toUpperCase():(n==="your agent"?"A":"Y")}
 function tid(){return encodeURIComponent(cur)}
 function note(t,cls){$("note").textContent=t||"";$("note").className="note"+(cls?" "+cls:"")}
 function each(sel,fn,root){Array.prototype.forEach.call((root||document).querySelectorAll(sel),fn)}
@@ -749,7 +749,9 @@ function agentPill(t){var b=$("agentbtn");b.hidden=false;var on=!!t.auto,wait=t.
   b.innerHTML='<i></i><span class="full">'+(wait?AgentName()+" needs you":(on?AgentName()+" is on":AgentName()+" is off"))+'</span><span class="short">'+(wait?"you":"")+'</span>'}
 function members(t){var a='<span class="av you">'+esc(initials(me?me.name:"you"))+'</span><span class="av bot">'+esc(initials(AgentName()==="Your agent"?"A":AgentName()))+'</span>';
   team.filter(function(p){return here.indexOf(p.id)>=0}).slice(0,3).forEach(function(p){a+='<span class="av bot" style="background:'+hueOf(p.id)+'">'+esc(initials(p.name))+'</span>'});
-  var n=(t.shared||0);if(n)a+='<span class="more">+'+n+'</span>';a+='<span class="addp">+ Add</span>';$("avs").innerHTML=a}
+  var ppl=(window._acc&&window._acc.id===t.id)?window._acc.grants:[];
+  ppl.slice(0,3).forEach(function(g){a+='<span class="av peer" title="'+esc(g.name)+'">'+esc(initials(g.name))+'</span>'});
+  var n=Math.max(0,ppl.length-3);if(n)a+='<span class="more">+'+n+'</span>';a+='<span class="addp">+ Add</span>';$("avs").innerHTML=a}
 function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(cur!==id)return;if(d.error){note(d.error,"bad");$("stream").innerHTML='<div class="void"><h2>Not here</h2><p>That channel is not on this account.</p></div>';return}
     entries=d.entries;var lastE=d.entries[d.entries.length-1];window._sig=d.entries.length+":"+(lastE?lastE.id:"");
@@ -777,7 +779,7 @@ function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=fals
 /* the right-hand panel: what the agent does here, in one glance */
 function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
   Promise.all([api("/app/api/thread/"+encodeURIComponent(id)+"/brief"),api("/app/api/thread/"+encodeURIComponent(id)+"/access")]).then(function(r){if(cur!==id)return;
-    var b=(r[0]&&r[0].brief)||{},acc=r[1]||{};var on=b.on_new_entry&&b.on_new_entry!=="off";
+    var b=(r[0]&&r[0].brief)||{},acc=r[1]||{};var on=b.on_new_entry&&b.on_new_entry!=="off";window._acc={id:id,grants:acc.grants||[]};
     var rh=(b.rhythms||[]);var tools=(b.tools||[]);
     var me2=threadOf(id),h="";
     if(me2.is_project){var kids=threadList.filter(function(x){return x.project===id}),loose=threadList.filter(function(x){return !x.is_project&&!x.project});
@@ -792,7 +794,8 @@ function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
       (b.every?'<div class="ln"><span>Check-in</span><span class="mono small muted">every '+esc(b.every)+'</span></div>':'')+'<button class="edit" id="p-sched">+ Add a schedule</button></div>';
     h+='<div class="blk"><span class="kick">On its own it may use</span>'+(tools.length||b.web?(b.web?'<div class="ln"><span>The web</span><span class="tag">'+((b.allow_domains||[]).length?(b.allow_domains.length+" sites"):"listed sites")+'</span></div>':'')+tools.map(function(t){return '<div class="ln"><span>'+esc(t)+'</span></div>'}).join(""):'<span class="sub">Only this record. When you ask it yourself, it may use everything you have connected.</span>')+'</div>';
     var links=(acc.links||[]),grants=(acc.grants||[]);
-    h+='<div class="blk"><span class="kick">Who sees what</span>'+(links.length||grants.length?grants.map(function(g){return '<div class="ln"><span>'+esc(g.name)+'</span><span class="small muted">'+esc(g.scopes.join(", "))+'</span></div>'}).join("")+links.map(function(l){return '<div class="ln"><span>'+esc(l.label||"A link")+'</span><span class="small muted">'+(l.lanes.indexOf("content")>=0?"everything":"summaries")+'</span></div>'}).join(""):'<span class="sub">Only you and '+esc(agentName())+'.</span>')+'<button class="edit" id="p-share">Share…</button></div>';
+    h+='<div class="blk"><span class="kick">People here</span><div class="ln"><span>'+esc(me?me.name:"You")+'</span><span class="small muted">owner</span></div>'+(acc.grants||[]).map(function(g){return '<div class="ln"><span>'+esc(g.name)+'</span><span class="small muted">'+(g.scopes.indexOf("contribute")>=0?"reads and writes":"reads")+'</span></div>'}).join("")+'<button class="edit" id="p-people">+ Add people</button></div>';
+    h+='<div class="blk"><span class="kick">Read-only links</span>'+(links.length?links.map(function(l){return '<div class="ln"><span>'+esc(l.label||"A link")+'</span><span class="small muted">'+(l.lanes.indexOf("content")>=0?"everything":"summaries")+'</span></div>'}).join(""):'<span class="sub">None.</span>')+'<button class="edit" id="p-share">Share a link…</button></div>';
     here=(b.agents||[]).slice();drawWho();members(threadOf(id));
     var inTeam=team.filter(function(p){return here.indexOf(p.id)>=0}),notHere=team.filter(function(p){return here.indexOf(p.id)<0});
     h+='<div class="blk"><span class="kick">Agents here</span><div class="chips"><span class="achip"><i style="background:var(--blue)"></i>'+esc(AgentName())+'</span>'+
@@ -808,6 +811,7 @@ function drawPanel(id){var p=$("panel");if(window.innerWidth<=1250){return}
     $("p-on").onclick=function(){var nb=Object.assign({},b);nb.on_new_entry=on?"off":"others";if(!nb.rhythms)nb.rhythms=[];
       api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}threads().then(function(){agentPill(threadOf(id));drawPanel(id)});loadToday()})};
     $("p-sched").onclick=function(){scheduleSheet(id)};
+    $("p-people").onclick=membersSheet;
     each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},p);
     each("[data-au]",function(x){x.onclick=function(){var nb=Object.assign({},b);nb.autonomy=x.getAttribute("data-au");if(!nb.rhythms)nb.rhythms=[];if(!nb.on_new_entry)nb.on_new_entry="off";
       api("/app/api/thread/"+encodeURIComponent(id)+"/brief",nb).then(function(r){if(r.error){alert(r.error);return}threads().then(function(){agentPill(threadOf(id));drawPanel(id)})})}},p);
@@ -1161,15 +1165,16 @@ function moreSheet(){if(!cur)return;var t=(window._threads||[]).filter(function(
    or make a one-time invite link for somebody who is not here yet. */
 function drawPeople(s,after){var box=s.querySelector("#ppl");if(!box)return;var th=cur;
   api("/app/api/handle").then(function(h){if(!h||h.error||!h.handle)return;
-    box.innerHTML='<label class="f" for="pp-q">Add people</label><div class="pp"><input id="pp-q" placeholder="Search by @handle" autocomplete="off" spellcheck="false"><button class="btn" id="pp-link">Invite link</button></div>'+
+    box.innerHTML='<label class="f" for="pp-q">Add people</label><div class="pp"><input id="pp-q" placeholder="@handle or email address" autocomplete="off" spellcheck="false"><button class="btn" id="pp-link">Invite link</button></div>'+
       '<div id="pp-res" class="list"></div><p class="hint" id="pp-note">They join this channel only. In a project, the other channels stay out of sight. You are <b>@'+esc(h.handle)+'</b>.</p><div class="or">or share it as a read-only link</div>';
     var q=box.querySelector("#pp-q"),res=box.querySelector("#pp-res"),t=null;
     q.oninput=function(){clearTimeout(t);var v=q.value.trim();if(v.replace("@","").length<2){res.innerHTML="";return}
       t=setTimeout(function(){api("/app/api/people?q="+encodeURIComponent(v)).then(function(d){var ps=(d&&d.people)||[];
         res.innerHTML=ps.length?ps.map(function(p){return '<div class="row"><div class="av peer">'+esc(initials(p.name||p.handle))+'</div><div class="t"><b>'+esc(p.name||("@"+p.handle))+'</b><span>@'+esc(p.handle)+'</span></div><button class="btn sm solid" data-add="'+esc(p.handle)+'">Add</button></div>'}).join("")
-          :'<p class="hint">Nobody here by that name. Send them an invite link instead.</p>';
+          :(d&&d.email?(d.can_email?'<div class="row"><div class="av peer">@</div><div class="t"><b>'+esc(d.email)+'</b><span>not on Lamdis yet · we email them a join link</span></div><button class="btn sm solid" data-add="'+esc(d.email)+'">Invite by email</button></div>'
+            :'<p class="hint">Nobody here has confirmed that address. Send them an invite link instead.</p>'):'<p class="hint">Nobody here by that name. Try their email, or send an invite link.</p>');
         each("[data-add]",function(b){b.onclick=function(){b.disabled=true;api("/app/api/invite",{thread:th,handle:b.getAttribute("data-add")}).then(function(r){
-          if(r.error){b.disabled=false;alert(r.error);return}b.textContent="Invited ✓";drawPanel(th);if(after)after()})}},res)})},180)};
+          if(r.error){b.disabled=false;alert(r.error);return}b.textContent=r.how==="email"?"Emailed ✓":"Invited ✓";drawPanel(th);if(after)after()})}},res)})},180)};
     box.querySelector("#pp-link").onclick=function(){var b=this;b.disabled=true;api("/app/api/joinlink",{thread:th}).then(function(r){b.disabled=false;
       if(r.error){alert(r.error);return}copy(r.url);b.textContent="Copied";box.querySelector("#pp-note").innerHTML='Copied a one-time link for this channel. It works for one person for 7 days: <span class="mono small">'+esc(r.url)+'</span>'})};
   }).catch(function(){})}
@@ -1213,6 +1218,8 @@ function settings(){var m=me||{};var origin=location.origin;
   if(!known&&curModel)opts='<option value="'+esc(curModel)+'" selected>'+esc(curModel)+' (current)</option>'+opts;
   var s=sheet('<header><h2>Settings</h2></header><section>'+
   '<label class="f">Your name</label><div style="display:flex;gap:.5rem"><input id="c-name" value="'+esc(m.name==="you"?"":m.name)+'" placeholder="How others will see you"><button class="btn" id="c-save">Save</button></div>'+
+  '<div id="c-emailwrap" hidden><label class="f" for="c-email">Your email</label><div style="display:flex;gap:.5rem"><input id="c-email" type="email" autocomplete="email" placeholder="you@example.com"><button class="btn" id="c-emailsend">Send code</button></div>'+
+    '<div id="c-codewrap" hidden style="display:flex;gap:.5rem;margin-top:.5rem"><input id="c-code" inputmode="numeric" maxlength="6" placeholder="6-digit code"><button class="btn solid" id="c-emailok">Confirm</button></div><p class="hint" id="c-emailhint">People can add you to a channel by this address once you confirm it. It is never shown to anyone.</p></div>'+
   '<div id="c-handlewrap" hidden><label class="f" for="c-handle">Your @handle</label><div style="display:flex;gap:.5rem"><input id="c-handle" autocomplete="off" spellcheck="false"><button class="btn" id="c-handlesave">Change</button></div><p class="hint">How people find you to add you to a channel. It finds you; it grants nothing on its own.</p></div>'+
   '<label class="f">Model</label><select id="c-model">'+opts+'<option value="__custom">Another id…</option></select><input id="c-model-custom" placeholder="vendor/model-id as OpenRouter names it" hidden style="margin-top:.4rem">'+
   '<p class="hint">Any model OpenRouter serves that can call tools. Prices are live from OpenRouter; each run shows what it cost. Switching takes effect on the next question.</p>'+
@@ -1252,6 +1259,12 @@ function settings(){var m=me||{};var origin=location.origin;
   s.querySelector("[data-x]").onclick=closeSheet;
   Array.prototype.forEach.call(s.querySelectorAll("[data-copy]"),function(b){b.onclick=function(){copy(b.getAttribute("data-copy"));b.textContent="copied"}});
   s.querySelector("#c-save").onclick=function(){api("/app/api/me",{name:s.querySelector("#c-name").value}).then(loadMe)};
+  api("/app/api/email").then(function(e){if(!e||e.error||!e.can_send)return;var w=s.querySelector("#c-emailwrap");w.hidden=false;var ei=s.querySelector("#c-email"),hint=s.querySelector("#c-emailhint");
+    if(e.confirmed){ei.value=e.email;hint.textContent="Confirmed. People can add you by this address; it is never shown to anyone."}
+    s.querySelector("#c-emailsend").onclick=function(){api("/app/api/email",{email:ei.value}).then(function(r){if(r.error){hint.textContent=r.error;return}
+      s.querySelector("#c-codewrap").hidden=false;hint.textContent="We sent a code to "+r.sent_to+". It works for 15 minutes.";s.querySelector("#c-code").focus()})};
+    s.querySelector("#c-emailok").onclick=function(){api("/app/api/email/confirm",{code:s.querySelector("#c-code").value}).then(function(r){if(r.error){hint.textContent=r.error;return}
+      s.querySelector("#c-codewrap").hidden=true;hint.textContent="Confirmed: "+r.email+". People can now add you by it."})}}).catch(function(){});
   api("/app/api/handle").then(function(h){if(!h||!h.handle)return;s.querySelector("#c-handlewrap").hidden=false;var hi=s.querySelector("#c-handle");hi.value="@"+h.handle;
     s.querySelector("#c-handlesave").onclick=function(){var b=this;api("/app/api/handle",{handle:hi.value}).then(function(r){if(r.error){alert(r.error);return}hi.value="@"+r.handle;b.textContent="Saved"})}}).catch(function(){});
   s.querySelector("#c-anamesave").onclick=function(){var b=s.querySelector("#c-anamesave");api("/app/api/agent/config",{name:s.querySelector("#c-aname").value}).then(function(r){b.textContent=r.error?"Failed":"Saved";loadAgent().then(drawMode)})};

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -143,5 +144,72 @@ func TestPasskeySessions(t *testing.T) {
 	old, _ := h.mintSession("gabc", h.now().Add(-time.Minute))
 	if _, ok := h.readSession(old); ok {
 		t.Fatal("an expired session was accepted")
+	}
+}
+
+type fakeMail struct{ sent []string }
+
+func (f *fakeMail) Send(_ context.Context, to, subject, body string) error {
+	f.sent = append(f.sent, to+"|"+subject+"|"+body)
+	return nil
+}
+
+func TestPeopleByEmail(t *testing.T) {
+	h, _, _, _ := testHost(t)
+	h.Guests, h.MaxAccounts = true, 10
+	mail := &fakeMail{}
+	h.Mail = mail
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	h.PublicBase = srv.URL
+	hd := h.Handler()
+	sam, ray := start(t, h, srv.URL), start(t, h, srv.URL)
+
+	// Ray confirms his address with the code sent to it.
+	if w := call(hd, "POST", "/app/api/email", ray, `{"email":"Ray@Example.com"}`); !strings.Contains(w.Body.String(), "ray@example.com") {
+		t.Fatalf("send code: %s", w.Body.String())
+	}
+	last := mail.sent[len(mail.sent)-1]
+	code := last[strings.Index(last, "code is ")+8 : strings.Index(last, "code is ")+14]
+	if w := call(hd, "POST", "/app/api/email/confirm", ray, `{"code":"000000x"}`); !strings.Contains(w.Body.String(), "not right") {
+		t.Fatalf("a wrong code: %s", w.Body.String())
+	}
+	if w := call(hd, "POST", "/app/api/email/confirm", ray, `{"code":"`+code+`"}`); !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("confirm: %s", w.Body.String())
+	}
+
+	// Exact address finds him; part of it finds nobody.
+	if w := call(hd, "GET", "/app/api/people?q=ray@example.com", sam, ""); !strings.Contains(w.Body.String(), `"email":"ray@example.com"`) {
+		t.Fatalf("search by email: %s", w.Body.String())
+	}
+	if w := call(hd, "GET", "/app/api/people?q=ray@exam", sam, ""); strings.Contains(w.Body.String(), "ray@example.com") {
+		t.Fatalf("a partial address found someone: %s", w.Body.String())
+	}
+
+	w := call(hd, "POST", "/app/api/threads", sam, `{"title":"quotes"}`)
+	var c struct{ ID string }
+	json.Unmarshal(w.Body.Bytes(), &c)
+
+	// Inviting his confirmed address invites his account.
+	if w := call(hd, "POST", "/app/api/invite", sam, `{"thread":"`+c.ID+`","handle":"ray@example.com"}`); !strings.Contains(w.Body.String(), `"how":"account"`) {
+		t.Fatalf("invite by known email: %s", w.Body.String())
+	}
+	if w := call(hd, "GET", "/app/api/invites", ray, ""); !strings.Contains(w.Body.String(), `"title":"quotes"`) {
+		t.Fatalf("no invitation for ray: %s", w.Body.String())
+	}
+
+	// Somebody not here gets a join link by email, which works.
+	if w := call(hd, "POST", "/app/api/invite", sam, `{"thread":"`+c.ID+`","handle":"new@person.io"}`); !strings.Contains(w.Body.String(), `"how":"email"`) {
+		t.Fatalf("invite new email: %s", w.Body.String())
+	}
+	last = mail.sent[len(mail.sent)-1]
+	if !strings.HasPrefix(last, "new@person.io|") || !strings.Contains(last, "join=") {
+		t.Fatalf("no join link mailed: %s", last)
+	}
+	jc := last[strings.Index(last, "join=")+5:]
+	jc = jc[:strings.IndexAny(jc, "\n ")]
+	eve := start(t, h, srv.URL)
+	if w := call(hd, "POST", "/app/api/join", eve, `{"code":"`+jc+`"}`); !strings.Contains(w.Body.String(), c.ID) {
+		t.Fatalf("mailed link did not join: %s", w.Body.String())
 	}
 }

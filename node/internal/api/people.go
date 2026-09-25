@@ -173,8 +173,16 @@ func (h *Host) handlePeople(w http.ResponseWriter, r *http.Request) {
 		writeStatusJSON(w, http.StatusUnauthorized, map[string]any{"error": err.Error()})
 		return
 	}
-	q := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(r.URL.Query().Get("q")), "@"))
+	raw := strings.TrimSpace(r.URL.Query().Get("q"))
 	out := []map[string]string{}
+	if e, ok := normEmail(raw); ok && !strings.HasPrefix(raw, "@") {
+		if a := h.accountByEmail(e); a != nil && a.ID != me.ID {
+			out = append(out, map[string]string{"handle": h.handleOf(a), "name": displayOf(a), "email": e})
+		}
+		writeJSON(w, map[string]any{"people": out, "email": e, "can_email": h.Mail != nil})
+		return
+	}
+	q := strings.ToLower(strings.TrimPrefix(raw, "@"))
 	if len(q) < 2 {
 		writeJSON(w, map[string]any{"people": out})
 		return
@@ -213,6 +221,15 @@ func (h *Host) handleInvite(w http.ResponseWriter, r *http.Request) {
 		Handle string `json:"handle"`
 	}
 	json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in)
+	if e, ok := normEmail(in.Handle); ok && strings.Contains(in.Handle, "@") && !strings.HasPrefix(strings.TrimSpace(in.Handle), "@") {
+		title, err := h.mayInvite(r.Context(), me, in.Thread)
+		if err != nil {
+			writeJSON(w, map[string]any{"error": err.Error()})
+			return
+		}
+		h.inviteByEmail(w, r, me, in.Thread, title, e)
+		return
+	}
 	them := h.accountByHandle(strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.Handle), "@")))
 	if them == nil {
 		writeJSON(w, map[string]any{"error": "Nobody here is called @" + strings.TrimPrefix(in.Handle, "@") + ". Send them an invite link instead."})
@@ -386,6 +403,15 @@ func (h *Host) handleJoinLink(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"error": err.Error()})
 		return
 	}
+	url, err := h.newJoinLink(me, in.Thread)
+	if err != nil {
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"url": url, "expires_in_days": 7})
+}
+
+func (h *Host) newJoinLink(me *Account, thread string) (string, error) {
 	code := strings.ToLower(randCode(10))
 	peopleMu.Lock()
 	joins := map[string]joinLink{}
@@ -397,11 +423,11 @@ func (h *Host) handleJoinLink(w http.ResponseWriter, r *http.Request) {
 			delete(joins, k)
 		}
 	}
-	joins[code] = joinLink{FromAcct: me.ID, Thread: in.Thread, Expires: h.now().Add(7 * 24 * time.Hour)}
+	joins[code] = joinLink{FromAcct: me.ID, Thread: thread, Expires: h.now().Add(7 * 24 * time.Hour)}
 	raw, _ := json.Marshal(joins)
-	os.WriteFile(h.joinsPath(), raw, 0o600)
+	err := os.WriteFile(h.joinsPath(), raw, 0o600)
 	peopleMu.Unlock()
-	writeJSON(w, map[string]any{"url": strings.TrimRight(h.PublicBase, "/") + "/app?join=" + code, "expires_in_days": 7})
+	return strings.TrimRight(h.PublicBase, "/") + "/app?join=" + code, err
 }
 
 // POST /app/api/join {code} redeems a link: grant, then join.

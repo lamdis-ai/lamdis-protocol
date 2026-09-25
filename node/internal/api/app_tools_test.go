@@ -41,13 +41,13 @@ func TestASecondConnectionToTheSamePlaceGetsItsOwnName(t *testing.T) {
 // only after it is made fit to be a label.
 func TestAServersOwnNameIsTidiedBeforeItIsUsed(t *testing.T) {
 	for raw, want := range map[string]string{
-		"orderdesk":          "orderdesk",
-		"github-mcp-server":  "github",
-		"Notion MCP":         "notion",
-		"mcp-linear":         "linear",
-		"Sentry MCP Server":  "sentry",
-		"  Plane  ":          "plane",
-		"!!!":                "tools",
+		"orderdesk":         "orderdesk",
+		"github-mcp-server": "github",
+		"Notion MCP":        "notion",
+		"mcp-linear":        "linear",
+		"Sentry MCP Server": "sentry",
+		"  Plane  ":         "plane",
+		"!!!":               "tools",
 		"averyveryverylongnameindeedthatnobodywants": "averyveryverylongnameind",
 	} {
 		if got := sane(raw); got != want {

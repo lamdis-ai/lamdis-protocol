@@ -39,6 +39,8 @@ type Host struct {
 	// Root holds one directory per account.
 	Root    string
 	Cognito *Cognito
+	// Mail sends confirmation codes and invitations; nil means no email.
+	Mail Mailer
 	// Model is the default model id for new accounts.
 	Model string
 	// PublicBase is the address people reach this host at, used to build
@@ -489,6 +491,9 @@ func (h *Host) Handler() http.Handler {
 	mux.HandleFunc("POST /app/api/passkey/register/finish", h.handlePasskeyRegisterFinish)
 	mux.HandleFunc("POST /app/api/passkey/login/begin", h.handlePasskeyLoginBegin)
 	mux.HandleFunc("POST /app/api/passkey/login/finish", h.handlePasskeyLoginFinish)
+	mux.HandleFunc("GET /app/api/email", h.handleEmail)
+	mux.HandleFunc("POST /app/api/email", h.handleEmail)
+	mux.HandleFunc("POST /app/api/email/confirm", h.handleEmailConfirm)
 	mux.HandleFunc("GET /app/api/handle", h.handleHandle)
 	mux.HandleFunc("POST /app/api/handle", h.handleHandle)
 	mux.HandleFunc("GET /app/api/people", h.handlePeople)

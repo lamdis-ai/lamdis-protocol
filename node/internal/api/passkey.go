@@ -296,4 +296,3 @@ func (h *Host) readSession(tok string) (string, bool) {
 	}
 	return p[1], true
 }
-
