@@ -21,6 +21,9 @@ say() { printf '%s\n' "$*"; }
 
 say "Building ${TAG} for arm64…"
 aws ecr get-login-password --profile "$PROFILE" --region "$REGION" | docker login -u AWS --password-stdin "${REPO%/*}" >/dev/null
+# Modules are fetched here, where the proxy is reachable, and shipped in.
+go mod vendor
+trap 'rm -rf "$(pwd)/vendor"' EXIT
 docker buildx build --no-cache --platform linux/arm64 -t "$REPO:${TAG}" --push . >/dev/null
 
 say "Registering a task definition with ${TAG}…"

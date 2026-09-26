@@ -14,3 +14,4 @@ integrations/*/*.egg-info/
 
 # Secrets belong beside the data, never in the repository.
 .env
+node/vendor/

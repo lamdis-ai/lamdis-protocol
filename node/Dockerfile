@@ -6,18 +6,16 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 
-# Dependencies first, so a code change does not re-download the module cache.
-COPY go.mod go.sum ./
-# The module cache is a BuildKit cache mount, so a no-cache rebuild does not
-# re-fetch every dependency, and a dropped download is retried.
-RUN --mount=type=cache,target=/go/pkg/mod \
-    for i in 1 2 3 4; do go mod download && exit 0; sleep 10; done; exit 1
-
+# Dependencies come from vendor/ when ops/deploy-app.sh has filled it on the
+# host: the builder's own route to the module proxy has proved unreliable, and
+# a deploy should not hinge on it. Without vendor/, download with retries.
 COPY . .
 # CGO off matters here: the sqlite driver is a pure-Go WASM build, so the whole
 # binary links statically and needs nothing from the base image.
 RUN --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    if [ -d vendor ]; then FLAGS=-mod=vendor; else \
+      for i in 1 2 3 4; do go mod download && break; sleep 10; done; FLAGS=; fi; \
+    CGO_ENABLED=0 GOOS=linux go build $FLAGS -trimpath \
       -ldflags="-s -w" -o /out/lamdis ./cmd/lamdis
 
 FROM gcr.io/distroless/static-debian12:nonroot
