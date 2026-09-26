@@ -56,11 +56,27 @@ sleep 30
 say "Starting ${TAG} alone…"
 aws ecs update-express-gateway-service --service-arn "$SERVICE" --task-definition-arn "$NEW" \
   --profile "$PROFILE" --region "$REGION" --query 'service.serviceArn' --output text >/dev/null
+# Switching the task definition is itself a deployment, and ECS Express keeps
+# the previous version running until a new one has baked. Let that (empty)
+# deployment finish at zero tasks before asking for one, or the old version
+# comes back up alongside the new.
+i=0
+until [ "$(aws ecs describe-services --cluster lamdis --services lamdis-app --profile "$PROFILE" --region "$REGION" \
+      --query 'length(services[0].deployments[?rolloutState==`IN_PROGRESS`])' --output text)" = "0" ]; do
+  i=$((i+1)); [ $i -gt 90 ] && { say "the empty deployment did not settle; stopping here"; exit 1; }
+  sleep 10
+done
 aws ecs update-express-gateway-service --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE" \
   --scaling-target 'minTaskCount=1,maxTaskCount=1' --query 'service.status.statusCode' --output text >/dev/null
 i=0
 until [ "$(curl -s -o /dev/null -w '%{http_code}' https://app.lamdis.ai/healthz)" = "200" ]; do
   i=$((i+1)); [ $i -gt 90 ] && { say "not healthy after 15 minutes"; exit 1; }
+  sleep 10
+done
+# Healthy is not enough: make sure only one server is left.
+i=0
+until [ "$(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'length(taskArns)' --output text)" = "1" ]; do
+  i=$((i+1)); [ $i -gt 60 ] && { say "more than one server is still running; look before deploying again"; exit 1; }
   sleep 10
 done
 say "Live: ${TAG}"
