@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strconv"
@@ -54,11 +55,21 @@ func OpenSQLiteShared(path string) (*SQLite, error) {
 }
 
 func openSQLite(path, journal string, busyMS int) (*SQLite, error) {
+	// The journal mode is set after opening rather than in the address: if
+	// another process still has the file open, switching fails, and that
+	// must not stop the database opening (nor leave a half-open handle that
+	// then locks every later attempt). It switches on a later open instead.
 	db, err := driver.Open(
-		"file:"+path+"?_pragma=journal_mode("+journal+")&_pragma=busy_timeout("+strconv.Itoa(busyMS)+")&_pragma=foreign_keys(1)",
+		"file:"+path+"?_pragma=busy_timeout("+strconv.Itoa(busyMS)+")&_pragma=foreign_keys(1)",
 		fts5.Register)
 	if err != nil {
 		return nil, err
+	}
+	var mode string
+	if err := db.QueryRow("PRAGMA journal_mode=" + journal).Scan(&mode); err != nil {
+		log.Printf("store: %s: could not set journal mode %s yet: %v", path, journal, err)
+	} else if !strings.EqualFold(mode, journal) {
+		log.Printf("store: %s: journal mode is %s, wanted %s; it switches when nothing else has it open", path, mode, journal)
 	}
 	s := &SQLite{db: db, logs: map[string]*cachedLog{}}
 	if err := s.migrate(); err != nil {
