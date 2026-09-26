@@ -21,10 +21,17 @@ say() { printf '%s\n' "$*"; }
 
 say "Building ${TAG} for arm64…"
 aws ecr get-login-password --profile "$PROFILE" --region "$REGION" | docker login -u AWS --password-stdin "${REPO%/*}" >/dev/null
-# Modules are fetched here, where the proxy is reachable, and shipped in.
-go mod vendor
-trap 'rm -rf "$(pwd)/vendor"' EXIT
-docker buildx build --no-cache --platform linux/arm64 -t "$REPO:${TAG}" --push . >/dev/null
+# Compiled here, where the module proxy is reachable, and shipped as the only
+# new layer: a slow uplink then has one small thing to push, and pushes retry.
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o lamdis-linux-arm64 ./cmd/lamdis
+trap 'rm -f "$(pwd)/lamdis-linux-arm64"' EXIT
+docker buildx build --platform linux/arm64 -f Dockerfile.prebuilt -t "$REPO:${TAG}" --load . >/dev/null
+i=0
+until docker push -q "$REPO:${TAG}" >/dev/null; do
+  i=$((i+1)); [ $i -ge 5 ] && { say "push kept failing; stopping before touching the service"; exit 1; }
+  say "  push failed; retrying ($i)"; sleep 15
+  aws ecr get-login-password --profile "$PROFILE" --region "$REGION" | docker login -u AWS --password-stdin "${REPO%/*}" >/dev/null
+done
 
 say "Registering a task definition with ${TAG}…"
 aws ecs describe-task-definition --task-definition lamdis-app --profile "$PROFILE" --region "$REGION" \

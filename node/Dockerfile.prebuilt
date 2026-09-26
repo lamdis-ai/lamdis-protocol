@@ -1,0 +1,9 @@
+# The node, compiled on the host by ops/deploy-app.sh and shipped on nothing.
+# The binary is pure Go (CGO off), so it needs nothing from the base image,
+# and the only new layer a deploy uploads is the binary itself.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY lamdis-linux-arm64 /lamdis
+USER nonroot:nonroot
+EXPOSE 8080
+ENTRYPOINT ["/lamdis"]
+CMD ["exchange"]
