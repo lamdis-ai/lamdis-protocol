@@ -435,3 +435,12 @@ func TestAShareLinkFromAHostedAccountOpens(t *testing.T) {
 		t.Fatal("the shared view leaked something")
 	}
 }
+
+// Apple fetches this to let the iOS app use this site's passkeys.
+func TestTheAppleAssociationFileIsServed(t *testing.T) {
+	_, _, _, handler := testHost(t)
+	w := call(handler, "GET", "/.well-known/apple-app-site-association", "", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"webcredentials":{"apps":["JNA2Z7W52M.ai.lamdis.app"]}`) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+}

@@ -458,6 +458,18 @@ func (h *Host) resolve(r *http.Request) (*Account, error) {
 func (h *Host) Handler() http.Handler {
 	mux := http.NewServeMux()
 
+	// The iOS app shares passkeys with this site and opens its links, which
+	// Apple checks against this file. LAMDIS_IOS_APP_ID overrides the app.
+	mux.HandleFunc("GET /.well-known/apple-app-site-association", func(w http.ResponseWriter, r *http.Request) {
+		app := envOrDefault("LAMDIS_IOS_APP_ID", "JNA2Z7W52M.ai.lamdis.app")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		json.NewEncoder(w).Encode(map[string]any{
+			"webcredentials": map[string]any{"apps": []string{app}},
+			"applinks": map[string]any{"details": []map[string]any{{
+				"appIDs": []string{app}, "components": []map[string]string{{"/": "/app*"}, {"/": "/s/*"}}}}},
+		})
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "accounts": h.Count()})
 	})
@@ -569,4 +581,11 @@ func loadPeersIn(dir string) (map[string]peerRecord, error) {
 		return out, nil
 	}
 	return out, json.Unmarshal(raw, &out)
+}
+
+func envOrDefault(k, d string) string {
+	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		return v
+	}
+	return d
 }
