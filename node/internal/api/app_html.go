@@ -188,8 +188,20 @@ button.avs:hover{border-color:var(--line2);background:var(--panel)}
 
 /* ---- Today ---- */
 .today{max-width:78rem;width:100%;margin:0 auto;padding:3.4rem 4rem 4rem}
-.hello{font-family:var(--display);font-weight:800;font-size:3.4rem;line-height:1;letter-spacing:-.04em;margin:.55rem 0 .5rem;text-wrap:balance}
-.hello em{font-style:normal;background:linear-gradient(100deg,#E08A00,#FF7A45 55%,#4C6FF5);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hello{font-family:var(--display);font-weight:800;font-size:2.8rem;line-height:1;letter-spacing:-.04em;margin:.55rem 0 .5rem;text-wrap:balance}
+.hello em{font-style:normal;color:var(--gold-text)}
+.glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin-top:1.4rem;max-width:48rem}
+.glance .g{display:flex;flex-direction:column;gap:.2rem;padding:.85rem 1rem;border:1px solid var(--line);border-radius:16px;background:var(--panel);text-align:left;font:inherit;color:inherit;cursor:pointer}
+.glance .g:hover{border-color:var(--gold-dim)}
+.glance .g b{font-family:var(--display);font-size:1.7rem;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.glance .g span{font-size:.8rem;color:var(--ink3);line-height:1.35}
+.glance .g.hot{border-color:#F2D29B;background:#FFF7E8}
+.glance .g.hot b{color:var(--gold-text)}
+.dcard .who3{display:flex;align-items:center;gap:.45rem;font-size:.8rem;color:var(--ink3)}
+.dcard .earlier{border-top:1px dashed var(--line);padding-top:.7rem;display:flex;flex-direction:column;gap:.6rem}
+.dcard .earlier summary{cursor:pointer;font-size:.82rem;color:var(--ink3);list-style:none}
+.dcard .earlier summary::-webkit-details-marker{display:none}
+.dcard .earlier .q{font-size:.95rem;color:var(--ink2)}
 .lede{font-size:1.02rem;color:var(--ink2);max-width:44rem;line-height:1.55}
 .tgrid{display:grid;grid-template-columns:minmax(0,1fr) 22rem;gap:1.8rem;margin-top:2.4rem;align-items:start}
 .col{display:flex;flex-direction:column;gap:.85rem;min-width:0}
@@ -249,6 +261,7 @@ button.avs:hover{border-color:var(--line2);background:var(--panel)}
 .avs .av{width:26px;height:26px;font-size:.66rem;border:2px solid var(--bg);margin-left:-6px}
 .avs .av:first-child{margin-left:0}
 .avs .more{font:.72rem var(--mono);color:var(--ink3);margin-left:.4rem}
+.avs .cnt{display:none}
 .body2{flex:1;display:flex;min-height:0}
 .convo{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .feed{flex:1;overflow-y:auto;padding:1.8rem 2rem .8rem;scroll-behavior:smooth}
@@ -476,23 +489,33 @@ select{background:var(--bg);border:1px solid var(--line2);border-radius:10px;pad
   .mbar{display:flex!important}
   .head{padding:0 .8rem;gap:.5rem;height:56px;position:sticky;top:0}
   .tabs{display:none}
-  .avs .addp{display:none}
+  /* Two rows on a phone: the channel's name, then who is in it. */
+  .head{flex-wrap:wrap;height:auto;padding:.45rem .8rem .5rem;row-gap:.4rem}
+  .head h1{flex:1 1 calc(100% - 12rem);order:0}
+  .head .spacer{display:none}
+  .head #share{order:1}.head #more{order:2}
+  .head .avs{order:3;margin-right:auto;padding-left:0}
+  .head #agentbtn{order:4}.head #linksbtn{order:5}
+  .avs .cnt{display:inline;margin-left:.45rem;font-size:.78rem;color:var(--ink2);font-weight:600}
+  .avs .addp{margin-left:.35rem}
   .head .pill .full{display:none}
   .head .pill .short{display:inline}
   .head .pill{padding:0 .6rem}
   .today,.sched{padding:1.2rem 1.1rem 2.5rem}
-  .hello{font-size:2.4rem}
+  .hello{font-size:2rem}
   .sched .hello{font-size:2.1rem}
   .feed{padding:1.1rem .9rem .4rem;overscroll-behavior:contain}
   .composer{padding:.5rem .7rem calc(.7rem + env(safe-area-inset-bottom))}
   .cbox{border-radius:16px}
   .crow .model{display:none}
   .chip .lbl{display:none}
-  .opts{flex-direction:column}
-  .opts .btn{height:44px;justify-content:center}
-  .free{flex-direction:column}
-  .free input,.free .btn{height:44px}
-  .free .btn{justify-content:center}
+  .opts .btn{height:40px;white-space:normal;text-align:left;line-height:1.25;padding:.45rem .85rem;height:auto;min-height:40px}
+  .free input,.free .btn{height:42px}
+  .free input{min-width:0;flex:1}
+  .glance{gap:.45rem}
+  .glance .g{padding:.7rem .75rem}
+  .glance .g b{font-size:1.35rem}
+  .glance .g span{font-size:.72rem}
   .addsched{grid-template-columns:1fr}
   .stable .hd{display:none}
   .srow{grid-template-columns:minmax(0,1fr) auto auto;row-gap:.3rem}
@@ -640,10 +663,14 @@ function today(){return Promise.all([loadToday(),threads(),api("/app/api/invites
   runs.forEach(function(x){chans[x.thread]=1;var dd=parseData(x.data);spent+=costOf(dd);reads+=(dd.threads_read||[]).length});
   var nc=Object.keys(chans).length;
   var date=new Date().toLocaleDateString([],{weekday:"long",day:"numeric",month:"long"});
-  var head=n?greeting()+' <em>'+words(n)+(n===1?" thing":" things")+'</em> '+(n===1?"needs":"need")+' you.':greeting()+' <em>Nothing</em> needs you.';
-  var lede=runs.length?"Since yesterday "+esc(agentName())+" worked "+(runs.length===1?"once":runs.length+" times")+" across "+nc+(nc===1?" channel":" channels")+(spent?", and spent "+money(spent):"")+".":
-    (threadList.length?esc(AgentName())+" has not worked on its own yet. Give a channel a morning review, or let it react when someone writes.":"A channel is a place for one subject: you, "+esc(agentName())+", and anyone you bring in. Everything written there is the record the agent reads.");
-  var h='<span class="kick">'+esc(date)+'</span><h1 class="hello">'+head+'</h1><p class="lede">'+lede+'</p>';
+  var up0=upcoming(d.schedules);
+  var head=greeting()+(n?' <em>'+(n===1?"One question":words(n)+" questions")+'</em> '+(n===1?"is":"are")+' waiting on you.':' Nothing is waiting on you.');
+  var lede=runs.length?"":(threadList.length?esc(AgentName())+" has not worked on its own yet. Give a channel a morning review, or let it react when someone writes.":"A channel is a place for one subject: you, "+esc(agentName())+", and anyone you bring in. Everything written there is the record the agent reads.");
+  var h='<span class="kick">'+esc(date)+'</span><h1 class="hello">'+head+'</h1>'+(lede?'<p class="lede">'+lede+'</p>':'');
+  if(threadList.length)h+='<div class="glance">'+
+    '<button class="g'+(n?' hot':'')+'" data-jump="needs"><b>'+n+'</b><span>'+(n===1?"question":"questions")+' for you</span></button>'+
+    '<button class="g" data-jump="done"><b>'+runs.length+'</b><span>done since yesterday'+(spent?' · '+money(spent):'')+'</span></button>'+
+    '<button class="g" data-go-sched><b>'+(up0.length?esc(up0[0]._label):"–")+'</b><span>'+(up0.length?esc(up0[0].name?cap(up0[0].name)+" review":"next check-in"):"nothing scheduled")+'</span></button></div>';
   if(invs.length)h+='<div class="invs">'+invs.map(function(v){return '<div class="card inv"><div class="av peer">'+esc(initials(v.from_name||v.from_handle))+'</div><div class="t"><b>'+esc(v.from_name||("@"+v.from_handle))+'</b> invited you to <b>#'+esc(v.title)+'</b><span>@'+esc(v.from_handle)+'</span></div><button class="btn solid" data-inv="'+esc(v.id)+'" data-yes="1">Join</button><button class="btn ghost" data-inv="'+esc(v.id)+'">Decline</button></div>'}).join("")+'</div>';
   if(!threadList.length){
     h+='<div style="margin-top:2.4rem" class="col"><span class="kick">Start with one</span><div class="starters">'+
@@ -653,9 +680,19 @@ function today(){return Promise.all([loadToday(),threads(),api("/app/api/invites
       '</div></div>';
     $("today").innerHTML=h;each("[data-starter]",function(b){b.onclick=function(){newThread(b.getAttribute("data-starter"))}});return}
   var left='<div class="col">';
-  if(n){left+='<span class="kick">Needs you</span>'+d.decisions.map(function(x){if(x.connect)return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(x.thread)+'">'+esc(x.title)+'</a><span class="tag ai">connect</span></div>'+connectCard(x.id,x.connect.service,x.connect.url,x.text,null,x.thread)+'</div>';return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(x.thread)+'">'+esc(x.title)+'</a><span class="tag call">your call</span></div>'+
-      '<div class="q">'+body(x.text)+'</div>'+decisionControls(x.id,x.options)+'</div>'}).join("")}
-  left+='<span class="kick">'+(runs.length?"While you were away":"Recent")+'</span>';
+  if(n){
+    // One card per channel: the newest question in full, earlier ones folded,
+    // since a later question usually carries the earlier ones forward.
+    var groups=[],byT={};
+    d.decisions.forEach(function(x){if(x.connect){groups.push({one:x});return}if(!byT[x.thread]){byT[x.thread]={thread:x.thread,title:x.title,list:[]};groups.push(byT[x.thread])}byT[x.thread].list.push(x)});
+    left+='<span class="kick" id="k-needs">Waiting on you</span>'+groups.map(function(g){
+      if(g.one){var x=g.one;return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(x.thread)+'">'+esc(x.title)+'</a><span class="tag ai">connect</span></div>'+connectCard(x.id,x.connect.service,x.connect.url,x.text,null,x.thread)+'</div>'}
+      var l=g.list.slice().sort(function(a,b){return (b.ts||"")>(a.ts||"")?1:-1}),x=l[0],rest=l.slice(1);
+      return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(g.thread)+'">'+esc(g.title)+'</a><span class="tag call">'+(l.length>1?l.length+" questions":"your call")+'</span></div>'+
+        '<div class="q">'+body(x.text)+'</div>'+decisionControls(x.id,x.options)+
+        (rest.length?'<details class="earlier"><summary>'+rest.length+' earlier '+(rest.length===1?"question":"questions")+' here ›</summary>'+rest.map(function(y){return '<div class="q">'+body(y.text)+'</div>'+decisionControls(y.id,y.options)}).join("")+'</details>':'')+
+        '</div>'}).join("")}
+  left+='<span class="kick" id="k-done">'+(runs.length?"Done since yesterday":"Recent")+'</span>';
   left+=runs.length?'<div class="card runs">'+runs.slice(0,12).map(function(x){var dd=parseData(x.data);var bad=dd.outcome==="error";
       var label=trigLabel(dd.trigger);
       var mt=[];if((dd.threads_read||[]).length)mt.push("read "+dd.threads_read.length);if((dd.tool_calls||[]).length)mt.push((dd.tool_calls.length)+(dd.tool_calls.length===1?" step":" steps"));if(cost(dd))mt.push(cost(dd));if(bad)mt.push(dd.error||"failed");
@@ -663,7 +700,7 @@ function today(){return Promise.all([loadToday(),threads(),api("/app/api/invites
         '<span class="tx">'+esc(x.followed||x.text||"Nothing worth writing down.")+'</span><span class="mt">'+esc(mt.join(" · "))+'</span></span></button>'}).join("")+'</div>'
     :'<div class="card quiet">Nothing ran on its own in the last day and a half. When '+esc(agentName())+' has schedules or is watching a channel, what it did shows up here.</div>';
   left+='</div>';
-  var up=upcoming(d.schedules);
+  var up=up0;
   var right='<div class="col"><span class="kick">Coming up</span><div class="card up">'+(up.length?up.slice(0,5).map(function(s){return '<button class="uprow" data-open="'+esc(s.thread)+'"><span class="tm">'+esc(s._label)+'</span><span class="bd"><b>'+esc(s.name?cap(s.name)+" review":(s.prompt||"Check in"))+'</b><span>#'+esc(s.title)+' · '+esc(s._every)+'</span></span></button>'}).join(""):
       '<p class="quiet" style="padding:.8rem 1.1rem">Nothing scheduled.</p>')+'<button class="link" data-go-sched>'+(up.length?"All schedules →":"Schedule something →")+'</button></div>';
   if(d.watching.length)right+='<div class="card side-card"><b>Watching '+d.watching.length+(d.watching.length===1?" channel":" channels")+'</b><p>'+esc(AgentName())+' wakes when someone '+(d.watching.some(function(w){return w.on==="all"})?"writes":"else writes")+' in '+d.watching.map(function(w){return "#"+esc(w.title)}).join(", ")+'.</p></div>';
@@ -673,6 +710,7 @@ function today(){return Promise.all([loadToday(),threads(),api("/app/api/invites
   $("today").innerHTML=h+'<div class="tgrid">'+left+right+'</div>';
   each("[data-open]",function(b){b.onclick=function(){go("chan",b.getAttribute("data-open"))}},$("today"));
   each("[data-go-sched]",function(b){b.onclick=function(){go("sched")}},$("today"));
+  each("[data-jump]",function(b){b.onclick=function(){var k=document.getElementById("k-"+b.getAttribute("data-jump"));if(k)k.scrollIntoView({behavior:"smooth",block:"start"})}},$("today"));
   each("[data-invite]",function(b){b.onclick=function(){cur=b.getAttribute("data-invite");shareSheet()}},$("today"));
   each("[data-inv]",function(b){b.onclick=function(){var yes=!!b.getAttribute("data-yes");b.disabled=true;b.textContent=yes?"Joining…":"Declining…";
     api("/app/api/invites/answer",{id:b.getAttribute("data-inv"),accept:yes}).then(function(r){if(r.error){alert(r.error);today();return}
@@ -757,7 +795,9 @@ function members(t){var a='<span class="av you">'+esc(initials(me?me.name:"you")
   team.filter(function(p){return here.indexOf(p.id)>=0}).slice(0,3).forEach(function(p){a+='<span class="av bot" style="background:'+hueOf(p.id)+'">'+esc(initials(p.name))+'</span>'});
   var ppl=(window._acc&&window._acc.id===t.id)?window._acc.grants:[];
   ppl.slice(0,3).forEach(function(g){a+='<span class="av peer" title="'+esc(g.name)+'">'+esc(initials(g.name))+'</span>'});
-  var n=Math.max(0,ppl.length-3);if(n)a+='<span class="more">+'+n+'</span>';a+='<span class="addp">+ Add</span>';$("avs").innerHTML=a}
+  var n=Math.max(0,ppl.length-3);if(n)a+='<span class="more">+'+n+'</span>';
+  var total=2+team.filter(function(p){return here.indexOf(p.id)>=0}).length+ppl.length;
+  a+='<span class="cnt">'+total+' here</span><span class="addp">+ Add</span>';$("avs").innerHTML=a}
 function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=false;threads();
   return api("/app/api/thread/"+encodeURIComponent(id)).then(function(d){if(cur!==id)return;if(d.error){note(d.error,"bad");$("stream").innerHTML='<div class="void"><h2>Not here</h2><p>That channel is not on this account.</p></div>';return}
     entries=d.entries;var lastE=d.entries[d.entries.length-1];window._sig=d.entries.length+":"+(lastE?lastE.id:"");
@@ -883,7 +923,8 @@ function wireConnect(root){each("[data-connect]",function(card){var go=card.quer
 function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px";$("send").disabled=!t.value.trim()}
 function drawMode(){mode="note";
   if(cur&&view==="chan"){var t=threadOf(cur);var nm=String(t.title||"this channel").replace(/…$/,"");
-    $("text").placeholder=t.is_project?"Message "+nm+" — the agents here see every channel in it":"Message #"+nm+" — the agents here reply when they have something to add"}}
+    var narrow=window.innerWidth<700;
+    $("text").placeholder=t.is_project?"Message "+nm+(narrow?"":" — the agents here see every channel in it"):"Message #"+nm+(narrow?"":" — the agents here reply when they have something to add")}}
 function mentionsAgent(t){var n=agentName()==="your agent"?"agent":agentName();var re=new RegExp("(^|\\s)@("+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"|agent)\\b","i");return re.test(t)}
 function send(){var t=$("text").value.trim();if(!cur||!t)return;
   var at=team.filter(function(p){return new RegExp("(^|\\s)@"+p.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i").test(t)})[0];if(at){target=at.id;return ask()}
@@ -1589,7 +1630,7 @@ func appShell(extra string) string {
 </div>`
 }
 
-const railMark = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l5-3 5 3v6l-5 3-5-3z" stroke="#E08A00"/><path d="M10 14l5-3 5 3v6l-5 3-5-3z" stroke="#4C6FF5"/></svg>`
+const railMark = `<svg width="12" height="26" viewBox="1 4.6 14 30.4" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5.6L10 8L6 10.4L2 8Z M10 23.9L14 26.3L10 28.7L6 26.3Z" fill="#FFB22E"/><path d="M2 8L2 13.3 M2 8L6 5.6 M2 8L6 10.4 M2 13.3L2 18.6 M2 13.3L6 15.7 M2 18.6L2 23.9 M2 18.6L6 21 M2 23.9L2 29.2 M2 23.9L6 26.3 M2 29.2L6 31.6 M6 5.6L10 8 M6 10.4L6 15.7 M6 10.4L10 8 M6 15.7L6 21 M6 15.7L10 13.3 M6 21L6 26.3 M6 21L10 18.6 M6 26.3L6 31.6 M6 26.3L10 23.9 M6 26.3L10 28.7 M6 31.6L10 34 M10 8L10 13.3 M10 13.3L10 18.6 M10 18.6L10 23.9 M10 23.9L14 26.3 M10 28.7L10 34 M10 28.7L14 26.3 M10 34L14 31.6 M14 26.3L14 31.6" stroke="currentColor" stroke-width="1"/></svg>`
 const menuIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>`
 const clockIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`
 
@@ -1597,7 +1638,7 @@ const clockIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" s
 func appHTML(model string, canAsk bool) string {
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><meta name="color-scheme" content="light"><meta name="theme-color" content="#FFFAF3">
-<title>Lamdis</title><style>` + appCSS + `</style></head><body>
+<title>Lamdis</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>` + appCSS + `</style></head><body>
 ` + appShell("") + `
 <script>` + appJS + `</script></body></html>`
 }

@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -512,6 +513,16 @@ func (h *Host) Handler() http.Handler {
 	mux.HandleFunc("POST /app/api/passkey/login/finish", h.handlePasskeyLoginFinish)
 	mux.HandleFunc("POST /app/api/account/delete", h.handleDeleteAccount)
 	mux.HandleFunc("POST /app/api/report", h.handleReport)
+	mux.HandleFunc("GET /app/api/whoami", h.handleWhoami)
+	mux.HandleFunc("POST /app/api/signin/email", h.handleSigninEmail)
+	mux.HandleFunc("POST /app/api/signin/email/confirm", h.handleSigninEmailConfirm)
+	mux.HandleFunc("POST /app/api/device/code", h.handleDeviceCode)
+	mux.HandleFunc("POST /app/api/device/redeem", h.handleDeviceRedeem)
+	mux.HandleFunc("GET /favicon.svg", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		io.WriteString(w, faviconSVG)
+	})
 	mux.HandleFunc("GET /app/api/email", h.handleEmail)
 	mux.HandleFunc("POST /app/api/email", h.handleEmail)
 	mux.HandleFunc("POST /app/api/email/confirm", h.handleEmailConfirm)
