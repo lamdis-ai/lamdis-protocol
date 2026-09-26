@@ -19,14 +19,14 @@ cd "$(dirname "$0")/../node"
 
 say() { printf '%s\n' "$*"; }
 
-say "Building $TAG for arm64…"
+say "Building ${TAG} for arm64…"
 aws ecr get-login-password --profile "$PROFILE" --region "$REGION" | docker login -u AWS --password-stdin "${REPO%/*}" >/dev/null
-docker buildx build --no-cache --platform linux/arm64 -t "$REPO:$TAG" --push . >/dev/null
+docker buildx build --no-cache --platform linux/arm64 -t "$REPO:${TAG}" --push . >/dev/null
 
-say "Registering a task definition with $TAG…"
+say "Registering a task definition with ${TAG}…"
 aws ecs describe-task-definition --task-definition lamdis-app --profile "$PROFILE" --region "$REGION" \
   --query taskDefinition > "$TMP/cur.json"
-python3 - "$TMP" "$TAG" <<'EOF'
+python3 - "$TMP" "${TAG}" <<'EOF'
 import json, sys
 tmp, tag = sys.argv[1], sys.argv[2]
 d = json.load(open(tmp + "/cur.json"))
@@ -53,7 +53,7 @@ done
 # EFS releases a stopped client's file locks after a short lease.
 sleep 30
 
-say "Starting $TAG alone…"
+say "Starting ${TAG} alone…"
 aws ecs update-express-gateway-service --service-arn "$SERVICE" --task-definition-arn "$NEW" \
   --profile "$PROFILE" --region "$REGION" --query 'service.serviceArn' --output text >/dev/null
 aws ecs update-express-gateway-service --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE" \
@@ -63,4 +63,4 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' https://app.lamdis.ai/healthz)
   i=$((i+1)); [ $i -gt 90 ] && { say "not healthy after 15 minutes"; exit 1; }
   sleep 10
 done
-say "Live: $TAG"
+say "Live: ${TAG}"
