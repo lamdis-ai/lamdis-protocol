@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"time"
 
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
@@ -36,6 +37,37 @@ type Scheduler struct {
 	projPending map[string]projNews
 	// chimePending: a person wrote in a channel where team members chime in.
 	chimePending map[string]projNews
+	// pmu guards the two maps above: poll runs in its own goroutine, and a
+	// post handled straight away claims its message from the web request.
+	pmu sync.Mutex
+	// claimed: entries already answered straight away, never again on a round.
+	claimed map[string]bool
+}
+
+// Claim marks a message as being answered now, so the next round does not
+// answer it a second time.
+func (s *Scheduler) Claim(ctx context.Context, thread, entry string) {
+	s.pmu.Lock()
+	if s.claimed == nil {
+		s.claimed = map[string]bool{}
+	}
+	s.claimed[entry] = true
+	if n, ok := s.chimePending[thread]; ok && n.entry == entry {
+		delete(s.chimePending, thread)
+	}
+	s.pmu.Unlock()
+	s.Consume(ctx, thread)
+	s.State.Update(s.Runner.now(), func(st *State) {
+		if ts := st.thread(thread); ts.Pending == entry {
+			ts.Pending = ""
+		}
+	})
+}
+
+func (s *Scheduler) isClaimed(entry string) bool {
+	s.pmu.Lock()
+	defer s.pmu.Unlock()
+	return s.claimed[entry]
 }
 
 type projNews struct {
@@ -173,7 +205,11 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 						switch e.Kind {
 						case KindRun, KindBrief, KindDecision, KindDecisionReply, KindConnect, KindConnectReply, KindProject, KindProjectMember:
 						default:
-							s.chimePending[id] = projNews{project: id, entry: e.ID, at: now}
+							if !s.isClaimed(e.ID) {
+								s.pmu.Lock()
+								s.chimePending[id] = projNews{project: id, entry: e.ID, at: now}
+								s.pmu.Unlock()
+							}
 						}
 					}
 					// The project above this channel may want to hear it too.
@@ -244,11 +280,18 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 		}
 	}
 	if !first {
+		s.pmu.Lock()
+		due := map[string]projNews{}
 		for id, n := range s.chimePending {
-			if now.Sub(n.at) < debounce {
-				continue
+			if now.Sub(n.at) >= debounce && !s.claimed[n.entry] {
+				due[id] = n
 			}
-			delete(s.chimePending, id)
+			if now.Sub(n.at) >= debounce {
+				delete(s.chimePending, id)
+			}
+		}
+		s.pmu.Unlock()
+		for id, n := range due {
 			tl, err := r.Store.Thread(ctx, id)
 			if err != nil {
 				continue

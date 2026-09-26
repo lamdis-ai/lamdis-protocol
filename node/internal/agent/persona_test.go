@@ -103,3 +103,25 @@ func TestATeamMemberChimesInOnItsOwn(t *testing.T) {
 		t.Fatal("the team member answered itself")
 	}
 }
+
+func TestTurnTaking(t *testing.T) {
+	sp := []Speaker{{ID: "", Name: "Juniper"}, {ID: "pd", Name: "Devil"}, {ID: "ps", Name: "Scout"}}
+	f := setup(t, &script{})
+	cfg, _ := LoadConfig(f.dir)
+	ctx := context.Background()
+	if got := f.r.Route(ctx, cfg, "@Scout then @Devil, what do you think?", sp, false); len(got) != 2 || got[0] != "ps" || got[1] != "pd" {
+		t.Fatalf("mentions: %v", got)
+	}
+	f.r.Model = &script{turns: []Message{say(`["Devil", "Scout", "Juniper"]`)}}
+	if got := f.r.Route(ctx, cfg, "is this a good idea?", sp, false); len(got) != 2 || got[0] != "pd" {
+		t.Fatalf("model pick, capped at two: %v", got)
+	}
+	f.r.Model = &script{turns: []Message{say(`not json at all`)}}
+	if got := f.r.Route(ctx, cfg, "hi", sp, true); len(got) != 1 || got[0] != "" {
+		t.Fatalf("alone, a failed route still gets the main agent: %v", got)
+	}
+	f.r.Model = &script{turns: []Message{say(`[]`)}}
+	if got := f.r.Route(ctx, cfg, "Ray, see you Thursday", sp, false); len(got) != 0 {
+		t.Fatalf("a message for another person got %v", got)
+	}
+}

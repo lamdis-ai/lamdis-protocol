@@ -328,6 +328,7 @@ details.runcard summary:before,details.runcard[open] summary:before{content:none
 .seg button[aria-pressed=true]{background:var(--raise);color:var(--ink)}
 .chip{height:30px;padding:0 .7rem;border-radius:99px;border:1px solid var(--line2);font-size:.78rem;color:var(--ink3);display:inline-flex;align-items:center;gap:.35rem}
 .chip:hover{color:var(--ink);border-color:var(--ink4)}
+.chint{font-size:.76rem;color:var(--ink4)}
 .crow .model{margin-left:auto;font:.72rem var(--mono);color:var(--ink4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:14rem}
 .send{width:38px;height:38px;border-radius:99px;background:var(--gold);display:grid;place-items:center;flex:none;color:var(--gold-ink);transition:background .14s,opacity .14s}
 .send:hover{background:#FFC24F}
@@ -760,7 +761,7 @@ function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=fals
     var tt=threadOf(id),par=tt.project?threadOf(tt.project):null;
     $("title").innerHTML=(par?'<a class="crumb" data-go="'+esc(par.id)+'">'+ICON.stack+esc(par.title)+'</a><span class="dim">/</span>':'')+(tt.is_project?ICON.stack:'<span class="hash">#</span>')+esc(d.title||"untitled")+(tt.is_project?'<span class="tag">project · '+(tt.children||0)+'</span>':'');
     each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},$("title"));
-    $("text").placeholder=(tt.is_project&&mode==="ask"?"Ask "+agentName()+" across all "+(tt.children||0)+" channels in "+d.title+"…":mode==="ask"?"Ask "+agentName()+" about #"+String(d.title||"this channel").replace(/…$/,"")+"…":"Message #"+String(d.title||"this channel").replace(/…$/,"")+" — agents here reply if they have something to add");
+    drawMode();
     var vis=d.entries.filter(function(e){return e.lane!=="control"&&e.kind!=="thread.brief"&&e.kind!=="agent.decision_reply"&&e.kind!=="agent.connect_reply"&&e.kind!=="project.member"&&e.kind!=="project.is"});
     var t=threadOf(id);agentPill(t);members(t);$("more").hidden=!t.mine;if(t.last)seen(id,t.last);
     api("/app/api/thread/"+encodeURIComponent(id)+"/links").then(function(l){if(cur!==id)return;var b=$("linksbtn");b.hidden=!l.total;
@@ -875,25 +876,28 @@ function wireConnect(root){each("[data-connect]",function(card){var go=card.quer
 
 /* ---- the composer ---- */
 function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px";$("send").disabled=!t.value.trim()}
-function drawMode(){each(".seg button",function(b){b.setAttribute("aria-pressed",String(b.getAttribute("data-mode")===mode))});
-  var an=agentName()==="your agent"?"agent":agentName();$("mode-ask").textContent="Ask "+(an==="agent"?"agent":an);
-  if(cur&&view==="chan"){var t=threadOf(cur);$("text").placeholder=mode==="ask"?"Ask "+agentName()+" about #"+String(t.title||"this channel").replace(/…$/,"")+"…":"Message #"+String(t.title||"this channel").replace(/…$/,"")+" — agents here reply if they have something to add"}}
+function drawMode(){mode="note";
+  if(cur&&view==="chan"){var t=threadOf(cur);var nm=String(t.title||"this channel").replace(/…$/,"");
+    $("text").placeholder=t.is_project?"Message "+nm+" — the agents here see every channel in it":"Message #"+nm+" — the agents here reply when they have something to add"}}
 function mentionsAgent(t){var n=agentName()==="your agent"?"agent":agentName();var re=new RegExp("(^|\\s)@("+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"|agent)\\b","i");return re.test(t)}
 function send(){var t=$("text").value.trim();if(!cur||!t)return;
   var at=team.filter(function(p){return new RegExp("(^|\\s)@"+p.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i").test(t)})[0];if(at){target=at.id;return ask()}
-  if(mode==="ask"||mentionsAgent(t)){if(me&&!me.can_ask){note(AgentName()+" is off until a model key is set.","warn");return}ask();return}
+  if(mentionsAgent(t)){if(me&&!me.can_ask){note(AgentName()+" is off until a model key is set.","warn");return}target="";ask();return}
   post()}
 function post(){var t=$("text").value.trim();if(!cur||!t)return;var th=cur;
   api("/app/api/post",{thread:cur,text:t,lane:"content"}).then(function(d){if(d.error){note(d.error,"bad");return}
-    $("text").value="";grow();note("");open(cur).then(function(){if(d.responders)watchReplies(th,d.responders)})})}
+    $("text").value="";grow();note("");open(cur).then(function(){if(d.responders)watchReplies(th,d.responders,d.entry)})})}
 /* After a message, the agents here are deciding whether to reply: say so,
    and look often until they have, rather than leaving a silence. */
-function watchReplies(th,n){if(cur!==th)return;var before=entries.length;thinking(n>1?"The agents here are reading…":AgentName()+" is reading…");
+function watchReplies(th,n,entry){if(cur!==th)return;var before=entries.length,shown=0;thinking(n>1?"The agents here are reading…":AgentName()+" is reading…");
   var t0=Date.now();busy=true;
-  (function tick(){api("/app/api/thread/"+encodeURIComponent(th)).then(function(d){if(cur!==th){busy=false;return}
+  (function tick(){Promise.all([api("/app/api/thread/"+encodeURIComponent(th)),entry?api("/app/api/routed/"+encodeURIComponent(entry)):Promise.resolve({})]).then(function(r){var d=r[0],rt=r[1]||{};if(cur!==th){busy=false;return}
     var runs=(d.entries||[]).slice(before).filter(function(e){return e.kind==="agent.run"}).length;
-    if(runs>=n||Date.now()-t0>120000){busy=false;open(th);return}
-    setTimeout(tick,2500)}).catch(function(){busy=false})})()}
+    var want=rt.known?rt.n:n;
+    // Show each reply as it lands rather than all at the end.
+    if(runs>shown&&runs<want){shown=runs;busy=false;open(th).then(function(){busy=true;thinking(AgentName()+" and the others are still going…")})}
+    if((rt.known&&runs>=want)||Date.now()-t0>120000){busy=false;open(th);return}
+    setTimeout(tick,1500)}).catch(function(){busy=false})})()}
 function ask(){var q=$("text").value.trim();if(!cur||!q||busy)return;busy=true;note("");
   $("text").value="";grow();var el=document.createElement("div");el.className="entry q";
   el.innerHTML='<div class="av you">'+esc(initials(me?me.name:"you"))+'</div><div class="c"><div class="meta"><span class="auth">'+esc(me?me.name:"you")+'</span><span class="tag">asked</span></div><div class="body">'+body(q)+'</div></div>';
@@ -906,12 +910,7 @@ function thinkingAs(pid){var p=team.filter(function(x){return x.id===pid})[0];va
   var av=th.querySelector(".av");av.textContent=initials(p.name);av.style.background=hueOf(p.id);th.querySelector(".lbl").textContent=p.name+" is working…"}
 function loadTeam(){return api("/app/api/agents").then(function(d){team=d.agents||[];return team})}
 /* who can be asked in this channel: the main agent and the members added here */
-function drawWho(){var w=$("who");if(!w)return;var opts=[{id:"",name:AgentName()}].concat(team.filter(function(p){return here.indexOf(p.id)>=0}));
-  if(target&&!opts.some(function(o){return o.id===target}))target="";
-  w.hidden=opts.length<2||mode!=="ask";
-  w.innerHTML=opts.map(function(o){return '<option value="'+esc(o.id)+'"'+(o.id===target?" selected":"")+'>'+esc(o.name)+'</option>'}).join("");
-  var nm=target?(team.filter(function(p){return p.id===target})[0]||{}).name:agentName();
-  if(view==="chan"&&mode==="ask"){var tt=threadOf(cur);$("text").placeholder=tt.is_project?"Ask "+nm+" across all "+(tt.children||0)+" channels in "+tt.title+"…":"Ask "+nm+" about #"+String(tt.title||"this channel").replace(/…$/,"")+"…"}}
+function drawWho(){drawMode()}
 
 /* The team: more than one agent, each with its own manner and expertise. */
 var PRESETS=[
@@ -1489,8 +1488,7 @@ $("scrim").onclick=function(){drawer(false)};
 $("send").onclick=send;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("linksbtn").onclick=linksSheet;$("more").onclick=moreSheet;
 $("new").onclick=newChooser;$("gear").onclick=settings;$("jump").onclick=openPal;$("agentcard").onclick=nameSheet;$("schedbtn").onclick=function(){scheduleSheet(cur)};
 each(".navi[data-view]",function(b){b.onclick=function(){go(b.getAttribute("data-view"))}});
-each(".seg button",function(b){b.onclick=function(){mode=b.getAttribute("data-mode");drawMode();drawWho();$("text").focus()}});
-$("who").onchange=function(){target=this.value;drawWho();$("text").focus()};
+
 each(".tabs button",function(b){b.onclick=function(){tab=b.getAttribute("data-tab");open(cur)}});
 $("text").oninput=function(){grow();mentionPop()};
 $("avs").onclick=membersSheet;
@@ -1567,8 +1565,7 @@ func appShell(extra string) string {
           <div class="composer"><div class="cbox">
             <textarea id="text" rows="1" placeholder="Ask your agent…"></textarea>
             <div class="crow">
-              <div class="seg" role="group" aria-label="Send as"><button data-mode="note" aria-pressed="true">Message</button><button data-mode="ask" id="mode-ask" aria-pressed="false">Ask agent</button></div>
-              <select class="who" id="who" hidden aria-label="Who to ask"></select>
+              <span class="chint" id="chint">@ to ask one agent</span>
               <button class="chip" id="schedbtn" title="Schedule a review">` + clockIcon + `<span class="lbl">Schedule</span></button>
               <span class="model" id="model"></span>
               <button class="send" id="send" disabled aria-label="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>

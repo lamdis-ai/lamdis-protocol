@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
@@ -84,6 +85,9 @@ type App struct {
 	// the one in the request. A sign-in has to come back to exactly what
 	// was registered, so it cannot be guessed per request.
 	PublicBase string
+	// routed remembers how many agents were picked to answer a message, so
+	// the page can stop waiting once they have.
+	routed sync.Map
 	// SyncBase is the address other nodes reach this one at, which is not
 	// always the address a person browses to.
 	SyncBase string
@@ -143,6 +147,13 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /app/api/today", a.owner(a.handleToday))
 	mux.HandleFunc("GET /app/api/thread/{id}", a.owner(a.handleThread))
 	mux.HandleFunc("POST /app/api/post", a.owner(a.handlePost))
+	mux.HandleFunc("GET /app/api/routed/{entry}", a.owner(func(w http.ResponseWriter, r *http.Request) {
+		if v, ok := a.routed.Load(r.PathValue("entry")); ok {
+			writeJSON(w, map[string]any{"known": true, "n": v})
+			return
+		}
+		writeJSON(w, map[string]any{"known": false})
+	}))
 	mux.HandleFunc("POST /app/api/chat", a.owner(a.handleChat))
 	mux.HandleFunc("GET /app/api/thread/{id}/brief", a.owner(a.handleBriefGet))
 	mux.HandleFunc("POST /app/api/thread/{id}/brief", a.owner(a.handleBriefSet))
@@ -508,7 +519,7 @@ func (a *App) handlePost(w http.ResponseWriter, r *http.Request) {
 	if lane == protolog.LaneContent {
 		responders = a.replyAsTheySeeFit(in.Thread, e.ID)
 	}
-	writeJSON(w, map[string]any{"id": e.ID, "lane": string(lane), "responders": responders})
+	writeJSON(w, map[string]any{"id": e.ID, "lane": string(lane), "responders": responders, "entry": e.ID})
 }
 
 // --- sharing ------------------------------------------------------------
@@ -805,32 +816,46 @@ func (a *App) replyAsTheySeeFit(thread, entry string) int {
 			alone = false
 		}
 	}
-	var who []string
+	var speakers []agent.Speaker
 	if !b.MainQuiet {
-		who = append(who, "")
+		speakers = append(speakers, agent.Speaker{ID: "", Name: a.displayName(a.AgentSelf), About: "the person's main agent; knows all their channels"})
 	}
 	for _, pid := range b.Chime {
-		if cfg.PersonaByID(pid) != nil && len(who) < 4 {
-			who = append(who, pid)
+		if p := cfg.PersonaByID(pid); p != nil && len(speakers) < 5 {
+			speakers = append(speakers, agent.Speaker{ID: p.ID, Name: p.Name, About: p.About})
 		}
 	}
-	if len(who) == 0 {
+	if len(speakers) == 0 {
 		return 0
 	}
-	// The scheduler must not pick this message up again on its next round.
-	if a.Scheduler != nil {
-		a.Scheduler.Consume(context.Background(), thread)
+	text := ""
+	if e := tl.Get(entry); e != nil {
+		var body struct {
+			Text string `json:"text"`
+		}
+		json.Unmarshal(e.Body, &body)
+		text = body.Text
 	}
+	// Claimed now, so the scheduler's next round leaves it alone.
+	if a.Scheduler != nil {
+		a.Scheduler.Claim(context.Background(), thread, entry)
+	}
+	direct := alone && !b.MainQuiet
 	go func() {
+		ctx, cancel := runCtx()
+		who := a.Runner.Route(ctx, cfg, text, speakers, direct)
+		cancel()
+		// One after another: each sees what the one before said.
 		for _, pid := range who {
 			ctx, cancel := runCtx()
-			a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerMessage, Thread: thread, Entry: entry, Persona: pid, Direct: pid == "" && alone})
+			a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerMessage, Thread: thread, Entry: entry, Persona: pid, Direct: pid == "" && direct})
 			if a.Scheduler != nil {
 				a.Scheduler.Consume(ctx, thread)
 				a.Scheduler.Push(ctx)
 			}
 			cancel()
 		}
+		a.routed.Store(entry, len(who))
 	}()
-	return len(who)
+	return len(speakers)
 }
