@@ -203,6 +203,9 @@ func (h *Host) Count() int {
 // load opens an account, creating its directory the first time. email is
 // recorded when known so an operator can tell who is who.
 func (h *Host) load(id, email string) (*Account, error) {
+	if _, err := os.Stat(filepath.Join(h.Root, ".deleted", id)); err == nil {
+		return nil, fmt.Errorf("this account was deleted")
+	}
 	h.mu.Lock()
 	if a := h.accounts[id]; a != nil {
 		h.mu.Unlock()
@@ -503,6 +506,8 @@ func (h *Host) Handler() http.Handler {
 	mux.HandleFunc("POST /app/api/passkey/register/finish", h.handlePasskeyRegisterFinish)
 	mux.HandleFunc("POST /app/api/passkey/login/begin", h.handlePasskeyLoginBegin)
 	mux.HandleFunc("POST /app/api/passkey/login/finish", h.handlePasskeyLoginFinish)
+	mux.HandleFunc("POST /app/api/account/delete", h.handleDeleteAccount)
+	mux.HandleFunc("POST /app/api/report", h.handleReport)
 	mux.HandleFunc("GET /app/api/email", h.handleEmail)
 	mux.HandleFunc("POST /app/api/email", h.handleEmail)
 	mux.HandleFunc("POST /app/api/email/confirm", h.handleEmailConfirm)

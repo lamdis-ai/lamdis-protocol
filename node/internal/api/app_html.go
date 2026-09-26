@@ -328,6 +328,9 @@ details.runcard summary:before,details.runcard[open] summary:before{content:none
 .seg button[aria-pressed=true]{background:var(--raise);color:var(--ink)}
 .chip{height:30px;padding:0 .7rem;border-radius:99px;border:1px solid var(--line2);font-size:.78rem;color:var(--ink3);display:inline-flex;align-items:center;gap:.35rem}
 .chip:hover{color:var(--ink);border-color:var(--ink4)}
+.rep{font:500 .7rem var(--sans);color:var(--ink4);margin-left:auto;opacity:0;transition:opacity .15s}
+.entry:hover .rep{opacity:1}
+.rep:hover{color:var(--red)}
 .chint{font-size:.76rem;color:var(--ink4)}
 .crow .model{margin-left:auto;font:.72rem var(--mono);color:var(--ink4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:14rem}
 .send{width:38px;height:38px;border-radius:99px;background:var(--gold);display:grid;place-items:center;flex:none;color:var(--gold-ink);transition:background .14s,opacity .14s}
@@ -702,7 +705,7 @@ function hueOf(id){var h=0;for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))
 function avatar(e){if(isBot(e)){var n=e.who==="your agent"?AgentName():e.who;return '<div class="av bot"'+(e.persona?' style="background:'+hueOf(e.persona)+'"':'')+'>'+esc(initials(n==="Your agent"?"A":n))+'</div>'}
   return '<div class="av '+(e.mine?"you":"peer")+'">'+esc(initials(e.who))+'</div>'}
 function whoName(e){if(e.who==="your agent")return AgentName();return e.who}
-function metaLine(e,extra){return '<div class="meta"><span class="auth">'+esc(whoName(e))+'</span>'+(e.agent?'<span class="tag ai">'+esc(e.agent==="agent"?"agent":e.agent)+'</span>':'')+(extra||'')+'<span>'+esc(when(e.ts))+'</span></div>'}
+function metaLine(e,extra){return '<div class="meta"><span class="auth">'+esc(whoName(e))+'</span>'+(e.agent?'<span class="tag ai">'+esc(e.agent==="agent"?"agent":e.agent)+'</span>':'')+(extra||'')+'<span>'+esc(when(e.ts))+'</span>'+(!e.mine&&!isBot(e)&&e.id?'<button class="rep" data-report="'+esc(e.id)+'" title="Report this message">Report</button>':'')+'</div>'}
 function runCard(e){var d=parseData(e.data);var bad=d.outcome==="error",wait=d.outcome==="waiting";
   var secs=Math.max(1,Math.round((d.duration_ms||0)/1000));
   var trig=String(d.trigger||"");
@@ -776,6 +779,8 @@ function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=fals
     if(t.since_shared)$("nudge-go").onclick=shareSheet;
     each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},$("stream"));
     wireDecisions($("stream"),function(){open(cur)});wireConnect($("stream"));
+    each("[data-report]",function(b){b.onclick=function(){var s=sheet('<header><h2>Report this message</h2><p>It goes to the people who run Lamdis, with the message, so they can act on it. You can also remove this person from the channel in Members.</p></header><section><textarea id="rp-why" rows="3" placeholder="What is wrong with it?"></textarea></section><footer><span class="spacer"></span><button class="btn" data-x>Cancel</button><button class="btn solid" id="rp-go">Send report</button></footer>');
+      s.querySelector("[data-x]").onclick=closeSheet;s.querySelector("#rp-go").onclick=function(){api("/app/api/report",{thread:cur,entry:b.getAttribute("data-report"),reason:s.querySelector("#rp-why").value}).then(function(r){if(r.error){alert(r.error);return}closeSheet();note("Reported. Thank you.")})}}},$("stream"));
     $("feed").scrollTop=$("feed").scrollHeight;if(!busy&&window.innerWidth>860)$("text").focus();
     drawPanel(id)})}
 
@@ -1267,6 +1272,7 @@ function settings(){var m=me||{};var origin=location.origin;
   '<label class="f">Pair with another node</label><div style="display:grid;grid-template-columns:1fr 2fr auto;gap:.5rem"><input id="p-name" placeholder="Name"><input id="p-url" placeholder="https://their-node"><button class="btn" id="p-add">Pair</button></div><div id="p-status"></div>'+
   '<div class="list" id="peers"></div>'+
   (cur?'<label class="f">Grant a paired person or agent access to this channel</label><div style="display:grid;grid-template-columns:2fr 1fr auto;gap:.5rem"><input id="g-to" placeholder="Paired name or identity"><input id="g-scope" value="summary" placeholder="summary | read | contribute"><button class="btn" id="g-go">Grant</button></div><div id="g-status"></div><div class="list" id="grants"></div>':'')+
+  '<div id="c-delwrap" hidden><label class="f">Delete your account</label><p class="hint" style="margin-top:0">Removes your channels, agents, connections and keys from this host for good, and frees your @handle and email. People you shared with keep what they already have.</p><button class="btn danger" id="c-delacct">Delete my account…</button></div>'+
   '<label class="f">Revoke the agent</label><button class="btn danger" id="c-revoke">Revoke its key everywhere</button><p class="hint">Severs it in every channel it acted in and removes its key. Restarting the node mints a fresh one.</p>'+
   '</details></section><footer><span class="spacer"></span><button class="btn" data-x>Done</button></footer>');
   s.querySelector("[data-x]").onclick=closeSheet;
@@ -1278,6 +1284,10 @@ function settings(){var m=me||{};var origin=location.origin;
       s.querySelector("#c-codewrap").hidden=false;hint.textContent="We sent a code to "+r.sent_to+". It works for 15 minutes.";s.querySelector("#c-code").focus()})};
     s.querySelector("#c-emailok").onclick=function(){api("/app/api/email/confirm",{code:s.querySelector("#c-code").value}).then(function(r){if(r.error){hint.textContent=r.error;return}
       s.querySelector("#c-codewrap").hidden=true;hint.textContent="Confirmed: "+r.email+". People can now add you by it."})}}).catch(function(){});
+  api("/app/api/handle").then(function(h){if(h&&h.handle){var dw=s.querySelector("#c-delwrap");dw.hidden=false;var db=s.querySelector("#c-delacct");
+      db.onclick=function(){if(!db.getAttribute("data-armed")){db.setAttribute("data-armed","1");db.textContent="This cannot be undone. Click again to delete everything.";return}
+        db.disabled=true;db.textContent="Deleting…";api("/app/api/account/delete",{confirm:"delete"}).then(function(r){if(r.error){db.textContent=r.error;return}
+          try{localStorage.removeItem("lamdis.guest");localStorage.removeItem("lamdis.session")}catch(e){}location.href=location.pathname})}}}).catch(function(){});
   api("/app/api/handle").then(function(h){if(!h||!h.handle)return;s.querySelector("#c-handlewrap").hidden=false;var hi=s.querySelector("#c-handle");hi.value="@"+h.handle;
     s.querySelector("#c-handlesave").onclick=function(){var b=this;api("/app/api/handle",{handle:hi.value}).then(function(r){if(r.error){alert(r.error);return}hi.value="@"+r.handle;b.textContent="Saved"})}}).catch(function(){});
   s.querySelector("#c-anamesave").onclick=function(){var b=s.querySelector("#c-anamesave");api("/app/api/agent/config",{name:s.querySelector("#c-aname").value}).then(function(r){b.textContent=r.error?"Failed":"Saved";loadAgent().then(drawMode)})};

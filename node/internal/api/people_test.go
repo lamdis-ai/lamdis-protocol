@@ -213,3 +213,24 @@ func TestPeopleByEmail(t *testing.T) {
 		t.Fatalf("mailed link did not join: %s", w.Body.String())
 	}
 }
+
+// Deleting an account removes it and every way of finding it.
+func TestDeletingAnAccount(t *testing.T) {
+	h, _, _, _ := testHost(t)
+	h.Guests, h.MaxAccounts = true, 10
+	hd := h.Handler()
+	me := start(t, h, "")
+	call(hd, "POST", "/app/api/handle", me, `{"handle":"gone.soon"}`)
+	if w := call(hd, "POST", "/app/api/account/delete", me, `{}`); !strings.Contains(w.Body.String(), "confirm") {
+		t.Fatalf("deleted without confirming: %s", w.Body.String())
+	}
+	if w := call(hd, "POST", "/app/api/account/delete", me, `{"confirm":"delete"}`); !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatalf("delete: %s", w.Body.String())
+	}
+	if h.accountByHandle("gone.soon") != nil {
+		t.Fatal("the handle still finds it")
+	}
+	if w := call(hd, "GET", "/app/api/threads", me, ""); strings.Contains(w.Body.String(), "Notes") {
+		t.Fatalf("the old token still opens the account's channels: %s", w.Body.String())
+	}
+}
