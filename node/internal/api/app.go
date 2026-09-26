@@ -790,6 +790,21 @@ func (a *App) replyAsTheySeeFit(thread, entry string) int {
 	}
 	b, _ := agent.LoadBrief(tl, a.Self)
 	cfg, _ := agent.LoadConfig(a.DataDir)
+	// Is anybody else in here? If not, everything written is to the agents.
+	alone := true
+	st := perm.Fold(thread, tl.Entries())
+	for _, e := range tl.Entries() {
+		if e.Kind != protolog.KindGrant {
+			continue
+		}
+		var g struct {
+			Principal string `json:"principal"`
+		}
+		if json.Unmarshal(e.Body, &g) == nil && g.Principal != a.Self && g.Principal != a.AgentSelf &&
+			len(st.EffectiveScopes(g.Principal, a.now())) > 0 && !st.IsAgent(g.Principal) {
+			alone = false
+		}
+	}
 	var who []string
 	if !b.MainQuiet {
 		who = append(who, "")
@@ -809,7 +824,7 @@ func (a *App) replyAsTheySeeFit(thread, entry string) int {
 	go func() {
 		for _, pid := range who {
 			ctx, cancel := runCtx()
-			a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerMessage, Thread: thread, Entry: entry, Persona: pid})
+			a.Runner.Run(ctx, agent.Trigger{Kind: agent.TriggerMessage, Thread: thread, Entry: entry, Persona: pid, Direct: pid == "" && alone})
 			if a.Scheduler != nil {
 				a.Scheduler.Consume(ctx, thread)
 				a.Scheduler.Push(ctx)

@@ -632,6 +632,7 @@ function words(n){return ["No","One","Two","Three","Four","Five","Six","Seven","
 function today(){return Promise.all([loadToday(),threads(),api("/app/api/invites").catch(function(){return {}})]).then(function(r){var d=r[0]||{};var invs=(r[2]&&r[2].invites)||[];if(d.error){$("today").innerHTML='<div class="void"><p>'+esc(d.error)+'</p></div>';return}
   window._tsig=JSON.stringify([d.decisions.length,d.runs.length&&d.runs[0].id,d.schedules.length]);
   var n=d.decisions.length, runs=d.runs, chans={}, spent=0, reads=0;
+  runs=runs.filter(function(x){return parseData(x.data).outcome!=="nothing"});
   runs.forEach(function(x){chans[x.thread]=1;var dd=parseData(x.data);spent+=costOf(dd);reads+=(dd.threads_read||[]).length});
   var nc=Object.keys(chans).length;
   var date=new Date().toLocaleDateString([],{weekday:"long",day:"numeric",month:"long"});
@@ -725,6 +726,7 @@ function render(es){var out=[],prev=null;
     if(tab==="agent"&&!isBot(e))return;
     var key=(isBot(e)?"bot:":"")+e.author;
     var cont=prev&&prev.key===key&&(new Date(e.ts)-new Date(prev.ts))<5*60000&&e.kind!=="agent.decision";
+    if(e.kind==="agent.run"&&tab!=="agent"&&parseData(e.data).outcome==="nothing")return;
     if(e.kind==="agent.run"){out.push('<div class="entry'+(cont?' cont':'')+'">'+avatar(e)+'<div class="c">'+(cont?'':metaLine(e))+runCard(e)+'</div></div>');prev={key:key,ts:e.ts};return}
     if(e.kind==="agent.decision"){var reply=es.filter(function(x){return x.kind==="agent.decision_reply"&&x.replies_to===e.id})[0];
       var inner='<div class="decision"><div style="display:flex;gap:.5rem;align-items:center"><span class="tag call">your call</span><span class="small muted">'+esc(AgentName())+' will not guess on this one</span></div><div class="ask">'+body(e.text)+'</div>';

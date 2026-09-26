@@ -99,6 +99,9 @@ type Trigger struct {
 	// Chime marks a run that should reply only if it has something to add
 	// (someone else's message, heard on the next round).
 	Chime bool
+	// Direct: nobody else is in the channel, so whatever the person wrote
+	// was said to the agents, and the main agent answers it.
+	Direct bool
 }
 
 // Result is what a run produced.
@@ -745,7 +748,7 @@ func (r *Runner) contextFor(ctx context.Context, t Trigger, tl *protolog.ThreadL
 			}
 		}
 		if t.Chime {
-			sb.WriteString(chimePrompt(who, where, t.Entry, trig, r.persona))
+			sb.WriteString(chimePrompt(who, where, t.Entry, trig, r.persona, false))
 		} else if r.persona != nil {
 			sb.WriteString(who + " just wrote" + where + " (entry " + t.Entry + "). You are in this channel to chime in as " + r.persona.Name + ", in your role. If you have something genuinely useful to add from that role, say it in a few sentences. If not, reply NOTHING. Do not repeat what others have said.")
 		} else {
@@ -753,7 +756,7 @@ func (r *Runner) contextFor(ctx context.Context, t Trigger, tl *protolog.ThreadL
 		}
 	case TriggerMessage:
 		who := r.name(r.Person)
-		sb.WriteString(chimePrompt(who, "", t.Entry, trig, r.persona))
+		sb.WriteString(chimePrompt(who, "", t.Entry, trig, r.persona, t.Direct))
 	case TriggerSchedule:
 		sb.WriteString("This is a scheduled run. Follow your standing instructions. If there is nothing to do, reply NOTHING.")
 	case TriggerReflect:
@@ -1311,19 +1314,23 @@ func sharedLink(u string) (string, bool) {
 	return "", false
 }
 
-// chimePrompt asks an agent to speak only if it has something to add: the
-// difference between a colleague in a channel and one who answers every
-// message.
-func chimePrompt(who, where, entry string, trig *protolog.Entry, p *Persona) string {
+// chimePrompt asks an agent to speak when it is spoken to or has something
+// to add, and to keep quiet when the message is plainly for someone else:
+// the difference between a colleague in a channel and one who answers every
+// line, or one who never does.
+func chimePrompt(who, where, entry string, trig *protolog.Entry, p *Persona, direct bool) string {
 	text := ""
 	if trig != nil {
 		text = bodyText(trig)
+	}
+	head := who + " just wrote" + where + " (entry " + entry + "):\n" + text + "\n\n"
+	if direct {
+		return head + "Nobody but you and the other agents is in this channel, so this was said to you. Reply to it directly and naturally, as you would in a chat: answer the question, do what was asked, or respond to the greeting. Keep it short."
 	}
 	role := "one of the agents in this channel"
 	if p != nil {
 		role = p.Name + ", one of the agents in this channel, in your role (" + trunc(p.About, 200) + ")"
 	}
-	return who + " just wrote" + where + " (entry " + entry + "):\n" + text + "\n\n" +
-		"They wrote to the channel, not to you in particular. You are " + role + ". Reply only if you have something genuinely useful: an answer to a question, a fact from the record or the web, a correction, a risk, or doing what they asked for. " +
-		"If it is addressed to a person rather than the agents, is small talk, or needs nothing from you, reply exactly NOTHING. Keep any reply short, and do not repeat what another agent already said."
+	return head + "You are " + role + ". Reply when this is said to the agents (a greeting to everyone, a question to the group, \"you\" or \"guys\", your name) or when you have something genuinely useful to add from your role: an answer, a fact from the record or the web, a correction, a risk, or doing what was asked. " +
+		"Reply exactly NOTHING only when it is clearly meant for another person, or another agent has already said what you would say. Keep any reply short."
 }
