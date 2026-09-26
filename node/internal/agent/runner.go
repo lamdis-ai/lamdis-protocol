@@ -69,6 +69,12 @@ type Runner struct {
 	// of the most expensive model on the market is not a feature. Empty
 	// means no restriction, which is right when the key is their own.
 	AllowedModels []string
+	// SharedOnly says the daily limits exist to protect a host's shared key,
+	// so an account using its own credential is not held to them. On a
+	// laptop they are the person's own safety limits and always apply.
+	SharedOnly bool
+	// Pool is the host-wide ceiling on the shared key, or nil.
+	Pool *Pool
 
 	mu      sync.Mutex
 	mapOnce string // the workspace map, computed once so the prefix is stable
@@ -189,6 +195,12 @@ const maxTurns = 16
 // config, without a restart. Environment wins for the key; the config's
 // model id and URL win over the startup defaults so a person can switch
 // models from Settings and see the change on the next question.
+// limited reports whether the daily limits apply to this account's runs.
+func (r *Runner) limited(cfg Config) bool {
+	own := cfg.OpenRouterKey != "" || cfg.ModelURLKey != "" || cfg.ModelURL != ""
+	return !(r.SharedOnly && own)
+}
+
 func (r *Runner) ModelFor(cfg Config) (Model, string) {
 	base, _ := r.Model.(*OpenRouter)
 	key, name, url := "", r.ModelName, ""
@@ -304,9 +316,15 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	// Budget. Chats are allowed past the run cap so a person is never
 	// silently ignored, but tokens and fetches are hard limits.
 	over := ""
+	limited := r.limited(cfg)
 	r.State.Update(start, func(s *State) {
 		s.Running = t.Thread
-		if s.Tokens >= cfg.MaxTokensPerDay {
+		if !limited {
+			return
+		}
+		if r.Pool.Full(start) {
+			over = "The free tier has had a busy day and is resting until tomorrow; with your own model key in Settings there is no shared limit"
+		} else if s.Tokens >= cfg.MaxTokensPerDay {
 			over = "Today's allowance for thinking is used up. It resets tomorrow; with your own model key in Settings there is no shared limit"
 		} else if t.Kind != TriggerChat && s.Runs >= cfg.MaxRunsPerDay {
 			over = "Today's allowance of runs is used up. It resets tomorrow; with your own model key in Settings there is no shared limit"
@@ -1110,7 +1128,7 @@ func (r *Runner) dispatch(ctx context.Context, t Trigger, tl *protolog.ThreadLog
 		cfg, _ := LoadConfig(r.DataDir)
 		over := false
 		r.State.Update(r.now(), func(st *State) {
-			if st.Fetches+SearchCostFetches > cfg.MaxFetchesPerDay {
+			if r.limited(cfg) && st.Fetches+SearchCostFetches > cfg.MaxFetchesPerDay {
 				over = true
 			} else {
 				st.Fetches += SearchCostFetches
@@ -1267,6 +1285,9 @@ func (r *Runner) record(ctx context.Context, thread string, rec *runRec, start t
 	id, err := r.append(ctx, thread, protolog.Draft{Kind: KindRun, Lane: protolog.LaneContent, Refs: refs, Body: body})
 	if err != nil {
 		r.logf("agent: could not record run: %v", err)
+	}
+	if cfg, _ := LoadConfig(r.DataDir); r.limited(cfg) {
+		r.Pool.Add(r.now(), rec.Tokens["prompt"]+rec.Tokens["completion"])
 	}
 	r.State.Update(r.now(), func(s *State) {
 		s.Runs++

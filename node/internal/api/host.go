@@ -56,6 +56,8 @@ type Host struct {
 	AccountRunsPerDay    int
 	AccountTokensPerDay  int
 	AccountFetchesPerDay int
+	// Pool caps what all accounts on the shared key spend in a day.
+	Pool *agent.Pool
 	// SignIn tells the page where to send people to prove who they are.
 	SignIn SignIn
 	// Starter mints a capped key for each new account while the ceiling
@@ -253,9 +255,9 @@ func (h *Host) load(id, email string) (*Account, error) {
 	state := agent.LoadState(dir)
 	runner := &agent.Runner{Store: st, PersonKey: key, Person: self, AgentKey: agentKey, Agent: agentPID,
 		Model: h.sharedModel(), ModelName: h.Model, DataDir: dir, State: state, NoCommands: true,
-		AllowedModels: h.AllowedModels,
-		Names:         func(p string) string { return "" },
-		Logf:          func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
+		AllowedModels: h.AllowedModels, SharedOnly: h.SharedKey != "", Pool: h.Pool,
+		Names: func(p string) string { return "" },
+		Logf:  func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched := &agent.Scheduler{Runner: runner, State: state,
 		Logf: func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched.Sync = func(ctx context.Context) error { return hostSync(ctx, dir, st, key, self, agentPID) }
@@ -300,8 +302,10 @@ func (h *Host) load(id, email string) (*Account, error) {
 	h.accounts[id] = acct
 	h.mu.Unlock()
 
+	// Limits follow the host's current settings, so raising them reaches
+	// people who signed up before the change, not only new arrivals.
+	h.budget(dir)
 	if fresh {
-		h.budget(dir)
 		h.welcome(acct)
 	}
 	if h.ctx != nil {
@@ -310,7 +314,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	return acct, nil
 }
 
-// budget writes the limits a new account lives within. They are in the
+// budget writes the limits an account lives within. They are in the
 // account's own config so the agent enforces them exactly as it does on
 // somebody's laptop, and the interface never offers to raise them.
 func (h *Host) budget(dir string) {

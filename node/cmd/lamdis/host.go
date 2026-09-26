@@ -63,13 +63,16 @@ func cmdHost(ctx context.Context, args []string) error {
 		// menu of cheap models and a small daily allowance. Bring your own
 		// key and both restrictions fall away.
 		AllowedModels:        strings.Fields(envOr("LAMDIS_ALLOWED_MODELS", model+" openai/gpt-5.6-mini")),
-		AccountRunsPerDay:    envInt("LAMDIS_ACCOUNT_RUNS", 25),
-		AccountTokensPerDay:  envInt("LAMDIS_ACCOUNT_TOKENS", 60000),
-		AccountFetchesPerDay: envInt("LAMDIS_ACCOUNT_FETCHES", 20),
-		SharedKey:            strings.TrimSpace(os.Getenv("LAMDIS_HOST_MODEL_KEY")),
-		StarterCap:           *starterCap,
-		KeyCeiling:           ceiling(),
-		Logf:                 func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+		AccountRunsPerDay:    envInt("LAMDIS_ACCOUNT_RUNS", 150),
+		AccountTokensPerDay:  envInt("LAMDIS_ACCOUNT_TOKENS", 1_000_000),
+		AccountFetchesPerDay: envInt("LAMDIS_ACCOUNT_FETCHES", 60),
+		// Everyone on the shared key together: about $5 a day at the
+		// default model's prices.
+		Pool:       &agent.Pool{Tokens: envInt("LAMDIS_HOST_TOKENS", 20_000_000)},
+		SharedKey:  strings.TrimSpace(os.Getenv("LAMDIS_HOST_MODEL_KEY")),
+		StarterCap: *starterCap,
+		KeyCeiling: ceiling(),
+		Logf:       func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 	}
 	// Starter keys are minted only if a management key is present, and only
 	// while the total committed stays under the ceiling.
@@ -101,8 +104,8 @@ func cmdHost(ctx context.Context, args []string) error {
 	case os.Getenv("LAMDIS_HOST_MODEL_KEY") != "":
 		fmt.Printf("model key  one shared key for every account; cap it\n")
 		fmt.Printf("per account %d runs, %d tokens, %d fetches a day, and only %s\n",
-			envInt("LAMDIS_ACCOUNT_RUNS", 25), envInt("LAMDIS_ACCOUNT_TOKENS", 60000),
-			envInt("LAMDIS_ACCOUNT_FETCHES", 20), envOr("LAMDIS_ALLOWED_MODELS", model+", openai/gpt-5.6-mini"))
+			envInt("LAMDIS_ACCOUNT_RUNS", 150), envInt("LAMDIS_ACCOUNT_TOKENS", 1_000_000),
+			envInt("LAMDIS_ACCOUNT_FETCHES", 60), envOr("LAMDIS_ALLOWED_MODELS", model+", openai/gpt-5.6-mini"))
 	default:
 		fmt.Printf("starter    off; new accounts bring their own key or write in\n")
 	}

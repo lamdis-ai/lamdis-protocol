@@ -81,6 +81,9 @@ func (r *Runner) Route(ctx context.Context, cfg Config, text string, speakers []
 	}
 	m, usage, err := model.Complete(ctx, msgs, nil)
 	r.charge(usage)
+	if r.limited(cfg) {
+		r.Pool.Add(r.now(), usage.Prompt+usage.Completion)
+	}
 	if err != nil {
 		return fallback
 	}
