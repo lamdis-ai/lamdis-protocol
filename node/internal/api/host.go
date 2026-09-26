@@ -239,7 +239,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	} else if raw, err := os.ReadFile(filepath.Join(dir, "email")); err == nil {
 		email = strings.TrimSpace(string(raw))
 	}
-	st, err := store.OpenSQLite(filepath.Join(dir, "lamdis.db"))
+	st, err := store.OpenSQLiteShared(filepath.Join(dir, "lamdis.db"))
 	if err != nil {
 		return nil, err
 	}

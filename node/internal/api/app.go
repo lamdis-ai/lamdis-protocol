@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -296,6 +297,7 @@ func (a *App) handleThreads(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ids, err := a.Store.Threads(ctx)
 	if err != nil {
+		log.Printf("app: listing channels for %s: %v", a.DataDir, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

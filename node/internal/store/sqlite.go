@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -38,8 +39,23 @@ type cachedLog struct {
 }
 
 func OpenSQLite(path string) (*SQLite, error) {
+	return openSQLite(path, "WAL", 5000)
+}
+
+// OpenSQLiteShared opens a database that more than one machine may open at
+// once, such as a hosted account on a network filesystem while a deploy has
+// the old and new servers both running. WAL mode relies on shared memory,
+// which does not cross machines, so two writers can corrupt each other; the
+// rollback journal uses file locks, which a network filesystem does enforce.
+// Opening an existing WAL database this way folds the log back in and
+// switches it.
+func OpenSQLiteShared(path string) (*SQLite, error) {
+	return openSQLite(path, "DELETE", 20000)
+}
+
+func openSQLite(path, journal string, busyMS int) (*SQLite, error) {
 	db, err := driver.Open(
-		"file:"+path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)",
+		"file:"+path+"?_pragma=journal_mode("+journal+")&_pragma=busy_timeout("+strconv.Itoa(busyMS)+")&_pragma=foreign_keys(1)",
 		fts5.Register)
 	if err != nil {
 		return nil, err

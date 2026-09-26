@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"sort"
 	"time"
@@ -69,6 +70,7 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ids, err := a.Store.Threads(ctx)
 	if err != nil {
+		log.Printf("app: today for %s: %v", a.DataDir, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
