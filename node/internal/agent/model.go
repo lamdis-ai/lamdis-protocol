@@ -26,6 +26,8 @@ type Message struct {
 	Content    string     `json:"content"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
+	// parts are attachments sent alongside Content (see attach.go).
+	parts []part
 }
 
 // ToolCall is a model's request to call a tool.

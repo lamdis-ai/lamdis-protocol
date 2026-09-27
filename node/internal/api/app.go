@@ -62,6 +62,9 @@ type App struct {
 	Runner    *agent.Runner
 	Scheduler *agent.Scheduler
 	AgentSelf string
+	// FileURL is where an attachment is served for everyone in its channel;
+	// nil serves it on the owner's own route.
+	FileURL func(id string) string
 	// Auth, when set, replaces the local-token check entirely: whoever calls
 	// has already been identified upstream. The hosted front door uses this
 	// after verifying an account token and routing to that person's node.
@@ -147,6 +150,8 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /app/api/threads", a.owner(a.handleThreads))
 	mux.HandleFunc("GET /app/api/today", a.owner(a.handleToday))
 	a.registerBrowser(mux)
+	mux.HandleFunc("POST /app/api/upload", a.owner(a.handleUpload))
+	mux.HandleFunc("GET /app/api/file/{id}", a.owner(a.handleFile))
 	mux.HandleFunc("GET /app/api/thread/{id}", a.owner(a.handleThread))
 	mux.HandleFunc("POST /app/api/post", a.owner(a.handlePost))
 	mux.HandleFunc("GET /app/api/routed/{entry}", a.owner(func(w http.ResponseWriter, r *http.Request) {
@@ -378,6 +383,8 @@ type appEntry struct {
 	Data      json.RawMessage `json:"data,omitempty"`
 	// Persona is the team member who wrote this, when not the main agent.
 	Persona string `json:"persona,omitempty"`
+	// Files attached to a message.
+	Files []FileRef `json:"files,omitempty"`
 }
 
 // entriesFor reads a thread through one principal's eyes.
@@ -407,14 +414,15 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 			continue
 		}
 		var b struct {
-			Text    string   `json:"text"`
-			Title   string   `json:"title"`
-			Agent   string   `json:"agent"`
-			Summary string   `json:"summary"`
-			Options []string `json:"options"`
-			Choice  string   `json:"choice"`
-			Persona string   `json:"persona"`
-			PID     string   `json:"persona_id"`
+			Text    string    `json:"text"`
+			Title   string    `json:"title"`
+			Agent   string    `json:"agent"`
+			Summary string    `json:"summary"`
+			Options []string  `json:"options"`
+			Choice  string    `json:"choice"`
+			Persona string    `json:"persona"`
+			PID     string    `json:"persona_id"`
+			Files   []FileRef `json:"files"`
 		}
 		json.Unmarshal(e.Body, &b)
 		txt := b.Text
@@ -433,7 +441,7 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 		ae := appEntry{
 			ID: e.ID, Lane: string(e.Lane), Kind: e.Kind, Author: e.Author,
 			Who: a.displayName(e.Author), Mine: e.Author == a.Self || e.OnBehalfOf == a.Self,
-			TS: e.TS, Text: txt, Agent: b.Agent, OnBehalf: e.OnBehalfOf, Options: b.Options,
+			TS: e.TS, Text: txt, Agent: b.Agent, OnBehalf: e.OnBehalfOf, Options: b.Options, Files: b.Files,
 		}
 		if e.OnBehalfOf != "" {
 			ae.Agent = "agent"
@@ -454,6 +462,7 @@ func (a *App) entriesFor(ctx context.Context, id string, lanes []protolog.Lane) 
 		switch e.Kind {
 		case agent.KindDecision:
 			ae.Resolved = answered[e.ID]
+			ae.Data = e.Body // a browser hand-off rides in the body
 		case agent.KindConnect:
 			ae.Resolved = answered[e.ID]
 			ae.Data = e.Body
@@ -478,11 +487,17 @@ func (a *App) handleThread(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handlePost(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Thread string `json:"thread"`
-		Text   string `json:"text"`
-		Lane   string `json:"lane"`
+		Thread string   `json:"thread"`
+		Text   string   `json:"text"`
+		Lane   string   `json:"lane"`
+		Files  []string `json:"files"`
 	}
-	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in) != nil || strings.TrimSpace(in.Text) == "" {
+	if json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in) != nil {
+		http.Error(w, "thread and text are required", http.StatusBadRequest)
+		return
+	}
+	files := a.fileRefs(in.Files)
+	if strings.TrimSpace(in.Text) == "" && len(files) == 0 {
 		http.Error(w, "thread and text are required", http.StatusBadRequest)
 		return
 	}
@@ -508,8 +523,11 @@ func (a *App) handlePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	e, err := author.Append(protolog.Draft{Kind: kind, Lane: lane,
-		Body: map[string]any{"text": strings.TrimSpace(in.Text)}})
+	postBody := map[string]any{"text": strings.TrimSpace(in.Text)}
+	if len(files) > 0 {
+		postBody["files"] = files
+	}
+	e, err := author.Append(protolog.Draft{Kind: kind, Lane: lane, Body: postBody})
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

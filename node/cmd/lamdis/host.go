@@ -62,7 +62,7 @@ func cmdHost(ctx context.Context, args []string) error {
 		// Somebody spending a credential they did not supply gets a short
 		// menu of cheap models and a small daily allowance. Bring your own
 		// key and both restrictions fall away.
-		AllowedModels:        strings.Fields(envOr("LAMDIS_ALLOWED_MODELS", model+" openai/gpt-5.6-mini")),
+		AllowedModels:        strings.Fields(envOr("LAMDIS_ALLOWED_MODELS", model+" openai/gpt-5.6-luna-pro")),
 		AccountRunsPerDay:    envInt("LAMDIS_ACCOUNT_RUNS", 150),
 		AccountTokensPerDay:  envInt("LAMDIS_ACCOUNT_TOKENS", 1_000_000),
 		AccountFetchesPerDay: envInt("LAMDIS_ACCOUNT_FETCHES", 200),
@@ -106,7 +106,7 @@ func cmdHost(ctx context.Context, args []string) error {
 		fmt.Printf("model key  one shared key for every account; cap it\n")
 		fmt.Printf("per account %d runs, %d tokens, %d fetches a day, and only %s\n",
 			envInt("LAMDIS_ACCOUNT_RUNS", 150), envInt("LAMDIS_ACCOUNT_TOKENS", 1_000_000),
-			envInt("LAMDIS_ACCOUNT_FETCHES", 200), envOr("LAMDIS_ALLOWED_MODELS", model+", openai/gpt-5.6-mini"))
+			envInt("LAMDIS_ACCOUNT_FETCHES", 200), envOr("LAMDIS_ALLOWED_MODELS", model+", openai/gpt-5.6-luna-pro"))
 	default:
 		fmt.Printf("starter    off; new accounts bring their own key or write in\n")
 	}

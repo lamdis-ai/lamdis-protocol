@@ -564,7 +564,7 @@ func (a *App) handleModels(w http.ResponseWriter, r *http.Request) {
 func pricedSubset(ids []string) []map[string]any {
 	known := map[string][2]float64{
 		"openai/gpt-5.6-luna":        {0.20, 1.20},
-		"openai/gpt-5.6-mini":        {0.25, 2.00},
+		"openai/gpt-5.6-luna-pro":    {0.20, 1.20},
 		"anthropic/claude-haiku-4.5": {1.00, 5.00},
 		"google/gemini-2.5-flash":    {0.30, 2.50},
 	}

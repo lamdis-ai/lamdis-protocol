@@ -339,6 +339,18 @@ details.runcard summary:before,details.runcard[open] summary:before{content:none
 
 .composer{padding:.6rem 2rem 1.3rem;flex:none}
 .cbox{max-width:var(--measure);margin:0 auto;border:2px solid var(--ink);background:var(--panel);border-radius:22px;box-shadow:0 5px 0 var(--ink);transition:transform .15s,box-shadow .15s}
+.atts{display:flex;flex-wrap:wrap;gap:.45rem;padding:.7rem .8rem 0}
+.att{display:flex;align-items:center;gap:.5rem;max-width:15rem;padding:.3rem .35rem .3rem .3rem;border:1px solid var(--line2);border-radius:12px;background:var(--bg);font-size:.8rem}
+.att.bad{border-color:var(--red);color:var(--red)}
+.att img,.att .ext,.fchip .ext{width:34px;height:34px;border-radius:8px;object-fit:cover;flex:none}
+.att .ext,.fchip .ext{display:grid;place-items:center;background:var(--gold-glow);color:var(--gold-text);font:700 .62rem var(--mono)}
+.att .nm,.fchip .nm{display:flex;flex-direction:column;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att small,.fchip small{color:var(--ink3);font-size:.7rem}
+.att button{border:none;background:none;color:var(--ink3);font-size:1rem;padding:0 .2rem;cursor:pointer}
+.files{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.45rem}
+.fimg img{display:block;max-width:min(320px,70vw);max-height:260px;border-radius:12px;border:1px solid var(--line)}
+.fchip{display:flex;align-items:center;gap:.55rem;max-width:18rem;padding:.35rem .7rem .35rem .35rem;border:1px solid var(--line2);border-radius:12px;background:var(--panel);text-decoration:none;color:var(--ink);font-size:.84rem}
+.fchip:hover{border-color:var(--gold-dim)}
 .cbox:focus-within{transform:translateY(-1px);box-shadow:0 7px 0 var(--ink)}
 .cbox textarea:focus-visible{outline:none}
 .cbox textarea{background:none;border:none;resize:none;padding:.95rem 1.1rem .35rem;font-size:.98rem;line-height:1.55;min-height:3rem;max-height:14rem;border-radius:0}
@@ -808,7 +820,7 @@ function render(es){var out=[],prev=null;
       out.push('<div class="entry">'+avatar(e)+'<div class="c">'+metaLine(e)+inner+'</div></div></div>');prev={key:key,ts:e.ts};return}
     var sum=e.lane==="summary",q=e.kind==="chat.question";
     var extra=(sum?'<span class="tag call">what you shared</span>':'')+(q?'<span class="tag">asked</span>':'');
-    out.push('<div class="entry'+(sum?' summary':'')+(q?' q':'')+(cont&&!extra?' cont':'')+'">'+avatar(e)+'<div class="c">'+(cont&&!extra?'':metaLine(e,extra))+'<div class="body">'+body(e.text)+'</div></div></div>');
+    out.push('<div class="entry'+(sum?' summary':'')+(q?' q':'')+(cont&&!extra?' cont':'')+'">'+avatar(e)+'<div class="c">'+(cont&&!extra?'':metaLine(e,extra))+'<div class="body">'+body(e.text)+'</div>'+filesHTML(e.files)+'</div></div>');
     prev={key:key,ts:e.ts}});
   return out.join("")}
 function thinking(t){
@@ -848,6 +860,7 @@ function open(id){if(id!==cur){here=[];target=""}cur=id;$("share").disabled=fals
       '<p>Write what you know, or ask '+esc(agentName())+' something. It answers from what is in here and in your other channels.</p>'+
       '<button class="btn" id="void-agent">Let it work here while you are away</button></div>');
     if($("void-agent"))$("void-agent").onclick=agentSheet;
+    hydrateFiles($("stream"));
     if(t.since_shared)$("nudge-go").onclick=shareSheet;
     each("[data-go]",function(a){a.onclick=function(){go("chan",a.getAttribute("data-go"))}},$("stream"));
     wireDecisions($("stream"),function(){open(cur)});wireConnect($("stream"));
@@ -952,19 +965,40 @@ function wireConnect(root){each("[data-connect]",function(card){var go=card.quer
   card.querySelector("[data-cc-no]").onclick=function(){api("/app/api/connect",{id:id,ok:false}).then(function(){loadToday();if(view==="chan")open(cur);else today()})}},root)}
 
 /* ---- the composer ---- */
-function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px";$("send").disabled=!t.value.trim()}
+function grow(){var t=$("text");t.style.height="auto";t.style.height=Math.min(t.scrollHeight,224)+"px";
+  var ready=pending.length&&pending.every(function(p){return p.id});$("send").disabled=!(t.value.trim()||ready)||pending.some(function(p){return !p.id&&!p.error})}
 function drawMode(){mode="note";
   if(cur&&view==="chan"){var t=threadOf(cur);var nm=String(t.title||"this channel").replace(/…$/,"");
     var narrow=window.innerWidth<700;
     $("text").placeholder=t.is_project?"Message "+nm+(narrow?"":" — the agents here see every channel in it"):"Message #"+nm+(narrow?"":" — the agents here reply when they have something to add")}}
 function mentionsAgent(t){var n=agentName()==="your agent"?"agent":agentName();var re=new RegExp("(^|\\s)@("+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"|agent)\\b","i");return re.test(t)}
-function send(){var t=$("text").value.trim();if(!cur||!t)return;
+function send(){var t=$("text").value.trim();if(!cur)return;if(pending.length)return post();if(!t)return;
   var at=team.filter(function(p){return new RegExp("(^|\\s)@"+p.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i").test(t)})[0];if(at){target=at.id;return ask()}
   if(mentionsAgent(t)){if(me&&!me.can_ask){note(AgentName()+" is off until a model key is set.","warn");return}target="";ask();return}
   post()}
-function post(){var t=$("text").value.trim();if(!cur||!t)return;var th=cur;
-  api("/app/api/post",{thread:cur,text:t,lane:"content"}).then(function(d){if(d.error){note(d.error,"bad");return}
-    $("text").value="";grow();note("");open(cur).then(function(){if(d.responders)watchReplies(th,d.responders,d.entry)})})}
+function post(){var t=$("text").value.trim();var files=pending.filter(function(p){return p.id}).map(function(p){return p.id});if(!cur||(!t&&!files.length))return;var th=cur;
+  api("/app/api/post",{thread:cur,text:t,lane:"content",files:files}).then(function(d){if(d.error){note(d.error,"bad");return}
+    $("text").value="";clearAtts();grow();note("");open(cur).then(function(){if(d.responders)watchReplies(th,d.responders,d.entry)})})}
+/* attachments: pick, paste or drop; each uploads at once and shows as a chip */
+var pending=[];
+function sizeWords(n){return n>=1048576?(n/1048576).toFixed(1)+" MB":n>=1024?Math.round(n/1024)+" KB":n+" bytes"}
+function addFiles(list){Array.prototype.forEach.call(list||[],function(f){if(pending.length>=10)return;
+  var p={name:f.name||"pasted image",type:f.type,size:f.size,local:/^image\//.test(f.type)?URL.createObjectURL(f):""};pending.push(p);drawAtts();
+  if(f.size>20*1048576){p.error="over 20 MB";drawAtts();return}
+  fetch("/app/api/upload?name="+encodeURIComponent(p.name),{method:"POST",body:f}).then(function(r){return r.json()}).then(function(d){if(d.error){p.error=d.error}else{p.id=d.id;p.url=d.url}drawAtts()}).catch(function(){p.error="upload failed";drawAtts()})})}
+function drawAtts(){var el=$("atts");el.hidden=!pending.length;
+  el.innerHTML=pending.map(function(p,i){return '<span class="att'+(p.error?' bad':'')+'">'+(p.local?'<img src="'+esc(p.local)+'" alt="">':'<span class="ext">'+esc((p.name.split(".").pop()||"file").slice(0,4).toUpperCase())+'</span>')+
+    '<span class="nm">'+esc(p.name)+'<small>'+(p.error?esc(p.error):p.id?sizeWords(p.size):"uploading…")+'</small></span><button data-unatt="'+i+'" aria-label="Remove">×</button></span>'}).join("");
+  each("[data-unatt]",function(b){b.onclick=function(){var p=pending.splice(+b.getAttribute("data-unatt"),1)[0];if(p&&p.local)URL.revokeObjectURL(p.local);drawAtts()}},el);grow()}
+function clearAtts(){pending.forEach(function(p){if(p.local)URL.revokeObjectURL(p.local)});pending=[];drawAtts()}
+function filesHTML(files){if(!files||!files.length)return "";
+  return '<div class="files">'+files.map(function(f){var own=f.url.indexOf("/f/")!==0;
+    if(/^image\//.test(f.type))return '<a class="fimg" href="'+esc(f.url)+'" target="_blank" rel="noopener"'+(own?' data-own="1"':'')+'><img '+(own?'data-src':'src')+'="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"></a>';
+    return '<a class="fchip" href="'+esc(f.url)+'" target="_blank" rel="noopener"'+(own?' data-own="1"':'')+'><span class="ext">'+esc((f.name.split(".").pop()||"file").slice(0,4).toUpperCase())+'</span><span class="nm">'+esc(f.name)+'<small>'+sizeWords(f.size)+'</small></span></a>'}).join("")+'</div>'}
+// On a laptop the owner's route wants the local token, which an <img> cannot send.
+function hydrateFiles(root){each("img[data-src]",function(i){var u=i.getAttribute("data-src");i.removeAttribute("data-src");fetchBlob(u).then(function(b){if(b)i.src=b})},root);
+  each("a[data-own]",function(a){a.onclick=function(ev){ev.preventDefault();fetch(a.getAttribute("href")).then(function(r){return r.blob()}).then(function(b){window.open(URL.createObjectURL(b),"_blank")})}},root)}
+
 /* After a message, the agents here are deciding whether to reply: say so,
    and look often until they have, rather than leaving a silence. */
 function watchReplies(th,n,entry){if(cur!==th)return;var before=entries.length,shown=0;thinking(n>1?"The agents here are reading…":AgentName()+" is reading…");
@@ -1568,6 +1602,9 @@ function settings(){var m=me||{};var origin=location.origin;
 function drawer(o){var sh=$("shell");if(sh)sh.classList.toggle("open",!!o)}
 each("[data-menu]",function(b){b.onclick=function(){$("shell").classList.toggle("open")}});
 $("scrim").onclick=function(){drawer(false)};
+$("attbtn").onclick=function(){$("attin").click()};$("attin").onchange=function(){addFiles(this.files);this.value=""};
+$("text").addEventListener("paste",function(e){var fs=[];Array.prototype.forEach.call((e.clipboardData&&e.clipboardData.items)||[],function(it){if(it.kind==="file"){var f=it.getAsFile();if(f)fs.push(f)}});if(fs.length){e.preventDefault();addFiles(fs)}});
+["dragover","drop"].forEach(function(ev){$("cbox").addEventListener(ev,function(e){if(!e.dataTransfer||!Array.prototype.some.call(e.dataTransfer.types||[],function(t){return t==="Files"}))return;e.preventDefault();if(ev==="drop")addFiles(e.dataTransfer.files)})});
 $("send").onclick=send;$("share").onclick=shareSheet;$("agentbtn").onclick=agentSheet;$("linksbtn").onclick=linksSheet;$("more").onclick=moreSheet;
 $("new").onclick=newChooser;$("gear").onclick=settings;$("jump").onclick=openPal;$("agentcard").onclick=nameSheet;$("schedbtn").onclick=function(){scheduleSheet(cur)};
 each(".navi[data-view]",function(b){b.onclick=function(){go(b.getAttribute("data-view"))}});
@@ -1645,10 +1682,12 @@ func appShell(extra string) string {
       <div class="body2">
         <div class="convo">
           <div class="feed" id="feed"><div class="stream" id="stream"></div></div>
-          <div class="composer"><div class="cbox">
+          <div class="composer"><div class="cbox" id="cbox">
+            <div class="atts" id="atts" hidden></div>
             <textarea id="text" rows="1" placeholder="Ask your agent…"></textarea>
             <div class="crow">
               <span class="chint" id="chint">@ to ask one agent</span>
+              <button class="chip" id="attbtn" title="Attach files or images">` + clipIcon + `<span class="lbl">Attach</span></button><input type="file" id="attin" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,.md,.csv,.json,.txt" hidden>
               <button class="chip" id="schedbtn" title="Schedule a review">` + clockIcon + `<span class="lbl">Schedule</span></button>
               <span class="model" id="model"></span>
               <button class="send" id="send" disabled aria-label="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
@@ -1661,6 +1700,8 @@ func appShell(extra string) string {
   </main>
 </div>`
 }
+
+const clipIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 01-7.1-7.1l8.6-8.6a3.3 3.3 0 014.7 4.7l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l8-8"/></svg>`
 
 const railMark = `<svg width="12" height="26" viewBox="1 4.6 14 30.4" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5.6L10 8L6 10.4L2 8Z M10 23.9L14 26.3L10 28.7L6 26.3Z" fill="#FFB22E"/><path d="M2 8L2 13.3 M2 8L6 5.6 M2 8L6 10.4 M2 13.3L2 18.6 M2 13.3L6 15.7 M2 18.6L2 23.9 M2 18.6L6 21 M2 23.9L2 29.2 M2 23.9L6 26.3 M2 29.2L6 31.6 M6 5.6L10 8 M6 10.4L6 15.7 M6 10.4L10 8 M6 15.7L6 21 M6 15.7L10 13.3 M6 21L6 26.3 M6 21L10 18.6 M6 26.3L6 31.6 M6 26.3L10 23.9 M6 26.3L10 28.7 M6 31.6L10 34 M10 8L10 13.3 M10 13.3L10 18.6 M10 18.6L10 23.9 M10 23.9L14 26.3 M10 28.7L10 34 M10 28.7L14 26.3 M10 34L14 31.6 M14 26.3L14 31.6" stroke="currentColor" stroke-width="1"/></svg>`
 const menuIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>`

@@ -77,6 +77,9 @@ type Runner struct {
 	Pool *Pool
 	// Browser runs the pages the agent works in for the person, or nil.
 	Browser *BrowserPool
+	// OpenFile reads an attachment by its address, for files that live in
+	// another account on the same host. Nil reads only this account's.
+	OpenFile func(url, id string) ([]byte, error)
 
 	mu      sync.Mutex
 	mapOnce string // the workspace map, computed once so the prefix is stable
@@ -427,6 +430,9 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	userMsg, threadsRead := r.contextFor(ctx, t, tl, st, trig, decision, brief, g)
 	rec.Threads = threadsRead
 	msgs := []Message{{Role: "system", Content: sys}, {Role: "user", Content: userMsg}}
+	// What was attached recently goes to the model as itself: images seen,
+	// PDFs read, text inline.
+	r.attachRecent(&msgs[1], tl, trig)
 
 	// A confirmed external call runs first, before the model sees anything.
 	if pending != nil {
@@ -887,14 +893,19 @@ func (r *Runner) lines(tl *protolog.ThreadLog, withIDs bool) []string {
 
 func bodyText(e *protolog.Entry) string {
 	var b struct {
-		Text  string `json:"text"`
-		Title string `json:"title"`
+		Text  string       `json:"text"`
+		Title string       `json:"title"`
+		Files []Attachment `json:"files"`
 	}
 	json.Unmarshal(e.Body, &b)
-	if b.Text != "" {
-		return b.Text
+	t := b.Text
+	if t == "" {
+		t = b.Title
 	}
-	return b.Title
+	for _, f := range b.Files {
+		t += fmt.Sprintf(" [attached: %s (%s, %s)]", f.Name, f.Type, sizeWords(f.Size))
+	}
+	return strings.TrimSpace(t)
 }
 
 func trunc(s string, n int) string {

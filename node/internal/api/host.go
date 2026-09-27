@@ -258,7 +258,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	state := agent.LoadState(dir)
 	runner := &agent.Runner{Store: st, PersonKey: key, Person: self, AgentKey: agentKey, Agent: agentPID,
 		Model: h.sharedModel(), ModelName: h.Model, DataDir: dir, State: state, NoCommands: true,
-		AllowedModels: h.AllowedModels, SharedOnly: h.SharedKey != "", Pool: h.Pool, Browser: h.Browser,
+		AllowedModels: h.AllowedModels, SharedOnly: h.SharedKey != "", Pool: h.Pool, Browser: h.Browser, OpenFile: h.openFile,
 		Names: func(p string) string { return "" },
 		Logf:  func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched := &agent.Scheduler{Runner: runner, State: state,
@@ -266,7 +266,8 @@ func (h *Host) load(id, email string) (*Account, error) {
 	sched.Sync = func(ctx context.Context) error { return hostSync(ctx, dir, st, key, self, agentPID) }
 
 	app := &App{Store: st, Key: key, Self: self, DataDir: dir, Model: h.Model,
-		Runner: runner, Scheduler: sched, AgentSelf: agentPID,
+		FileURL: func(fid string) string { return h.fileURL(id, fid) },
+		Runner:  runner, Scheduler: sched, AgentSelf: agentPID,
 		SharePrefix: "/s/" + id,
 		NoCommands:  true,
 		// An account with an email behind it may keep credentials; one that
@@ -520,6 +521,7 @@ func (h *Host) Handler() http.Handler {
 	mux.HandleFunc("POST /app/api/signin/email/confirm", h.handleSigninEmailConfirm)
 	mux.HandleFunc("POST /app/api/device/code", h.handleDeviceCode)
 	mux.HandleFunc("POST /app/api/device/redeem", h.handleDeviceRedeem)
+	mux.HandleFunc("GET /f/{acct}/{id}/{sig}", h.handleSharedFile)
 	mux.HandleFunc("GET /favicon.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
