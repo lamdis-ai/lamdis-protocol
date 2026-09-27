@@ -49,7 +49,7 @@ func ask(h http.Handler, ip, session, text string) (int, map[string]any) {
 // already there. The question and the answer both land in the thread, which
 // is the thing the page is trying to show.
 func TestTryAnswersIntoTheThread(t *testing.T) {
-	m := &fakeModel{reply: "Dalton is cheaper by £500 once the migration is counted."}
+	m := &fakeModel{reply: "Dalton is cheaper by $500 once the migration is counted."}
 	_, h := tryServer(t, m)
 
 	w := httptest.NewRecorder()

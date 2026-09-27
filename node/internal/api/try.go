@@ -112,10 +112,10 @@ func (t *Try) defaults() {
 func seeded(now time.Time) []tryEntry {
 	d := func(days int) string { return now.AddDate(0, 0, -days).Format("Jan 2") }
 	return []tryEntry{
-		{Who: "you", When: d(34), Text: "Quote from Marek Systems to replace the billing platform: £14,200 a year, four weeks to migrate, can start 6 October. Includes the connectors."},
-		{Who: "you", When: d(31), Text: "Second quote, Dalton: £11,800 a year. Six weeks though, and they do not do the data migration, so that is somebody else on top."},
+		{Who: "you", When: d(34), Text: "Quote from Marek Systems to replace the billing platform: $14,200 a year, four weeks to migrate, can start 6 October. Includes the connectors."},
+		{Who: "you", When: d(31), Text: "Second quote, Dalton: $11,800 a year. Six weeks though, and they do not do the data migration, so that is somebody else on top."},
 		{Who: "you", When: d(29), Text: "Told the board we would be off the old system by mid-November."},
-		{Who: "you", When: d(12), Text: "Migration contractor quoted £1,900 for the whole export. Two days once they have the dump."},
+		{Who: "you", When: d(12), Text: "Migration contractor quoted $1,900 for the whole export. Two days once they have the dump."},
 		{Who: "you", When: d(3), Text: "Marek emailed: still 6 October, but now wants 40% up front instead of the 25% in the quote."},
 	}
 }
