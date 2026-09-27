@@ -90,7 +90,11 @@ aws ecs update-express-gateway-service --service-arn "$SERVICE" --task-definitio
 # Switching the task definition starts an ECS Express canary that cannot
 # finish at zero tasks, so do not wait for it: ask for one server at once, on
 # both the service and its autoscaling target (the Express update alone has
-# been seen not to apply), and let the check below keep it to one.
+# been seen not to apply), and let the check below keep it to one. The Express
+# service also stores its own scaling target (zero, from the stop above) and
+# reapplies it, stopping new tasks, so that is set first.
+aws ecs update-express-gateway-service --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE" \
+  --scaling-target 'minTaskCount=1,maxTaskCount=1' --query 'service.status.statusCode' --output text >/dev/null
 aws application-autoscaling register-scalable-target --service-namespace ecs --resource-id service/lamdis/lamdis-app \
   --scalable-dimension ecs:service:DesiredCount --min-capacity 1 --max-capacity 1 --profile "$PROFILE" --region "$REGION" >/dev/null
 aws ecs update-service --cluster lamdis --service lamdis-app --desired-count 1 --profile "$PROFILE" --region "$REGION" >/dev/null
