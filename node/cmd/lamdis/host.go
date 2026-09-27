@@ -65,9 +65,10 @@ func cmdHost(ctx context.Context, args []string) error {
 		AllowedModels:        strings.Fields(envOr("LAMDIS_ALLOWED_MODELS", model+" openai/gpt-5.6-mini")),
 		AccountRunsPerDay:    envInt("LAMDIS_ACCOUNT_RUNS", 150),
 		AccountTokensPerDay:  envInt("LAMDIS_ACCOUNT_TOKENS", 1_000_000),
-		AccountFetchesPerDay: envInt("LAMDIS_ACCOUNT_FETCHES", 60),
+		AccountFetchesPerDay: envInt("LAMDIS_ACCOUNT_FETCHES", 200),
 		// Everyone on the shared key together: about $5 a day at the
 		// default model's prices.
+		Browser:    agent.NewBrowserPool(os.Getenv("LAMDIS_BROWSER_CDP")),
 		Pool:       &agent.Pool{Tokens: envInt("LAMDIS_HOST_TOKENS", 20_000_000)},
 		SharedKey:  strings.TrimSpace(os.Getenv("LAMDIS_HOST_MODEL_KEY")),
 		StarterCap: *starterCap,
@@ -105,7 +106,7 @@ func cmdHost(ctx context.Context, args []string) error {
 		fmt.Printf("model key  one shared key for every account; cap it\n")
 		fmt.Printf("per account %d runs, %d tokens, %d fetches a day, and only %s\n",
 			envInt("LAMDIS_ACCOUNT_RUNS", 150), envInt("LAMDIS_ACCOUNT_TOKENS", 1_000_000),
-			envInt("LAMDIS_ACCOUNT_FETCHES", 60), envOr("LAMDIS_ALLOWED_MODELS", model+", openai/gpt-5.6-mini"))
+			envInt("LAMDIS_ACCOUNT_FETCHES", 200), envOr("LAMDIS_ALLOWED_MODELS", model+", openai/gpt-5.6-mini"))
 	default:
 		fmt.Printf("starter    off; new accounts bring their own key or write in\n")
 	}

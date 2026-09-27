@@ -28,6 +28,22 @@ type todayDecision struct {
 	TS      string   `json:"ts"`
 	// Connect is set when this is a Connect card rather than a question.
 	Connect *todayConnect `json:"connect,omitempty"`
+	// Browser is set when the answer happens in the agent's browser: a
+	// sign-in to do there, or a button the agent asks to press.
+	Browser *todayBrowser `json:"browser,omitempty"`
+}
+
+type todayBrowser struct {
+	URL   string `json:"url"`
+	Title string `json:"title"`
+}
+
+func browserOf(data json.RawMessage) *todayBrowser {
+	var b struct {
+		Browser *todayBrowser `json:"browser"`
+	}
+	json.Unmarshal(data, &b)
+	return b.Browser
 }
 
 type todayConnect struct {
@@ -96,7 +112,7 @@ func (a *App) handleToday(w http.ResponseWriter, r *http.Request) {
 			switch e.Kind {
 			case agent.KindDecision:
 				if !e.Resolved {
-					out.Decisions = append(out.Decisions, todayDecision{Thread: id, Title: title, ID: e.ID, Text: e.Text, Options: e.Options, TS: e.TS})
+					out.Decisions = append(out.Decisions, todayDecision{Thread: id, Title: title, ID: e.ID, Text: e.Text, Options: e.Options, TS: e.TS, Browser: browserOf(e.Data)})
 				}
 			case agent.KindConnect:
 				if !e.Resolved {

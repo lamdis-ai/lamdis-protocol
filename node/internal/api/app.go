@@ -146,6 +146,7 @@ func (a *App) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /app/", a.page)
 	mux.HandleFunc("GET /app/api/threads", a.owner(a.handleThreads))
 	mux.HandleFunc("GET /app/api/today", a.owner(a.handleToday))
+	a.registerBrowser(mux)
 	mux.HandleFunc("GET /app/api/thread/{id}", a.owner(a.handleThread))
 	mux.HandleFunc("POST /app/api/post", a.owner(a.handlePost))
 	mux.HandleFunc("GET /app/api/routed/{entry}", a.owner(func(w http.ResponseWriter, r *http.Request) {

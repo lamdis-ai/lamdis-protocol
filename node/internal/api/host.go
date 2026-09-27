@@ -59,6 +59,8 @@ type Host struct {
 	AccountFetchesPerDay int
 	// Pool caps what all accounts on the shared key spend in a day.
 	Pool *agent.Pool
+	// Browser runs every account's browser (each in its own context), or nil.
+	Browser *agent.BrowserPool
 	// SignIn tells the page where to send people to prove who they are.
 	SignIn SignIn
 	// Starter mints a capped key for each new account while the ceiling
@@ -256,7 +258,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	state := agent.LoadState(dir)
 	runner := &agent.Runner{Store: st, PersonKey: key, Person: self, AgentKey: agentKey, Agent: agentPID,
 		Model: h.sharedModel(), ModelName: h.Model, DataDir: dir, State: state, NoCommands: true,
-		AllowedModels: h.AllowedModels, SharedOnly: h.SharedKey != "", Pool: h.Pool,
+		AllowedModels: h.AllowedModels, SharedOnly: h.SharedKey != "", Pool: h.Pool, Browser: h.Browser,
 		Names: func(p string) string { return "" },
 		Logf:  func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched := &agent.Scheduler{Runner: runner, State: state,

@@ -566,7 +566,8 @@ func cmdServe(dataDir string, s store.Store, args []string) error {
 	}
 	runner := &agent.Runner{Store: s, PersonKey: priv, Person: pid, AgentKey: agentKey, Agent: agentPID,
 		Model: mdl, ModelName: model, DataDir: dataDir, Names: names, Embedder: embedderFromEnv(), State: state,
-		Logf: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}
+		Browser: agent.NewBrowserPool(os.Getenv("LAMDIS_BROWSER_CDP")),
+		Logf:    func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}
 	sched := &agent.Scheduler{Runner: runner, State: state,
 		Logf: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }}
 	sched.Sync = func(ctx context.Context) error {

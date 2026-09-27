@@ -190,6 +190,13 @@ button.avs:hover{border-color:var(--line2);background:var(--panel)}
 .today{max-width:78rem;width:100%;margin:0 auto;padding:3.4rem 4rem 4rem}
 .hello{font-family:var(--display);font-weight:800;font-size:2.8rem;line-height:1;letter-spacing:-.04em;margin:.55rem 0 .5rem;text-wrap:balance}
 .hello em{font-style:normal;color:var(--gold-text)}
+.sheet.wide{max-width:none;width:min(960px,94vw,calc((100vh - 16rem) * 1.6 + 3rem))}
+.brbtn{margin-bottom:.6rem;gap:.45rem}
+.brview{display:flex;flex-direction:column;gap:.5rem}
+.brbar,.brkeys{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.brbar input,.brkeys input{flex:1;min-width:10rem;height:34px;padding:0 .7rem;border:1px solid var(--line2);border-radius:10px;font:inherit;font-size:.86rem;background:var(--panel)}
+.brimgwrap{border:1px solid var(--line2);border-radius:12px;overflow:hidden;background:#fff;aspect-ratio:1280/800}
+.brimgwrap img{display:block;width:100%;height:100%;object-fit:contain;cursor:pointer}
 .glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin-top:1.4rem;max-width:48rem}
 .glance .g{display:flex;flex-direction:column;gap:.2rem;padding:.85rem 1rem;border:1px solid var(--line);border-radius:16px;background:var(--panel);text-align:left;font:inherit;color:inherit;cursor:pointer}
 .glance .g:hover{border-color:var(--gold-dim)}
@@ -580,6 +587,7 @@ var ICON={
   chev:'<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
   stack:'<svg class="stk" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>',
   bolt:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  globe:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"/></svg>',
   clock:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
 };
 
@@ -689,7 +697,7 @@ function today(){return Promise.all([loadToday(),threads(),api("/app/api/invites
       if(g.one){var x=g.one;return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(x.thread)+'">'+esc(x.title)+'</a><span class="tag ai">connect</span></div>'+connectCard(x.id,x.connect.service,x.connect.url,x.text,null,x.thread)+'</div>'}
       var l=g.list.slice().sort(function(a,b){return (b.ts||"")>(a.ts||"")?1:-1}),x=l[0],rest=l.slice(1);
       return '<div class="card dcard"><div class="where"><span class="hash">#</span><a data-open="'+esc(g.thread)+'">'+esc(g.title)+'</a><span class="tag call">'+(l.length>1?l.length+" questions":"your call")+'</span></div>'+
-        '<div class="q">'+body(x.text)+'</div>'+decisionControls(x.id,x.options)+
+        '<div class="q">'+body(x.text)+'</div>'+decisionControls(x.id,x.options,x.browser)+
         (rest.length?'<details class="earlier"><summary>'+rest.length+' earlier '+(rest.length===1?"question":"questions")+' here ›</summary>'+rest.map(function(y){return '<div class="q">'+body(y.text)+'</div>'+decisionControls(y.id,y.options)}).join("")+'</details>':'')+
         '</div>'}).join("")}
   left+='<span class="kick" id="k-done">'+(runs.length?"Done since yesterday":"Recent")+'</span>';
@@ -726,10 +734,34 @@ function upcoming(list){var now=new Date(),nowM=now.getHours()*60+now.getMinutes
     else{o._sort=2000;o._label="~"+s.every;o._every="every "+s.every.replace(/0m0s$/,"").replace(/m0s$/,"m")}
     return o}).sort(function(a,b){return a._sort-b._sort})}
 
+/* the agent's browser, handed to the person: a live view they click and type into */
+function browserSheet(after){
+  var s=sheet('<header><h2>Your agent\u2019s browser</h2><p>Do this part yourself: click on the page and type. What you type goes to the site, not to the agent. Press Done when you are finished.</p></header>'+
+    '<div class="brview"><div class="brbar"><button class="btn sm" id="br-back" aria-label="Back">\u2190</button><input id="br-url" placeholder="https://" spellcheck="false"><button class="btn sm" id="br-go">Go</button></div>'+
+    '<div class="brimgwrap"><img id="br-img" alt="The page in your agent\u2019s browser"></div>'+
+    '<div class="brkeys"><input id="br-type" placeholder="Type into the page (click a field first)" autocomplete="off"><button class="btn sm" id="br-send">Type</button><button class="btn sm" data-k="Enter">Enter</button><button class="btn sm" data-k="Tab">Tab</button><button class="btn sm" data-k="Backspace">\u232b</button><button class="btn sm" id="br-dn">Scroll \u2193</button></div></div>'+
+    '<div class="row" style="justify-content:flex-end;margin-top:.8rem"><button class="btn solid" id="br-done">Done</button></div>');
+  s.classList.add("wide");
+  var img=s.querySelector("#br-img"),live=true,busy=false;
+  function frame(){if(!live||!document.body.contains(img))return;
+    fetchBlob("/app/api/browser/shot").then(function(u){if(u){var o=img.src;img.src=u;if(o&&o.indexOf("blob:")===0)URL.revokeObjectURL(o)}}).finally(function(){setTimeout(frame,busy?300:900)})}
+  function input(o){busy=true;return api("/app/api/browser/input",o).then(function(r){busy=false;if(r&&r.url)s.querySelector("#br-url").value=r.url;if(r&&r.error)note(r.error,"bad")})}
+  api("/app/api/browser").then(function(st){if(st.url)s.querySelector("#br-url").value=st.url});
+  img.onclick=function(ev){var r=img.getBoundingClientRect();input({kind:"click",x:(ev.clientX-r.left)*1280/r.width,y:(ev.clientY-r.top)*800/r.height})};
+  s.querySelector("#br-send").onclick=function(){var i=s.querySelector("#br-type");if(!i.value)return;var v=i.value;i.value="";input({kind:"type",text:v})};
+  s.querySelector("#br-type").onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();s.querySelector("#br-send").click()}};
+  each("[data-k]",function(b){b.onclick=function(){input({kind:"key",text:b.getAttribute("data-k")})}},s);
+  s.querySelector("#br-dn").onclick=function(){input({kind:"scroll",down:true})};
+  s.querySelector("#br-back").onclick=function(){input({kind:"back"})};
+  s.querySelector("#br-go").onclick=function(){input({kind:"open",url:s.querySelector("#br-url").value})};
+  s.querySelector("#br-done").onclick=function(){live=false;input({kind:"done"}).then(function(){closeSheet();if(after)after()})};
+  frame()}
+function fetchBlob(path){return fetch(path).then(function(r){return r.ok&&(r.headers.get("content-type")||"").indexOf("image")===0?r.blob():null}).then(function(b){return b?URL.createObjectURL(b):null}).catch(function(){return null})}
+
 /* decisions, wherever they appear */
-function decisionControls(id,options){return '<div class="opts">'+(options||[]).map(function(o,i){return '<button class="btn'+(i===0?" solid":"")+'" data-dec="'+esc(id)+'" data-choice="'+esc(o)+'">'+esc(o)+'</button>'}).join("")+'</div>'+
+function decisionControls(id,options,br){return (br?'<button class="btn solid brbtn" data-browser="1">'+ICON.globe+' Open the browser'+(br.title?' · '+esc(br.title.slice(0,40)):'')+'</button>':'')+'<div class="opts">'+(options||[]).map(function(o,i){return '<button class="btn'+(i===0?" solid":"")+'" data-dec="'+esc(id)+'" data-choice="'+esc(o)+'">'+esc(o)+'</button>'}).join("")+'</div>'+
   '<div class="free"><input placeholder="Or answer in your own words" data-decin="'+esc(id)+'"><button class="btn" data-dec="'+esc(id)+'" data-free="1">Reply</button></div>'}
-function wireDecisions(root,after){each("[data-dec]",function(b){b.onclick=function(){var id=b.getAttribute("data-dec"),choice=b.getAttribute("data-choice")||"",text="";
+function wireDecisions(root,after){each("[data-browser]",function(b){b.onclick=function(){browserSheet(after)}},root);each("[data-dec]",function(b){b.onclick=function(){var id=b.getAttribute("data-dec"),choice=b.getAttribute("data-choice")||"",text="";
     if(b.getAttribute("data-free")){var inp=root.querySelector('[data-decin="'+id+'"]');text=inp?inp.value.trim():"";if(!text){if(inp)inp.focus();return}}
     each('[data-dec="'+id+'"]',function(x){x.disabled=true},root);b.textContent=choice?choice+" · "+agentName()+" is continuing…":"Sent · "+agentName()+" is continuing…";
     api("/app/api/decision",{id:id,choice:choice,text:text}).then(function(d){if(d.error)alert(d.error);after()})}},root)}
@@ -772,7 +804,7 @@ function render(es){var out=[],prev=null;
     if(e.kind==="agent.run"){out.push('<div class="entry'+(cont?' cont':'')+'">'+avatar(e)+'<div class="c">'+(cont?'':metaLine(e))+runCard(e)+'</div></div>');prev={key:key,ts:e.ts};return}
     if(e.kind==="agent.decision"){var reply=es.filter(function(x){return x.kind==="agent.decision_reply"&&x.replies_to===e.id})[0];
       var inner='<div class="decision"><div style="display:flex;gap:.5rem;align-items:center"><span class="tag call">your call</span><span class="small muted">'+esc(AgentName())+' will not guess on this one</span></div><div class="ask">'+body(e.text)+'</div>';
-      if(reply){var r=parseData(reply.data);inner+='<div class="done">You answered: '+esc((r.choice||"")+(r.text?" "+r.text:""))+'</div>'}else inner+=decisionControls(e.id,e.options);
+      if(reply){var r=parseData(reply.data);inner+='<div class="done">You answered: '+esc((r.choice||"")+(r.text?" "+r.text:""))+'</div>'}else inner+=decisionControls(e.id,e.options,parseData(e.data).browser);
       out.push('<div class="entry">'+avatar(e)+'<div class="c">'+metaLine(e)+inner+'</div></div></div>');prev={key:key,ts:e.ts};return}
     var sum=e.lane==="summary",q=e.kind==="chat.question";
     var extra=(sum?'<span class="tag call">what you shared</span>':'')+(q?'<span class="tag">asked</span>':'');

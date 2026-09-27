@@ -46,6 +46,27 @@ for k in ["taskDefinitionArn", "revision", "status", "requiresAttributes", "comp
 for c in d["containerDefinitions"]:
     if "lamdis-app" in c["image"]:
         c["image"] = c["image"].rsplit(":", 1)[0] + ":" + tag
+        env = [e for e in c.get("environment", []) if e["name"] != "LAMDIS_BROWSER_CDP"]
+        env.append({"name": "LAMDIS_BROWSER_CDP", "value": "http://127.0.0.1:9222"})
+        c["environment"] = env
+# The agents' browser: headless Chrome beside the app, reachable only on the
+# task's own loopback (no port mapping, bound to 127.0.0.1). Not essential:
+# if it falls over, the app keeps serving and the browser tool says so.
+browser = {
+    "name": "browser",
+    "image": "730082756200.dkr.ecr.us-east-1.amazonaws.com/lamdis-browser:chrome151",
+    "essential": False,
+    "entryPoint": ["/headless-shell/headless-shell"],
+    "command": ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader",
+                "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=9222",
+                "--disable-dev-shm-usage"],
+    "logConfiguration": next(c for c in d["containerDefinitions"] if "lamdis-app" in c["image"]).get("logConfiguration"),
+}
+if browser["logConfiguration"]:
+    browser["logConfiguration"] = json.loads(json.dumps(browser["logConfiguration"]))
+    browser["logConfiguration"].setdefault("options", {})["awslogs-stream-prefix"] = "browser"
+d["containerDefinitions"] = [c for c in d["containerDefinitions"] if c["name"] != "browser"] + [browser]
+d["cpu"], d["memory"] = "1024", "3072"
 json.dump(d, open(tmp + "/new.json", "w"))
 EOF
 NEW="$(aws ecs register-task-definition --cli-input-json "file://$TMP/new.json" --profile "$PROFILE" --region "$REGION" \
