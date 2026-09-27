@@ -421,6 +421,13 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 
 	// Messages.
 	sys := r.systemPrompt(brief, g, canWrite, st)
+	if g.web && canWrite && r.Browser != nil {
+		if d := strings.TrimSpace(cfg.Details); d != "" {
+			sys += "\n\nDetails the person has given you for filling in forms (use them when a site asks; never write them into a channel, which others may read):\n<details>\n" + trunc(d, 2000) + "\n</details>\n"
+		} else {
+			sys += "\n\nWhen a form asks for the person's own details (phone, email, address) and you do not have them, ask for them with ask_person and type them in yourself; they can also save them in Settings under Details your agents may use.\n"
+		}
+	}
 	if r.persona != nil {
 		sys = "Your name is " + r.persona.Name + ". You are one of several agents working for this person; answer as " + r.persona.Name + ", in your own manner.\n" +
 			"Who you are and what you are good at: " + r.persona.About + "\n\n" + sys
@@ -960,7 +967,7 @@ func (r *Runner) toolSpecs(g gate, canWrite bool, ex *externals) []ToolSpec {
 	if g.web && canWrite && r.Browser != nil {
 		out = append(out, ToolSpec{Name: "browser", Description: "Use a real web browser for the person: open sites, read them, click, fill in forms, search inside sites that have no API. " +
 			"Every result is the page as text with numbered things you can use; act on them by number. The browser keeps its place between runs. " +
-			"If a site needs the person to sign in, use action handoff: they sign in themselves on a live view, and you never see their password. " +
+			"Fill in forms yourself, with details you have or that the person gives you in the channel. Use action handoff only for what must never pass through you: a password, a one-time code, a card number, or a check that the site wants a person to do. They do that step on a live view and press Done. " +
 			"Any step that sends, books, buys, pays, posts, deletes or agrees to something is never yours to take: use action confirm, which asks the person and takes that one step only after they say yes. This holds in full auto too.",
 			Parameters: obj(map[string]any{
 				"action": map[string]any{"type": "string", "enum": []string{"open", "read", "click", "type", "choose", "scroll_down", "scroll_up", "back", "handoff", "confirm"}},

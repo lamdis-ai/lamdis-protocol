@@ -112,7 +112,7 @@ func unseal(key []byte, stored string) string {
 // secrets lists every credential field in a config, so sealing and opening
 // cannot drift apart.
 func secrets(c *Config) []*string {
-	out := []*string{&c.OpenRouterKey, &c.ModelURLKey}
+	out := []*string{&c.OpenRouterKey, &c.ModelURLKey, &c.Details}
 	for i := range c.Tools {
 		out = append(out, &c.Tools[i].Auth)
 		if o := c.Tools[i].OAuth; o != nil {

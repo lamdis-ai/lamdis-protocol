@@ -69,3 +69,38 @@ func TestBrowserRefusesPrivateAddresses(t *testing.T) {
 		t.Error("data: URLs are part of ordinary pages")
 	}
 }
+
+// A site that refuses its own requests from this browser is reported to the
+// agent, so it does not tell the person a form went through when it did not.
+func TestBrowserReportsARefusingSite(t *testing.T) {
+	if localChrome() == "" {
+		t.Skip("no local Chrome")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api" {
+			http.Error(w, "no bots", http.StatusForbidden)
+			return
+		}
+		fmt.Fprint(w, `<h1>Notify me</h1><script>fetch('/api',{method:'POST'})</script>`)
+	}))
+	defer srv.Close()
+	browserAllowPrivate = true
+	defer func() { browserAllowPrivate = false }()
+	p := NewBrowserPool("")
+	dir := t.TempDir()
+	s, err := p.Session(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Forget(dir)
+	if err := s.Open(srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	page, _ := s.Read()
+	if !strings.Contains(page, "refused 1 of its own requests") {
+		t.Fatalf("no warning:\n%s", page)
+	}
+	if page, _ = s.Read(); strings.Contains(page, "refused") {
+		t.Fatal("the warning repeats without new refusals")
+	}
+}

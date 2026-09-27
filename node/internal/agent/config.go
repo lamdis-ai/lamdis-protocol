@@ -13,6 +13,9 @@ type Config struct {
 	// Name is what the person calls their agent. Empty means "your agent".
 	// It is a label for people; the agent's identity is still its key.
 	Name string `json:"name,omitempty"`
+	// Details are what the person lets their agents type into forms for
+	// them: phone, email, address, preferences. Sealed at rest like a key.
+	Details string `json:"details,omitempty"`
 	// Autonomy: "ask" (the default: it stops for your call and asks before
 	// changing anything) or "auto" (full auto: it decides and acts).
 	Autonomy string `json:"autonomy,omitempty"`

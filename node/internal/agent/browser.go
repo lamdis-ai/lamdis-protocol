@@ -63,6 +63,13 @@ type BrowserSession struct {
 	mu      sync.Mutex
 	last    time.Time
 	hostsOK sync.Map // host -> bool, vetted once per session
+	// pinned keeps the session alive while the person has a step to do in
+	// it (a hand-off or a confirmation), however long they take.
+	pinned time.Time
+	// refused counts the site's own requests that failed since the last
+	// read: a site that blocks automated browsers looks like this.
+	refused int
+	fmu     sync.Mutex
 }
 
 // NewBrowserPool returns a pool, or nil when there is nowhere to run a browser.
@@ -149,13 +156,27 @@ func (p *BrowserPool) Session(key string) (*BrowserSession, error) {
 	}
 	s := &BrowserSession{pool: p, key: key, ctx: ctx, cancel: cancel, last: time.Now()}
 	chromedp.ListenTarget(ctx, func(ev any) {
-		if e, ok := ev.(*fetch.EventRequestPaused); ok {
+		switch e := ev.(type) {
+		case *fetch.EventRequestPaused:
 			go s.vetRequest(e)
+		case *network.EventResponseReceived:
+			if (e.Type == network.ResourceTypeXHR || e.Type == network.ResourceTypeFetch) && (e.Response.Status == 403 || e.Response.Status == 429) {
+				s.fmu.Lock()
+				s.refused++
+				s.fmu.Unlock()
+			}
+		case *network.EventLoadingFailed:
+			if (e.Type == network.ResourceTypeXHR || e.Type == network.ResourceTypeFetch) && !e.Canceled && (e.CorsErrorStatus != nil || e.BlockedReason != "") {
+				s.fmu.Lock()
+				s.refused++
+				s.fmu.Unlock()
+			}
 		}
 	})
 	// As above: the first Run makes this account's tab, so it runs on ctx.
 	err = chromedp.Run(ctx,
 		fetch.Enable(),
+		network.Enable(),
 		chromedp.EmulateViewport(1280, 800),
 		chromedp.ActionFunc(func(c context.Context) error { return s.restoreCookies(c) }),
 	)
@@ -164,7 +185,22 @@ func (p *BrowserPool) Session(key string) (*BrowserSession, error) {
 		return nil, fmt.Errorf("could not start a browser: %v", err)
 	}
 	p.sessions[key] = s
+	// A session that ended (idle, or a restart) picks up where it was.
+	if u := s.lastURL(); u != "" {
+		go func() {
+			if _, err := browsableURL(u); err == nil {
+				s.run(45*time.Second, chromedp.Navigate(u), settle())
+			}
+		}()
+	}
 	return s, nil
+}
+
+// Pin keeps the session open while the person has something to do in it.
+func (s *BrowserSession) Pin(d time.Duration) {
+	s.mu.Lock()
+	s.pinned = time.Now().Add(d)
+	s.mu.Unlock()
 }
 
 // Existing returns the account's browser only if one is open.
@@ -180,9 +216,12 @@ func (p *BrowserPool) Existing(key string) *BrowserSession {
 func (p *BrowserPool) reap() {
 	idle := p.Idle
 	if idle == 0 {
-		idle = 10 * time.Minute
+		idle = 30 * time.Minute
 	}
 	for k, s := range p.sessions {
+		if s.ctx.Err() == nil && time.Now().Before(s.pinned) {
+			continue
+		}
 		if s.ctx.Err() != nil || time.Since(s.last) > idle {
 			s.saveCookies()
 			s.cancel()
@@ -327,6 +366,13 @@ func (s *BrowserSession) Read() (string, error) {
 	if len(p.Items) > 0 {
 		b.WriteString("\n\nThings you can use (by number):\n" + strings.Join(p.Items, "\n"))
 	}
+	s.fmu.Lock()
+	refused := s.refused
+	s.refused = 0
+	s.fmu.Unlock()
+	if refused > 0 {
+		b.WriteString(fmt.Sprintf("\n\nNote: this site refused %d of its own requests from this browser. Sites that block automated browsers look like this, so a form here may not save even when it looks filled in. Do not tell the person a step went through unless the page confirms it; if it keeps happening, say the site is blocking the agent's browser and give them the direct link to do it themselves.", refused))
+	}
 	s.saveCookies()
 	return b.String(), nil
 }
@@ -442,6 +488,7 @@ func (p *BrowserPool) Forget(key string) {
 	}
 	p.mu.Unlock()
 	os.Remove(cookiePath(key))
+	os.Remove(filepath.Join(key, "browser.last"))
 }
 
 func cookiePath(dir string) string { return filepath.Join(dir, "browser.sealed") }
@@ -467,6 +514,27 @@ func (s *BrowserSession) saveCookies() {
 		return
 	}
 	os.WriteFile(cookiePath(s.key), []byte(sealed), 0o600)
+	var u string
+	if chromedp.Run(ctx, chromedp.Location(&u)) == nil && strings.HasPrefix(u, "http") {
+		if su, err := seal(key, u); err == nil {
+			os.WriteFile(filepath.Join(s.key, "browser.last"), []byte(su), 0o600)
+		}
+	}
+}
+
+// lastURL is where this account's browser was, if it was there recently.
+func (s *BrowserSession) lastURL() string {
+	path := filepath.Join(s.key, "browser.last")
+	fi, err := os.Stat(path)
+	if err != nil || time.Since(fi.ModTime()) > 3*time.Hour {
+		return ""
+	}
+	raw, _ := os.ReadFile(path)
+	key, err := vaultKey(s.key)
+	if err != nil {
+		return ""
+	}
+	return unseal(key, string(raw))
 }
 
 func (s *BrowserSession) restoreCookies(ctx context.Context) error {

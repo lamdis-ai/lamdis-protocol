@@ -137,7 +137,8 @@ func (a *App) reach() map[string]any {
 		"max_tokens_per_day": cfg.MaxTokensPerDay, "config_path": a.DataDir + "/agent.json",
 		"auto_web": cfg.AutoWeb, "may_hold_secrets": a.mayHoldSecrets(), "autonomy": firstNonEmpty(cfg.Autonomy, "ask"),
 		"model": modelName, "model_url": cfg.ModelURL, "has_key": cfg.OpenRouterKey != "" || os.Getenv("LAMDIS_OPENROUTER_KEY") != "",
-		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != "", "has_url_key": cfg.ModelURLKey != ""}
+		"key_from_env": os.Getenv("LAMDIS_OPENROUTER_KEY") != "", "has_url_key": cfg.ModelURLKey != "",
+		"details": cfg.Details}
 }
 
 func (a *App) handleBriefSet(w http.ResponseWriter, r *http.Request) {
@@ -341,6 +342,7 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		ModelURLKey   *string  `json:"model_url_key"`
 		Name          *string  `json:"name"`
 		Autonomy      *string  `json:"autonomy"`
+		Details       *string  `json:"details"`
 	}
 	if json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in) != nil {
 		http.Error(w, "bad config", http.StatusBadRequest)
@@ -377,6 +379,13 @@ func (a *App) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cfg.Name = n
+	}
+	if in.Details != nil {
+		d := strings.TrimSpace(*in.Details)
+		if len(d) > 2000 {
+			d = d[:2000]
+		}
+		cfg.Details = d
 	}
 	if in.AutoWeb != nil {
 		switch v := strings.TrimSpace(*in.AutoWeb); v {

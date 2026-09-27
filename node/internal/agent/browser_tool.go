@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 )
@@ -125,6 +126,7 @@ func (r *Runner) browse(ctx context.Context, t Trigger, g gate, canWrite bool, r
 		}
 		u, title := s.URL()
 		s.Save()
+		s.Pin(3 * time.Hour)
 		body := map[string]any{"text": what + ". Open the browser, do it there yourself, then press Done.",
 			"options": []string{"Done"}, "browser": map[string]any{"url": u, "title": title},
 			"trigger": t.Kind, "chain": t.Chain}
@@ -135,6 +137,7 @@ func (r *Runner) browse(ctx context.Context, t Trigger, g gate, canWrite bool, r
 			return "confirm needs the id of the button and exactly what pressing it will do", false, ""
 		}
 		u, title := s.URL()
+		s.Pin(3 * time.Hour)
 		body := map[string]any{"text": "May I press this on " + title + "? " + what,
 			"options": []string{BrowserYes, "No"}, "tool": BrowserConfirmTool,
 			"args":    map[string]any{"id": id, "url": u, "what": what},

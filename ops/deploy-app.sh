@@ -87,18 +87,13 @@ sleep 30
 say "Starting ${TAG} alone…"
 aws ecs update-express-gateway-service --service-arn "$SERVICE" --task-definition-arn "$NEW" \
   --profile "$PROFILE" --region "$REGION" --query 'service.serviceArn' --output text >/dev/null
-# Switching the task definition is itself a deployment, and ECS Express keeps
-# the previous version running until a new one has baked. Let that (empty)
-# deployment finish at zero tasks before asking for one, or the old version
-# comes back up alongside the new.
-i=0
-until [ "$(aws ecs describe-services --cluster lamdis --services lamdis-app --profile "$PROFILE" --region "$REGION" \
-      --query 'length(services[0].deployments[?rolloutState==`IN_PROGRESS`])' --output text)" = "0" ]; do
-  i=$((i+1)); [ $i -gt 90 ] && { say "the empty deployment did not settle; stopping here"; exit 1; }
-  sleep 10
-done
-aws ecs update-express-gateway-service --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE" \
-  --scaling-target 'minTaskCount=1,maxTaskCount=1' --query 'service.status.statusCode' --output text >/dev/null
+# Switching the task definition starts an ECS Express canary that cannot
+# finish at zero tasks, so do not wait for it: ask for one server at once, on
+# both the service and its autoscaling target (the Express update alone has
+# been seen not to apply), and let the check below keep it to one.
+aws application-autoscaling register-scalable-target --service-namespace ecs --resource-id service/lamdis/lamdis-app \
+  --scalable-dimension ecs:service:DesiredCount --min-capacity 1 --max-capacity 1 --profile "$PROFILE" --region "$REGION" >/dev/null
+aws ecs update-service --cluster lamdis --service lamdis-app --desired-count 1 --profile "$PROFILE" --region "$REGION" >/dev/null
 i=0
 until [ "$(curl -s -o /dev/null -w '%{http_code}' https://app.lamdis.ai/healthz)" = "200" ]; do
   i=$((i+1)); [ $i -gt 90 ] && { say "not healthy after 15 minutes"; exit 1; }
@@ -109,7 +104,9 @@ done
 # while it bakes; any task not started by the primary deployment is stopped.
 PRIMARY="$(aws ecs describe-services --cluster lamdis --services lamdis-app --profile "$PROFILE" --region "$REGION" \
   --query 'services[0].deployments[?status==`PRIMARY`].id | [0]' --output text)"
-for t in $(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'taskArns[]' --output text); do
+TASKS="$(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'taskArns[]' --output text)"
+# Only ever trim down to one: never stop the last server, whoever started it.
+[ "$(echo $TASKS | wc -w)" -gt 1 ] && for t in $TASKS; do
   by="$(aws ecs describe-tasks --cluster lamdis --tasks "$t" --profile "$PROFILE" --region "$REGION" --query 'tasks[0].startedBy' --output text)"
   if [ "$by" != "$PRIMARY" ]; then
     say "  stopping $t (not the primary deployment's)"
