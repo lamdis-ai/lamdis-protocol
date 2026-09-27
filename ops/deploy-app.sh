@@ -104,7 +104,18 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' https://app.lamdis.ai/healthz)
   i=$((i+1)); [ $i -gt 90 ] && { say "not healthy after 15 minutes"; exit 1; }
   sleep 10
 done
-# Healthy is not enough: make sure only one server is left.
+# Healthy is not enough: make sure only one server is left. ECS Express can
+# bring the previous (same-version) deployment back up beside the primary one
+# while it bakes; any task not started by the primary deployment is stopped.
+PRIMARY="$(aws ecs describe-services --cluster lamdis --services lamdis-app --profile "$PROFILE" --region "$REGION" \
+  --query 'services[0].deployments[?status==`PRIMARY`].id | [0]' --output text)"
+for t in $(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'taskArns[]' --output text); do
+  by="$(aws ecs describe-tasks --cluster lamdis --tasks "$t" --profile "$PROFILE" --region "$REGION" --query 'tasks[0].startedBy' --output text)"
+  if [ "$by" != "$PRIMARY" ]; then
+    say "  stopping $t (not the primary deployment's)"
+    aws ecs stop-task --cluster lamdis --task "$t" --reason "one writer on EFS" --profile "$PROFILE" --region "$REGION" >/dev/null
+  fi
+done
 i=0
 until [ "$(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'length(taskArns)' --output text)" = "1" ]; do
   i=$((i+1)); [ $i -gt 60 ] && { say "more than one server is still running; look before deploying again"; exit 1; }
