@@ -47,11 +47,21 @@ type BrowserPool struct {
 	// Idle is how long an unused session lives. Default ten minutes.
 	Idle time.Duration
 
+	// Device returns the DevTools address of an account's own browser (the
+	// person's computer, through the host), or "" to use the pool's.
+	Device func(key string) string
+
 	mu       sync.Mutex
 	alloc    context.Context
 	stop     context.CancelFunc
 	browser  context.Context // the connected browser; accounts get contexts inside it
 	sessions map[string]*BrowserSession
+	devices  map[string]deviceRoot // key -> a connection to that person's own browser
+}
+
+type deviceRoot struct {
+	ctx  context.Context
+	stop func()
 }
 
 // BrowserSession is one account's browser.
@@ -70,6 +80,9 @@ type BrowserSession struct {
 	// read: a site that blocks automated browsers looks like this.
 	refused int
 	fmu     sync.Mutex
+	// device: this is the person's own browser, with their own sign-ins; it
+	// keeps its own cookies and gets a tab, not a fresh context.
+	device bool
 }
 
 // NewBrowserPool returns a pool, or nil when there is nowhere to run a browser.
@@ -122,9 +135,21 @@ func (p *BrowserPool) Session(key string) (*BrowserSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.reap()
+	devURL := ""
+	if p.Device != nil {
+		devURL = p.Device(key)
+	}
 	if s := p.sessions[key]; s != nil && s.ctx.Err() == nil {
-		s.last = time.Now()
-		return s, nil
+		if s.device == (devURL != "") {
+			s.last = time.Now()
+			return s, nil
+		}
+		// The person's computer came or went: move to the right browser.
+		s.cancel()
+		delete(p.sessions, key)
+	}
+	if devURL != "" {
+		return p.deviceSession(key, devURL)
 	}
 	root, err := p.root()
 	if err != nil {
@@ -195,6 +220,73 @@ func (p *BrowserPool) Session(key string) (*BrowserSession, error) {
 	}
 	return s, nil
 }
+
+// deviceSession opens a tab in the person's own browser.
+func (p *BrowserPool) deviceSession(key, url string) (*BrowserSession, error) {
+	if p.devices == nil {
+		p.devices = map[string]deviceRoot{}
+	}
+	dr, ok := p.devices[key]
+	if !ok || dr.ctx.Err() != nil {
+		alloc, stopAlloc := chromedp.NewRemoteAllocator(context.Background(), url, chromedp.NoModifyURL)
+		b, stopB := chromedp.NewContext(alloc)
+		if err := chromedp.Run(b); err != nil {
+			stopB()
+			stopAlloc()
+			return nil, fmt.Errorf("could not reach the browser on your computer: %v", err)
+		}
+		dr = deviceRoot{ctx: b, stop: func() { stopB(); stopAlloc() }}
+		p.devices[key] = dr
+	}
+	var tid target.ID
+	err := chromedp.Run(dr.ctx, chromedp.ActionFunc(func(c context.Context) error {
+		var err error
+		tid, err = target.CreateTarget("about:blank").Do(cdp.WithExecutor(c, chromedp.FromContext(c).Browser))
+		return err
+	}))
+	if err != nil {
+		dr.stop()
+		delete(p.devices, key)
+		return nil, fmt.Errorf("could not open a tab on your computer: %v", err)
+	}
+	ctx, cancel := chromedp.NewContext(dr.ctx, chromedp.WithTargetID(tid))
+	s := &BrowserSession{pool: p, key: key, ctx: ctx, cancel: cancel, last: time.Now(), device: true}
+	chromedp.ListenTarget(ctx, func(ev any) {
+		switch e := ev.(type) {
+		case *fetch.EventRequestPaused:
+			go s.vetRequest(e) // the person's own network is guarded the same way
+		case *network.EventResponseReceived:
+			if (e.Type == network.ResourceTypeXHR || e.Type == network.ResourceTypeFetch) && (e.Response.Status == 403 || e.Response.Status == 429) {
+				s.fmu.Lock()
+				s.refused++
+				s.fmu.Unlock()
+			}
+		}
+	})
+	if err := chromedp.Run(ctx, fetch.Enable(), network.Enable()); err != nil {
+		cancel()
+		return nil, fmt.Errorf("could not open a tab on your computer: %v", err)
+	}
+	p.sessions[key] = s
+	return s, nil
+}
+
+// DropDevice forgets a person's own browser after it disconnects.
+func (p *BrowserPool) DropDevice(key string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if s := p.sessions[key]; s != nil && s.device {
+		s.cancel()
+		delete(p.sessions, key)
+	}
+	if dr, ok := p.devices[key]; ok {
+		dr.stop()
+		delete(p.devices, key)
+	}
+}
+
+// OnDevice reports whether the account's browser is the person's own.
+func (s *BrowserSession) OnDevice() bool { return s.device }
 
 // Pin keeps the session open while the person has something to do in it.
 func (s *BrowserSession) Pin(d time.Duration) {
@@ -494,6 +586,9 @@ func (p *BrowserPool) Forget(key string) {
 func cookiePath(dir string) string { return filepath.Join(dir, "browser.sealed") }
 
 func (s *BrowserSession) saveCookies() {
+	if s.device {
+		return // the person's own browser keeps its own
+	}
 	var cookies []*network.Cookie
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()

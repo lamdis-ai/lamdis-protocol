@@ -61,6 +61,8 @@ type Host struct {
 	Pool *agent.Pool
 	// Browser runs every account's browser (each in its own context), or nil.
 	Browser *agent.BrowserPool
+	// devices holds each person's own browser, when their computer is connected.
+	devices *deviceHub
 	// SignIn tells the page where to send people to prove who they are.
 	SignIn SignIn
 	// Starter mints a capped key for each new account while the ceiling
@@ -468,6 +470,15 @@ func (h *Host) resolve(r *http.Request) (*Account, error) {
 // Handler is the whole hosted surface.
 func (h *Host) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if h.devices == nil {
+		h.devices = newDeviceHub()
+		if h.Browser != nil {
+			// An account whose computer is connected browses there.
+			h.Browser.Device = func(key string) string { return h.devices.CDP(filepath.Base(key)) }
+		}
+	}
+	mux.HandleFunc("GET /app/api/device/browser", h.handleDeviceBrowser)
+	mux.HandleFunc("GET /app/api/device/browser/status", h.handleDeviceBrowserStatus)
 
 	// The iOS app shares passkeys with this site and opens its links, which
 	// Apple checks against this file. LAMDIS_IOS_APP_ID overrides the app.

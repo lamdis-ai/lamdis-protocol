@@ -38,7 +38,7 @@ func main() {
 	}
 }
 
-var commandNames = []string{"help", "-h", "--help", "app", "agent", "link", "trust", "keys", "host", "try-server", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
+var commandNames = []string{"help", "browser", "-h", "--help", "app", "agent", "link", "trust", "keys", "host", "try-server", "init", "demo", "exchange", "review", "gauntlet", "wallet", "buy", "verify-photo",
 	"whoami", "thread", "threads", "post", "read", "search", "mcp", "serve", "peer", "peers", "sync", "share",
 	"discover", "request", "requests", "approve", "deny", "grant", "revoke", "access"}
 
@@ -211,6 +211,9 @@ func run(args []string) error {
 	case "keys":
 		// Operator side: no store, no keys of ours, just OpenRouter.
 		return cmdKeys(ctx, rest)
+	case "browser":
+		// Lend this computer's Chrome to your agents on a host.
+		return runBrowser(rest)
 	case "host":
 		// Many people's nodes in one process. Opens its own stores.
 		return cmdHost(ctx, rest)
