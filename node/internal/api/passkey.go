@@ -178,6 +178,7 @@ func (h *Host) handlePasskeyRegisterFinish(w http.ResponseWriter, r *http.Reques
 		os.WriteFile(filepath.Join(me.Dir, "subject"), []byte("passkey"), 0o600)
 	}
 	peopleMu.Unlock()
+	h.promote(me)
 	writeJSON(w, map[string]any{"ok": true, "passkeys": len(creds), "handle": h.handleOf(me)})
 }
 

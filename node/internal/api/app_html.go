@@ -197,6 +197,7 @@ button.avs:hover{border-color:var(--line2);background:var(--panel)}
 .brbar input,.brkeys input{flex:1;min-width:10rem;height:34px;padding:0 .7rem;border:1px solid var(--line2);border-radius:10px;font:inherit;font-size:.86rem;background:var(--panel)}
 .brimgwrap{border:1px solid var(--line2);border-radius:12px;overflow:hidden;background:#fff;aspect-ratio:1280/800}
 .brimgwrap img{display:block;width:100%;height:100%;object-fit:contain;cursor:pointer}
+.cmd{font:.78rem/1.5 var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.55rem .7rem;margin:.45rem 0;white-space:pre-wrap;user-select:all}
 .glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;margin-top:1.4rem;max-width:48rem}
 .glance .g{display:flex;flex-direction:column;gap:.2rem;padding:.85rem 1rem;border:1px solid var(--line);border-radius:16px;background:var(--panel);text-align:left;font:inherit;color:inherit;cursor:pointer}
 .glance .g:hover{border-color:var(--gold-dim)}
@@ -1356,6 +1357,7 @@ function settings(){var m=me||{};var origin=location.origin;
   '<label class="f">Your agent</label><div style="display:flex;gap:.5rem"><input id="c-aname" maxlength="32" value="'+esc(agentName()==="your agent"?"":agentName())+'" placeholder="Give it a name, e.g. Juniper"><button class="btn" id="c-anamesave">Save</button></div>'+
   (a.problem?'<p class="hint" style="color:var(--gold-text)">'+esc(a.problem)+'</p>':'<p class="hint">Runs on '+esc(a.model||"")+'. Acting for you in '+esc(String(a.delegated_threads||0))+' channel'+(a.delegated_threads===1?"":"s")+'. Today: '+esc(String(st.runs_today||0))+' runs, '+esc(String(st.fetches_today||0))+' fetches, '+esc(String(st.tokens_today||0))+' tokens.'+(st.last_sync?' Synced with peers '+esc(ago(st.last_sync))+'.':'')+(st.last_sync_error?' <span style="color:var(--red)">Sync: '+esc(st.last_sync_error)+'</span>':'')+'</p>')+
   '<p class="hint">It has its own key, signed by yours, so anyone reading a channel can tell you from your agent. Anything it writes says so. It can never share or grant access.</p>'+
+  '<label class="f">Use this computer\u2019s browser</label><div id="c-devb" class="hint" style="margin-top:0">Checking…</div>'+
   '<label class="f">Details your agents may use</label><textarea id="c-details" rows="3" maxlength="2000" placeholder="Phone: (248) 555-0137&#10;Email for bookings: you@example.com&#10;Address, dietary needs, seat preferences…">'+esc((a.reach&&a.reach.details)||"")+'</textarea>'+
   '<div style="display:flex;gap:.5rem;align-items:center;margin-top:.4rem"><button class="btn" id="c-detailssave">Save</button><span class="hint" style="margin:0">Your agents type these into forms for you (a booking, a waitlist) instead of asking. Kept encrypted; never posted in a channel. Passwords and card numbers never go here: you enter those yourself.</span></div>'+
   '<p class="hint">Everything lives in <span class="mono">'+esc(reach.config_path||"").replace(/\/agent\.json$/,"")+'</span> on this machine. This page answers only on this machine; peers reach the node by signature, never by this token.</p>'+
@@ -1399,6 +1401,13 @@ function settings(){var m=me||{};var origin=location.origin;
           try{localStorage.removeItem("lamdis.guest");localStorage.removeItem("lamdis.session")}catch(e){}location.href=location.pathname})}}}).catch(function(){});
   api("/app/api/handle").then(function(h){if(!h||!h.handle)return;s.querySelector("#c-handlewrap").hidden=false;var hi=s.querySelector("#c-handle");hi.value="@"+h.handle;
     s.querySelector("#c-handlesave").onclick=function(){var b=this;api("/app/api/handle",{handle:hi.value}).then(function(r){if(r.error){alert(r.error);return}hi.value="@"+r.handle;b.textContent="Saved"})}}).catch(function(){});
+  (function devb(){var el=s.querySelector("#c-devb");if(!el)return;
+    api("/app/api/device/browser/status").then(function(st){if(st.error){el.textContent="Available on app.lamdis.ai.";return}
+      if(st.connected){el.innerHTML='<b style="color:var(--green)">Connected.</b> Your agents browse in the Chrome window on your computer, where you are signed in. Close it or press Ctrl-C to go back to the cloud browser.';return}
+      el.innerHTML='Your agents browse on your own computer instead of in the cloud: signed in as you, on your connection, so sites treat it as you. <button class="btn sm" id="c-devbgo">Set it up</button>';
+      el.querySelector("#c-devbgo").onclick=function(){var b=this;b.disabled=true;api("/app/api/device/code",{}).then(function(d){if(d.error){b.textContent=d.error;return}
+        el.innerHTML='On your Mac or PC, in a terminal:<pre class="cmd">curl -fsSL https://lamdis.ai/install | sh\nlamdis browser '+esc(d.code)+'</pre>Chrome opens with a Lamdis profile. Sign in to the sites you want your agents to use, once. The code works for ten minutes. <button class="btn sm" id="c-devbchk">Check</button>';
+        el.querySelector("#c-devbchk").onclick=devb})}}).catch(function(){el.textContent=""})})();
   s.querySelector("#c-detailssave").onclick=function(){var b=this;api("/app/api/agent/config",{details:s.querySelector("#c-details").value}).then(function(r){b.textContent=r.error?"Failed":"Saved"})};
   s.querySelector("#c-anamesave").onclick=function(){var b=s.querySelector("#c-anamesave");api("/app/api/agent/config",{name:s.querySelector("#c-aname").value}).then(function(r){b.textContent=r.error?"Failed":"Saved";loadAgent().then(drawMode)})};
   var conns=[];

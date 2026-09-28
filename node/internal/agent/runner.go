@@ -77,6 +77,9 @@ type Runner struct {
 	Pool *Pool
 	// Browser runs the pages the agent works in for the person, or nil.
 	Browser *BrowserPool
+	// Guest is set on a host account nobody can come back to yet; its
+	// allowance is small and the way to a bigger one is worth saying.
+	Guest bool
 	// OpenFile reads an attachment by its address, for files that live in
 	// another account on the same host. Nil reads only this account's.
 	OpenFile func(url, id string) ([]byte, error)
@@ -329,8 +332,14 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		}
 		if r.Pool.Full(start) {
 			over = "The free tier has had a busy day and is resting until tomorrow; with your own model key in Settings there is no shared limit"
+			if r.Guest {
+				over = "Today's free allowance for new visitors is used up. Add your email (Sign in, top of the page or You on the phone) and you get your own, much larger allowance right away"
+			}
 		} else if s.Tokens >= cfg.MaxTokensPerDay {
 			over = "Today's allowance for thinking is used up. It resets tomorrow; with your own model key in Settings there is no shared limit"
+			if r.Guest {
+				over = "You have used today's guest allowance. Add your email (Sign in, top of the page or You on the phone) and it goes up about sevenfold right away"
+			}
 		} else if t.Kind != TriggerChat && s.Runs >= cfg.MaxRunsPerDay {
 			over = "Today's allowance of runs is used up. It resets tomorrow; with your own model key in Settings there is no shared limit"
 		}

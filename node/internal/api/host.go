@@ -59,6 +59,14 @@ type Host struct {
 	AccountFetchesPerDay int
 	// Pool caps what all accounts on the shared key spend in a day.
 	Pool *agent.Pool
+	// GuestPool is the separate daily pool for accounts nobody can come
+	// back to yet, and the Guest* limits are theirs (see abuse.go).
+	GuestPool          *agent.Pool
+	GuestRunsPerDay    int
+	GuestTokensPerDay  int
+	GuestFetchesPerDay int
+	// StartsPerHour and StartsPerDay limit new guests per network; 0 is none.
+	StartsPerHour, StartsPerDay int
 	// Browser runs every account's browser (each in its own context), or nil.
 	Browser *agent.BrowserPool
 	// devices holds each person's own browser, when their computer is connected.
@@ -260,7 +268,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	state := agent.LoadState(dir)
 	runner := &agent.Runner{Store: st, PersonKey: key, Person: self, AgentKey: agentKey, Agent: agentPID,
 		Model: h.sharedModel(), ModelName: h.Model, DataDir: dir, State: state, NoCommands: true,
-		AllowedModels: h.AllowedModels, SharedOnly: h.SharedKey != "", Pool: h.Pool, Browser: h.Browser, OpenFile: h.openFile,
+		AllowedModels: h.AllowedModels, SharedOnly: h.SharedKey != "", Pool: h.poolFor(dir), Guest: h.GuestPool != nil && !keptAccount(dir), Browser: h.Browser, OpenFile: h.openFile,
 		Names: func(p string) string { return "" },
 		Logf:  func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched := &agent.Scheduler{Runner: runner, State: state,
@@ -325,14 +333,27 @@ func (h *Host) load(id, email string) (*Account, error) {
 // somebody's laptop, and the interface never offers to raise them.
 func (h *Host) budget(dir string) {
 	cfg, _ := agent.LoadConfig(dir)
-	if h.AccountRunsPerDay > 0 {
-		cfg.MaxRunsPerDay = h.AccountRunsPerDay
+	runs, tokens, fetches := h.AccountRunsPerDay, h.AccountTokensPerDay, h.AccountFetchesPerDay
+	if !keptAccount(dir) {
+		// A guest: enough to try it properly, not enough to be worth farming.
+		if h.GuestRunsPerDay > 0 {
+			runs = h.GuestRunsPerDay
+		}
+		if h.GuestTokensPerDay > 0 {
+			tokens = h.GuestTokensPerDay
+		}
+		if h.GuestFetchesPerDay > 0 {
+			fetches = h.GuestFetchesPerDay
+		}
 	}
-	if h.AccountTokensPerDay > 0 {
-		cfg.MaxTokensPerDay = h.AccountTokensPerDay
+	if runs > 0 {
+		cfg.MaxRunsPerDay = runs
 	}
-	if h.AccountFetchesPerDay > 0 {
-		cfg.MaxFetchesPerDay = h.AccountFetchesPerDay
+	if tokens > 0 {
+		cfg.MaxTokensPerDay = tokens
+	}
+	if fetches > 0 {
+		cfg.MaxFetchesPerDay = fetches
 	}
 	if cfg.Model == "" {
 		cfg.Model = h.Model

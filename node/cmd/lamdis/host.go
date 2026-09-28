@@ -68,12 +68,19 @@ func cmdHost(ctx context.Context, args []string) error {
 		AccountFetchesPerDay: envInt("LAMDIS_ACCOUNT_FETCHES", 200),
 		// Everyone on the shared key together: about $5 a day at the
 		// default model's prices.
-		Browser:    agent.NewBrowserPool(os.Getenv("LAMDIS_BROWSER_CDP")),
-		Pool:       &agent.Pool{Tokens: envInt("LAMDIS_HOST_TOKENS", 20_000_000)},
-		SharedKey:  strings.TrimSpace(os.Getenv("LAMDIS_HOST_MODEL_KEY")),
-		StarterCap: *starterCap,
-		KeyCeiling: ceiling(),
-		Logf:       func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+		Browser: agent.NewBrowserPool(os.Getenv("LAMDIS_BROWSER_CDP")),
+		Pool:    &agent.Pool{Tokens: envInt("LAMDIS_HOST_TOKENS", 20_000_000)},
+		// Guests spend from their own, smaller pool: about $1 a day.
+		GuestPool:          &agent.Pool{Tokens: envInt("LAMDIS_GUEST_POOL_TOKENS", 4_000_000)},
+		GuestRunsPerDay:    envInt("LAMDIS_GUEST_RUNS", 40),
+		GuestTokensPerDay:  envInt("LAMDIS_GUEST_TOKENS", 150_000),
+		GuestFetchesPerDay: envInt("LAMDIS_GUEST_FETCHES", 40),
+		StartsPerHour:      envInt("LAMDIS_STARTS_PER_HOUR", 5),
+		StartsPerDay:       envInt("LAMDIS_STARTS_PER_DAY", 15),
+		SharedKey:          strings.TrimSpace(os.Getenv("LAMDIS_HOST_MODEL_KEY")),
+		StarterCap:         *starterCap,
+		KeyCeiling:         ceiling(),
+		Logf:               func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 	}
 	// Starter keys are minted only if a management key is present, and only
 	// while the total committed stays under the ceiling.

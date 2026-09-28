@@ -169,6 +169,7 @@ func (h *Host) handleEmailConfirm(w http.ResponseWriter, r *http.Request) {
 	os.MkdirAll(h.emailIndex(), 0o700)
 	os.WriteFile(filepath.Join(h.emailIndex(), emailKey(p.email)), []byte(me.ID), 0o600)
 	os.WriteFile(filepath.Join(me.Dir, "email_confirmed"), []byte(p.email), 0o600)
+	h.promote(me)
 	writeJSON(w, map[string]any{"ok": true, "email": p.email})
 }
 

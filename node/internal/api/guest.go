@@ -97,6 +97,10 @@ func (h *Host) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeStatusJSON(w, http.StatusForbidden, map[string]any{"error": "this host asks people to sign in first"})
 		return
 	}
+	if !allowStart(clientIP(r), h.now(), h.StartsPerHour, h.StartsPerDay) {
+		writeStatusJSON(w, http.StatusTooManyRequests, map[string]any{"error": "Too many new accounts from this network today. Sign in with your email instead, or try again later."})
+		return
+	}
 	buf := make([]byte, 8)
 	rand.Read(buf)
 	id := "g" + hex.EncodeToString(buf)
