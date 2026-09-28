@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -35,9 +36,21 @@ type CatalogEntry struct {
 	Aliases []string `json:"aliases,omitempty"`
 	URL     string   `json:"url,omitempty"`
 	// How: "oauth" (sign in on their page), "key" (paste a key from their
-	// settings), "open" (nothing needed), or "none" (no official way).
+	// settings), "open" (nothing needed), "host" (the host holds a key for
+	// everyone, in the environment variable Env), or "none" (no official way).
 	How  string `json:"how"`
 	Note string `json:"note,omitempty"`
+	Env  string `json:"-"`
+}
+
+// hostKey is the key a host holds for a connector everyone may use, or "".
+func hostKey(url string) string {
+	for _, e := range Catalog {
+		if e.How == "host" && e.Env != "" && strings.TrimRight(e.URL, "/") == strings.TrimRight(url, "/") {
+			return strings.TrimSpace(os.Getenv(e.Env))
+		}
+	}
+	return ""
 }
 
 // Candidate is one way to connect something, from wherever it was found.
@@ -249,7 +262,9 @@ func describeCandidates(query string, cs []Candidate, have []ToolServer) string 
 	for _, c := range cs {
 		switch {
 		case c.How == "none":
-			fmt.Fprintf(&sb, "- %s: NO official way to connect. %s\n", c.Name, c.Note)
+			fmt.Fprintf(&sb, "- %s: NO official way to connect. %s Instead, do it in the browser tool: if the person has connected their own computer's browser (Settings, Use this computer's browser) you are signed in there as them; otherwise suggest they set that up, because sites like this often refuse cloud browsers.\n", c.Name, c.Note)
+		case c.How == "host" && hostKey(c.URL) == "":
+			fmt.Fprintf(&sb, "- %s: official, but this host has not been set up for it yet. %s\n", c.Name, c.Note)
 		case c.Source == "catalog":
 			fmt.Fprintf(&sb, "- %s (official) %s — %s. %s\n", c.Name, c.URL, howWords(c.How), c.Note)
 		default:
@@ -269,6 +284,8 @@ func howWords(h string) string {
 		return "the person pastes a key from the service's settings"
 	case "open":
 		return "nothing to sign in to"
+	case "host":
+		return "ready to use, nothing for the person to sign in to"
 	}
 	return "sign-in checked when they connect"
 }

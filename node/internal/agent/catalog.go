@@ -31,6 +31,10 @@ var Catalog = []CatalogEntry{
 	{Name: "Zapier", URL: "https://mcp.zapier.com/api/mcp/mcp", How: "oauth", Note: "Reaches thousands of other apps through the person's own Zapier account; each action uses their Zapier tasks."},
 	{Name: "DeepWiki", URL: "https://mcp.deepwiki.com/mcp", How: "open", Note: "Reads public GitHub repositories' documentation."},
 
+	// Held by the host for everyone: nothing for the person to sign in to.
+	{Name: "Instacart", Aliases: []string{"groceries", "grocery", "shopping list"}, URL: "https://mcp.instacart.com/mcp", How: "host", Env: "LAMDIS_INSTACART_KEY",
+		Note: "Makes Instacart shopping lists and recipe pages the person opens to pick a store and check out; it does not place orders itself."},
+
 	// Official, but the vendor only admits apps it has approved.
 	{Name: "Gmail", Aliases: []string{"google mail", "email"}, URL: "https://gmailmcp.googleapis.com/mcp/v1", How: "oauth", Note: "Needs a Google-approved Lamdis app, which is not in place yet."},
 	{Name: "Google Calendar", Aliases: []string{"calendar", "gcal"}, URL: "https://calendarmcp.googleapis.com/mcp/v1", How: "oauth", Note: "Needs a Google-approved Lamdis app, which is not in place yet."},
@@ -44,6 +48,8 @@ var Catalog = []CatalogEntry{
 	// No sanctioned way in. Say so; do not suggest password-sharing tools.
 	{Name: "Blink", Aliases: []string{"blink camera", "blink cameras"}, How: "none", Note: "Amazon offers no public API for Blink. If they run Home Assistant with its Blink integration, connecting Home Assistant is the supported route."},
 	{Name: "Ring", Aliases: []string{"ring doorbell", "ring camera"}, How: "none", Note: "No public API. Home Assistant's Ring integration is the supported route if they run it."},
+	{Name: "OpenTable", Aliases: []string{"restaurant reservation", "restaurant booking"}, How: "none", Note: "OpenTable's API is for approved partners only."},
+	{Name: "Resy", Aliases: []string{"resy reservation", "resy notify"}, How: "none", Note: "Resy has no public API, and its site refuses cloud browsers."},
 	{Name: "Expedia", How: "none", Note: "Expedia's agent tools are for business partners only; a personal Expedia account cannot be connected."},
 	{Name: "Facebook", Aliases: []string{"facebook account", "facebook page", "instagram", "meta"}, How: "none", Note: "Meta does not let apps read or post for a personal account. Ads can be connected (Meta Ads); Pages and Instagram posting need an approved Meta app, or the person's own Zapier."},
 	{Name: "Airbnb", How: "none", Note: "Partner-only API."},

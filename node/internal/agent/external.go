@@ -123,6 +123,14 @@ func transportFor(ctx context.Context, srv ToolServer, allowCommands bool) (sdk.
 				Transport: headerRoundTripper{name: "Authorization", value: "Bearer " + srv.OAuth.Access}}
 			return t, nil
 		}
+		if srv.Auth == "" {
+			// A connector the host holds a key for, for everyone.
+			if k := hostKey(srv.URL); k != "" {
+				t.HTTPClient = &http.Client{Timeout: 60 * time.Second,
+					Transport: headerRoundTripper{name: "Authorization", value: "Bearer " + k}}
+				return t, nil
+			}
+		}
 		if srv.Auth != "" {
 			name := srv.Header
 			if name == "" {
