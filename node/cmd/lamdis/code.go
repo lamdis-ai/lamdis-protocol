@@ -38,6 +38,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	modelURL := fs.String("url", "", "OpenAI-compatible base URL for a local model, e.g. http://localhost:11434/v1")
 	dir := fs.String("dir", "", "workspace directory (default: the git root of the current directory)")
 	quiet := fs.Bool("q", false, "print only the answer")
+	verbose := fs.Bool("verbose", false, "show each tool call while working")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -103,27 +104,37 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		}
 	}
 	runner := &agent.Runner{Store: s, PersonKey: priv, Person: pid, AgentKey: agentKey, Agent: agentPID,
-		Model: base, ModelName: envModel, DataDir: dataDir, Names: names, Embedder: embedderFromEnv(),
+		Model: base, ModelName: envModel, RunTimeout: 30 * time.Minute,
+		OwnModelCredential: strings.TrimSpace(os.Getenv("LAMDIS_OPENROUTER_KEY")) != "",
+		RunToCompletion:    true, SharedOnly: true,
+		DataDir: dataDir, Names: names, Embedder: embedderFromEnv(),
 		State: agent.LoadState(dataDir), Workspace: ws}
 	if !runner.Ready() {
 		return fmt.Errorf("no model is configured.\n  OpenRouter:  put LAMDIS_OPENROUTER_KEY=sk-or-... in %s/.env (keys at openrouter.ai/keys)\n  local model: lamdis -url http://localhost:11434/v1 -model qwen3.5:4b", dataDir)
 	}
 	spin := newSpinner(os.Stderr)
+	interactive := task == ""
+	var actionCount int
 	if !*quiet {
 		// What it just did goes above the line; what it is doing now stays
 		// on it. So a wait always says something, and the transcript
 		// afterwards reads as though nothing was ever spinning.
 		runner.OnTool = func(name string, args map[string]any, out string, took time.Duration) {
+			actionCount++
 			sum := strings.ReplaceAll(toolArgSummary(name, args), root+"/", "")
-			status := ""
 			if strings.HasPrefix(out, "error:") {
-				status = " \033[31m" + trunc(strings.TrimPrefix(out, "error: "), 60) + "\033[0m"
+				problem := trunc(strings.TrimSpace(strings.TrimPrefix(out, "error:")), 160)
+				spin.Note("\033[31m  ✗ failed after %s · %s\033[0m\n", elapsed(took), problem)
+			} else if interactive {
+				spin.Note("\033[32m  ✓ finished in %s\033[0m\n", elapsed(took))
+			} else if *verbose {
+				spin.Note("  \033[2m→ %s %s (%s)\033[0m\n", name, sum, elapsed(took))
 			}
-			spin.Note("  \033[2m→ %s %s (%s)\033[0m%s\n", name, sum, took.Round(100*time.Millisecond), status)
-			spin.Say("thinking")
+			spin.Continue("thinking about the result")
 		}
 		runner.OnStep = func(what string, args map[string]any) {
-			spin.Say(doing(what, args))
+			status := doing(what, args)
+			spin.Say(status)
 		}
 	}
 
@@ -146,7 +157,43 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	// What somebody typed is not thrown away because the network hiccuped.
 	// It goes back in the box, so Enter tries it again.
 	var retry string
+	var inputLines <-chan string
+	runWithInput := func(trigger agent.Trigger) agent.Result {
+		if inputLines == nil {
+			return runner.Run(ctx, trigger)
+		}
+		interjections := make(chan string, 16)
+		runner.Interjections = interjections
+		defer func() { runner.Interjections = nil }()
+		done := make(chan agent.Result, 1)
+		go func() { done <- runner.Run(ctx, trigger) }()
+		for {
+			select {
+			case res := <-done:
+				return res
+			case line, ok := <-inputLines:
+				if !ok {
+					inputLines = nil
+					continue
+				}
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				_, err := personAppendCLI(ctx, s, priv, thread, protolog.Draft{Kind: agent.KindQuestion, Lane: protolog.LaneContent,
+					Body: map[string]any{"text": line, "workspace": root}})
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "\033[31mCould not save your message: %v\033[0m\n", err)
+					continue
+				}
+				interjections <- line
+				spin.Say("got it — I’ll fold that in")
+			}
+		}
+	}
 	ask := func(text string) error {
+		actionCount = 0
+		runStarted := time.Now()
 		q, err := personAppendCLI(ctx, s, priv, thread, protolog.Draft{Kind: agent.KindQuestion, Lane: protolog.LaneContent,
 			Body: map[string]any{"text": text, "workspace": root}})
 		if err != nil {
@@ -157,7 +204,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		// Linked to a host: start from what is there now, so the agent is
 		// not answering about a stale copy.
 		syncPeers(ctx, dataDir, s, priv, pid, agentPID)
-		res := runner.Run(ctx, agent.Trigger{Kind: agent.TriggerCode, Thread: thread, Entry: q.ID})
+		res := runWithInput(agent.Trigger{Kind: agent.TriggerCode, Thread: thread, Entry: q.ID})
 		spin.Stop()
 		for res.Outcome == "waiting" {
 			// The agent asked something. Answer here, in the terminal.
@@ -172,13 +219,24 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 				return err
 			}
 			spin.Start("thinking")
-			res = runner.Run(ctx, agent.Trigger{Kind: agent.TriggerDecision, Thread: thread, Entry: r.ID})
+			res = runWithInput(agent.Trigger{Kind: agent.TriggerDecision, Thread: thread, Entry: r.ID})
 			spin.Stop()
 		}
 		if res.Outcome == "error" {
-			return fmt.Errorf("%s", res.Error)
+			problem := res.Error
+			if strings.Contains(problem, "context deadline exceeded") {
+				problem = "the run reached its 30-minute limit"
+			}
+			return fmt.Errorf("stopped after %s: %s", elapsed(time.Since(runStarted)), problem)
 		}
 		retry = ""
+		if !*quiet {
+			steps := "steps"
+			if actionCount == 1 {
+				steps = "step"
+			}
+			fmt.Fprintf(os.Stderr, "\033[32m  ✓ done · %d %s · %s total\033[0m\n\n", actionCount, steps, elapsed(time.Since(runStarted)))
+		}
 		fmt.Println(res.Answer)
 		// And send what was written, so it shows up wherever the person is
 		// looking, then say so rather than leaving them to wonder.
@@ -193,9 +251,20 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	if task != "" {
 		return ask(task)
 	}
+	// In the interactive terminal, never redraw over the user's input. Durable
+	// lines plus heartbeats remain readable even while a message is being typed.
+	spin.lineMode = true
 	// Interactive.
-	in := bufio.NewScanner(os.Stdin)
-	in.Buffer(make([]byte, 1<<20), 1<<20)
+	lineCh := make(chan string, 16)
+	inputLines = lineCh
+	go func() {
+		defer close(lineCh)
+		in := bufio.NewScanner(os.Stdin)
+		in.Buffer(make([]byte, 1<<20), 1<<20)
+		for in.Scan() {
+			lineCh <- in.Text()
+		}
+	}()
 	switch {
 	case inProject:
 		fmt.Fprintf(os.Stderr, "\033[2mAsk it anything about this project, or tell it what to change. /help for more.\033[0m\n")
@@ -206,11 +275,12 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	}
 	for {
 		fmt.Fprint(os.Stderr, "\n\033[1m› \033[0m")
-		if !in.Scan() {
+		raw, ok := <-lineCh
+		if !ok {
 			fmt.Fprintln(os.Stderr)
 			return nil
 		}
-		line := strings.TrimSpace(in.Text())
+		line := strings.TrimSpace(raw)
 		if line == "" {
 			// Enter on an empty line retries whatever did not get through.
 			if retry == "" {
@@ -224,6 +294,10 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 			return nil
 		case "/help", "help", "?":
 			fmt.Fprint(os.Stderr, cliHelp(ws != nil, thread))
+			continue
+		case "/model":
+			fmt.Fprintf(os.Stderr, "\033[2mCurrent model: %s\033[0m\n", mname)
+			fmt.Fprintln(os.Stderr, "\033[2mUse /model vendor/model-id to switch, or /model default to use the default.\033[0m")
 			continue
 		case "/trust":
 			if err := cmdTrust(ctx, dataDir, nil); err != nil {
@@ -241,6 +315,25 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 			continue
 		case "/here":
 			fmt.Fprintf(os.Stderr, "\033[2m%s · thread %s · %s\033[0m\n", root, thread[:12], mname)
+			continue
+		}
+		if strings.HasPrefix(line, "/model ") {
+			choice := strings.TrimSpace(strings.TrimPrefix(line, "/model "))
+			if choice == "" {
+				fmt.Fprintln(os.Stderr, "\033[31mUsage: /model vendor/model-id (or /model default)\033[0m")
+				continue
+			}
+			if strings.EqualFold(choice, "default") {
+				cfg.Model = ""
+			} else {
+				cfg.Model = choice
+			}
+			if err := agent.SaveConfig(dataDir, cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mCould not save model: %v\033[0m\n", err)
+				continue
+			}
+			_, mname = runner.ModelFor(cfg)
+			fmt.Fprintf(os.Stderr, "\033[2mModel set to %s. It will answer the next question.\033[0m\n", mname)
 			continue
 		}
 		if err := ask(line); err != nil {
@@ -268,6 +361,7 @@ func cliHelp(canWork bool, thread string) string {
 	s += "\n" + b + "Commands" + z + "\n" +
 		"  /threads     " + d + "everything in your record" + z + "\n" +
 		"  /trust       " + d + "how much of this machine it may use" + z + "\n" +
+		"  /model       " + d + "show or change the model" + z + "\n" +
 		"  /app         " + d + "open it in a browser" + z + "\n" +
 		"  /here        " + d + "where you are and what is answering" + z + "\n" +
 		"  /quit        " + d + "or Ctrl-D" + z + "\n\n" +

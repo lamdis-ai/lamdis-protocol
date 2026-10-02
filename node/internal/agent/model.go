@@ -60,7 +60,7 @@ type Model interface {
 
 // DefaultModel is cheap, long-context, and handles tool calls. Override with
 // LAMDIS_MODEL; the id is shown in the interface so nobody has to guess.
-const DefaultModel = "openai/gpt-5.6-luna"
+const DefaultModel = "z-ai/glm-5.3-flash"
 
 // OpenRouter is a Model over an OpenAI-compatible chat completions API.
 // OpenRouter by default; BaseURL points it at anything else that speaks the

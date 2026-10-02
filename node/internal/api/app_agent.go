@@ -572,6 +572,7 @@ func (a *App) handleModels(w http.ResponseWriter, r *http.Request) {
 // so a restricted node answers instantly and works offline.
 func pricedSubset(ids []string) []map[string]any {
 	known := map[string][2]float64{
+		"z-ai/glm-5.3-flash":        {0.075, 0.25},
 		"openai/gpt-5.6-luna":        {0.20, 1.20},
 		"openai/gpt-5.6-luna-pro":    {0.20, 1.20},
 		"anthropic/claude-haiku-4.5": {1.00, 5.00},

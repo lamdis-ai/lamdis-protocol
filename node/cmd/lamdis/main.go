@@ -60,7 +60,9 @@ agent:
                               current repository and records every run
   lamdis "add a test for X"   one task, then exit
      [-model ID] [-url URL]   pick a model, or an OpenAI-compatible local server
-     [-dir PATH] [-q]         workspace (default: git root); -q prints only the answer
+     [-dir PATH]             workspace (default: git root)
+     [-q]                    print only the answer
+     [-verbose]              show each tool call while working
 
 commands:
   init                        create a person keypair and empty store
@@ -123,6 +125,7 @@ commands:
                               -addr :8420 for peers; even then the app stays
                               local unless -expose-app.
   peer add <name> <url>       pair with a person's node (exchanges identities)
+  peer remove <name>          stop syncing with a paired node (local only)
   peers                       list who you're paired with
   sync [peer] [-watch 30s]    sync permitted threads with peers (default: all)
 
@@ -295,6 +298,9 @@ func run(args []string) error {
 		if len(rest) == 3 && rest[0] == "add" {
 			return cmdPeerAdd(ctx, *dataDir, rest[1], rest[2])
 		}
+		if len(rest) == 2 && rest[0] == "remove" {
+			return cmdPeerRemove(*dataDir, rest[1])
+		}
 		return usage()
 	case "peers":
 		return cmdPeers(*dataDir)
@@ -440,6 +446,22 @@ func cmdPeers(dataDir string) error {
 		}
 		fmt.Printf("%-12s %s  %s\n", name, p.URL, id)
 	}
+	return nil
+}
+
+func cmdPeerRemove(dataDir, name string) error {
+	peers, err := loadPeers(dataDir)
+	if err != nil {
+		return err
+	}
+	if _, ok := peers[name]; !ok {
+		return fmt.Errorf("no peer named %q", name)
+	}
+	delete(peers, name)
+	if err := savePeers(dataDir, peers); err != nil {
+		return err
+	}
+	fmt.Printf("✓ stopped syncing with %s; local threads and data are unchanged\n", name)
 	return nil
 }
 

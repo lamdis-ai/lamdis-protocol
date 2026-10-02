@@ -106,6 +106,26 @@ func TestItStaysQuietWhenNobodyIsWatching(t *testing.T) {
 	}
 }
 
+func TestInteractiveProgressCannotLookFrozen(t *testing.T) {
+	s, buf := drawing()
+	s.lineMode = true
+	s.heartbeat = 25 * time.Millisecond
+	s.Start("thinking")
+	s.Say("running the release build")
+	time.Sleep(70 * time.Millisecond)
+	s.Stop()
+
+	out := buf.String()
+	for _, want := range []string{"working", "running the release build", "still running the release build", "elapsed", "Ctrl-C stops"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("interactive progress omitted %q: %q", want, out)
+		}
+	}
+	if strings.ContainsAny(out, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") {
+		t.Fatalf("interactive progress redraws an animated spinner: %q", out)
+	}
+}
+
 // The line should say the thing a person would say.
 func TestItNamesTheWorkInWords(t *testing.T) {
 	for _, c := range []struct{ tool, want string }{

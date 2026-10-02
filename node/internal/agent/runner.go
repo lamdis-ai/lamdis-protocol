@@ -45,12 +45,21 @@ type Runner struct {
 	Agent     string
 	Model     Model
 	ModelName string
-	DataDir   string
-	Names     func(principal string) string
-	Embedder  embed.Embedder
-	State     *State
-	Now       func() time.Time
-	Logf      func(format string, args ...any)
+	// RunTimeout overrides the default four-minute service deadline.
+	// Interactive coding tasks get more time for multi-step work.
+	RunTimeout time.Duration
+	// OwnModelCredential marks a credential loaded from the local process
+	// environment as belonging to this machine's user.
+	OwnModelCredential bool
+	// RunToCompletion lets an interactive coding task use as many model turns
+	// and tool calls as it needs, up to RunTimeout.
+	RunToCompletion bool
+	DataDir         string
+	Names           func(principal string) string
+	Embedder        embed.Embedder
+	State           *State
+	Now             func() time.Time
+	Logf            func(format string, args ...any)
 	// Workspace, when set, gives the agent file and shell tools in one
 	// directory. Only the terminal sets it; the node's autonomous runs
 	// never touch a filesystem.
@@ -61,6 +70,9 @@ type Runner struct {
 	// OnStep is told what is about to happen, so something waiting can say
 	// so rather than showing a bare spinner for twenty seconds.
 	OnStep func(what string, args map[string]any)
+	// Interjections carries new terminal messages into an active coding run.
+	// They are incorporated at safe points between model/tool steps.
+	Interjections <-chan string
 	// NoCommands refuses tool servers that run a local command, which is
 	// what a hosted node wants.
 	NoCommands bool
@@ -205,7 +217,7 @@ const maxTurns = 16
 // models from Settings and see the change on the next question.
 // limited reports whether the daily limits apply to this account's runs.
 func (r *Runner) limited(cfg Config) bool {
-	own := cfg.OpenRouterKey != "" || cfg.ModelURLKey != "" || cfg.ModelURL != ""
+	own := cfg.OpenRouterKey != "" || cfg.ModelURLKey != "" || cfg.ModelURL != "" || r.OwnModelCredential
 	return !(r.SharedOnly && own)
 }
 
@@ -286,7 +298,11 @@ func (r *Runner) Ready() bool {
 func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+	timeout := r.RunTimeout
+	if timeout <= 0 {
+		timeout = 4 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	start := r.now()
 	cfg, _ := LoadConfig(r.DataDir)
@@ -467,9 +483,33 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 
 	tools := r.toolSpecs(g, canWrite, ex)
 	calls := 0
+	const interactiveToolCeiling = 200
+	lastToolKey := ""
+	repeatedToolCalls := 0
 	var final string
 	outcome := ""
-	for turn := 0; turn < maxTurns; turn++ {
+	drainInterjections := func() bool {
+		added := false
+		for r.Interjections != nil {
+			select {
+			case text, ok := <-r.Interjections:
+				if !ok {
+					r.Interjections = nil
+					return added
+				}
+				text = strings.TrimSpace(text)
+				if text != "" {
+					msgs = append(msgs, Message{Role: "user", Content: "The person added this while you were working. Incorporate it into the current task:\n" + text})
+					added = true
+				}
+			default:
+				return added
+			}
+		}
+		return added
+	}
+	for turn := 0; r.RunToCompletion || turn < maxTurns; turn++ {
+		drainInterjections()
 		m, u, err := model.Complete(ctx, msgs, tools)
 		rec.Tokens["prompt"] += u.Prompt
 		rec.Tokens["completion"] += u.Completion
@@ -477,6 +517,9 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 			return fail(err.Error())
 		}
 		msgs = append(msgs, m)
+		if len(m.ToolCalls) == 0 && drainInterjections() {
+			continue
+		}
 		if len(m.ToolCalls) == 0 {
 			final = strings.TrimSpace(m.Content)
 			break
@@ -484,13 +527,26 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		stop := false
 		for _, tc := range m.ToolCalls {
 			calls++
-			if calls > cfg.MaxToolCalls {
+			if calls > interactiveToolCeiling {
+				return fail(fmt.Sprintf("stopped after %d tool calls; the task may be looping", interactiveToolCeiling))
+			}
+			if !r.RunToCompletion && calls > cfg.MaxToolCalls {
 				return fail(fmt.Sprintf("stopped after %d tool calls", cfg.MaxToolCalls))
 			}
 			name := humanName(tc.Function.Name)
 			var args map[string]any
 			if json.Unmarshal([]byte(tc.Function.Arguments), &args) != nil {
 				args = map[string]any{}
+			}
+			keyBytes, _ := json.Marshal([]any{humanName(tc.Function.Name), args})
+			toolKey := string(keyBytes)
+			if toolKey == lastToolKey {
+				repeatedToolCalls++
+			} else {
+				lastToolKey, repeatedToolCalls = toolKey, 1
+			}
+			if r.RunToCompletion && repeatedToolCalls >= 3 {
+				return fail("stopped after the same tool call repeated three times; the task may be looping")
 			}
 			rec.ToolCalls = append(rec.ToolCalls, name)
 			if r.OnStep != nil {
@@ -633,7 +689,7 @@ func (r *Runner) systemPrompt(b Brief, g gate, canWrite bool, st *perm.State) st
 		sb.WriteString("\nThey are at a terminal with no project open, so you have no file or shell tools here. Answer from the record, and if they want code read or changed, say they should run this inside the project.\n")
 	}
 	if r.Workspace != nil {
-		sb.WriteString("\nYou are working in a code repository with file and shell tools. Read before you edit. Make the smallest change that does the job, with edit_file. After changing anything, run the project's own tests or build with run and say what you ran and what it printed; never claim something is verified unless a command showed it. If the task is unclear or would touch something outside it, ask_person first (in full auto, make the reasonable call and say so). The final message is a short report: what changed, what was run, anything left open.\n")
+		sb.WriteString("\nYou are working in a code repository with file and shell tools. Read before you edit. Make the smallest change that does the job, with edit_file. Use write_file for scripts you need to create; do not repeatedly use shell heredocs or create a new temporary script name for each retry. If a command fails, inspect its output and change the approach before trying again. After changing anything, run the project's own tests or build with run and say what you ran and what it printed; never claim something is verified unless a command showed it. If the task is unclear or would touch something outside it, ask_person first (in full auto, make the reasonable call and say so). The final message is a short report: what changed, what was run, anything left open.\n")
 	}
 	if b.Text != "" {
 		sb.WriteString("\nStanding instructions from " + r.name(r.Person) + " for this thread:\n" + strings.TrimSpace(b.Text) + "\n")

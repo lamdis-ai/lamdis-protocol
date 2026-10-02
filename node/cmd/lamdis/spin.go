@@ -27,6 +27,11 @@ type spinner struct {
 	what    string
 	started time.Time
 	on      bool
+	// lineMode is used by the interactive prompt. Redrawing a spinner while
+	// stdin is active makes typed text jump around, so it emits durable status
+	// lines and a periodic heartbeat instead.
+	lineMode  bool
+	heartbeat time.Duration
 }
 
 // newSpinner returns one that draws, or one that does nothing when nobody
@@ -44,6 +49,9 @@ func (s *spinner) Start(what string) {
 	}
 	s.what, s.started = what, time.Now()
 	s.stop, s.done = make(chan struct{}), make(chan struct{})
+	if s.lineMode {
+		fmt.Fprintf(s.w, "\033[2m  ◌ working… (Ctrl-C stops; keep typing to add context)\033[0m\n")
+	}
 	go s.run()
 }
 
@@ -51,12 +59,42 @@ func (s *spinner) Start(what string) {
 // work reads as one wait rather than several.
 func (s *spinner) Say(what string) {
 	s.mu.Lock()
+	changed := what != s.what
+	s.what = what
+	if s.lineMode && s.stop != nil && changed {
+		fmt.Fprintf(s.w, "\033[2m  → %s\033[0m\n", what)
+	}
+	s.mu.Unlock()
+}
+
+// Continue changes what the heartbeat describes without adding another line.
+func (s *spinner) Continue(what string) {
+	s.mu.Lock()
 	s.what = what
 	s.mu.Unlock()
 }
 
 func (s *spinner) run() {
 	defer close(s.done)
+	if s.lineMode {
+		every := s.heartbeat
+		if every <= 0 {
+			every = 10 * time.Second
+		}
+		t := time.NewTicker(every)
+		defer t.Stop()
+		for {
+			select {
+			case <-s.stop:
+				return
+			case <-t.C:
+				s.mu.Lock()
+				fmt.Fprintf(s.w, "\033[2m  … still %s · %s elapsed (Ctrl-C stops)\033[0m\n",
+					s.what, elapsed(time.Since(s.started)))
+				s.mu.Unlock()
+			}
+		}
+	}
 	// A quiet, even pulse. Braille dots are one cell wide everywhere.
 	frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 	t := time.NewTicker(90 * time.Millisecond)
@@ -98,10 +136,21 @@ func (s *spinner) Stop() {
 
 // Note prints a line above the spinner without disturbing it.
 func (s *spinner) Note(format string, a ...any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.on && s.stop != nil {
-		s.clear()
+		if !s.lineMode {
+			s.clear()
+		}
 	}
 	fmt.Fprintf(s.w, format, a...)
+}
+
+func elapsed(d time.Duration) string {
+	if d < time.Second {
+		return d.Round(100 * time.Millisecond).String()
+	}
+	return d.Round(time.Second).String()
 }
 
 // doing turns a tool call into something worth reading while you wait.
