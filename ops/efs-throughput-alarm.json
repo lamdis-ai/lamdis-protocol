@@ -1,0 +1,45 @@
+{
+  "AlarmName": "lamdis-efs-throughput-high",
+  "AlarmDescription": "Lamdis EFS uses at least 80% of permitted metered throughput for 3 of 5 minutes. Check application latency and EFS throughput mode; Elastic can restore capacity if Bursting becomes constrained.",
+  "ActionsEnabled": true,
+  "AlarmActions": ["arn:aws:sns:us-east-1:730082756200:lamdis-alerts"],
+  "EvaluationPeriods": 5,
+  "DatapointsToAlarm": 3,
+  "Threshold": 80,
+  "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+  "TreatMissingData": "notBreaching",
+  "Metrics": [
+    {
+      "Id": "metered",
+      "MetricStat": {
+        "Metric": {
+          "Namespace": "AWS/EFS",
+          "MetricName": "MeteredIOBytes",
+          "Dimensions": [{"Name": "FileSystemId", "Value": "fs-05981263e88aee227"}]
+        },
+        "Period": 60,
+        "Stat": "Sum"
+      },
+      "ReturnData": false
+    },
+    {
+      "Id": "permitted",
+      "MetricStat": {
+        "Metric": {
+          "Namespace": "AWS/EFS",
+          "MetricName": "PermittedThroughput",
+          "Dimensions": [{"Name": "FileSystemId", "Value": "fs-05981263e88aee227"}]
+        },
+        "Period": 60,
+        "Stat": "Average"
+      },
+      "ReturnData": false
+    },
+    {
+      "Id": "utilization",
+      "Expression": "100 * metered / (60 * permitted)",
+      "Label": "EFS permitted throughput used (%)",
+      "ReturnData": true
+    }
+  ]
+}

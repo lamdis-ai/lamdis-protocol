@@ -33,13 +33,14 @@ settings are all still there. Adding credit starts it again.
 
 ## AWS is bounded by shape, not by a hard cap
 
-Nothing here scales with traffic in a way that can surprise you.
+Compute has explicit limits. Storage operations, requests and network usage
+still need cost monitoring; a small stored dataset does not imply a small bill.
 
 | Thing | Bound |
 |---|---|
 | The hosted app | one ECS task, never more than two |
 | The try box | a Lambda with reserved concurrency of 5 |
-| Storage | EFS holding kilobytes per account |
+| Storage | EFS; charges depend on storage class and throughput mode as well as stored size |
 | CloudFront | pay per request; the responses are small JSON |
 
 Existing budgets already alert both addresses: `aws-daily-tripwire` at $30 a
@@ -50,6 +51,36 @@ Added for this: an SNS topic `lamdis-alerts` with three CloudWatch alarms,
 for the demo being hit unusually hard, the demo failing, and the app having
 no running task. **Both email addresses have to confirm the subscription
 before any of them can reach you.**
+
+### EFS access costs
+
+The September 25–30, 2026 anomaly was access charges on `lamdis-exchange`
+(`fs-05981263e88aee227`, us-east-1), using Elastic throughput. AWS recorded
+$14.30 against an expected $3.96. The September 30 access cost of $2.69/day
+would be about $81/month if sustained, despite only about 5.9 MB stored.
+
+The v44 scheduler saves bookkeeping once per scan and skips writes when the
+durable state is unchanged, including after a restart. Real changes still
+persist before runs start; failed file writes are retried on the next save.
+
+`lamdis-efs-throughput-high` alerts the existing, confirmed `lamdis-alerts`
+subscription when metered usage reaches 80% of permitted throughput for
+three of five minutes. Its reproducible configuration is
+`ops/efs-throughput-alarm.json`:
+
+```sh
+aws cloudwatch put-metric-alarm --profile aws-admin --region us-east-1 \
+  --cli-input-json file://ops/efs-throughput-alarm.json
+```
+
+Bursting removes the Elastic throughput access fee, but capacity must be
+checked against observed workload and latency. If Bursting constrains the
+app, restore Elastic throughput without moving any data:
+
+```sh
+aws efs update-file-system --profile aws-admin --region us-east-1 \
+  --file-system-id fs-05981263e88aee227 --throughput-mode elastic
+```
 
 ## Stopping it
 
