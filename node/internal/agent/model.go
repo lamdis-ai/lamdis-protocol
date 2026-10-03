@@ -391,7 +391,11 @@ func (o *OpenRouter) ListModels(ctx context.Context) ([]string, error) {
 	if !o.isOpenRouter() || o.Key == "" {
 		return nil, fmt.Errorf("model listing needs an OpenRouter key")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(o.BaseURL, "/")+"/models", nil)
+	base := strings.TrimRight(o.BaseURL, "/")
+	if base == "" {
+		base = openRouterURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models", nil)
 	if err != nil {
 		return nil, err
 	}
