@@ -190,6 +190,24 @@ func doing(tool string, args map[string]any) string {
 		return "checking where it may work"
 	case "ask_person":
 		return "asking you"
+	case "find_symbol":
+		return "finding " + short(get("name"), 40)
+	case "find_references":
+		return "finding uses of " + short(get("name"), 36)
+	case "find_tests":
+		return "finding tests for " + short(get("path"), 36)
+	case "git_status", "git_diff":
+		return "checking git"
+	case "run_tests":
+		return "running tests"
+	case "run_checks":
+		return "running checks"
+	case "explore":
+		return "exploring: " + short(get("task"), 44)
+	case "verify":
+		return "checking: " + short(get("command"), 44)
+	case "review":
+		return "reviewing the change"
 	}
 	return "working"
 }

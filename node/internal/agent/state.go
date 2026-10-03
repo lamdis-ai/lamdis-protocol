@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,8 +13,9 @@ import (
 // where it last looked in each thread, and how much the agent has done today.
 // The log is the record of what happened; this is only bookkeeping.
 type State struct {
-	mu   sync.Mutex
-	path string
+	mu    sync.Mutex
+	path  string
+	saved []byte
 
 	Day     string `json:"day"`
 	Runs    int    `json:"runs"`
@@ -49,7 +51,9 @@ type ThreadState struct {
 func LoadState(dataDir string) *State {
 	st := &State{path: filepath.Join(dataDir, "agent-state.json"), Threads: map[string]*ThreadState{}}
 	if raw, err := os.ReadFile(st.path); err == nil {
-		json.Unmarshal(raw, st)
+		if json.Unmarshal(raw, st) == nil {
+			st.saved = raw
+		}
 	}
 	if st.Threads == nil {
 		st.Threads = map[string]*ThreadState{}
@@ -89,13 +93,28 @@ func (s *State) save() {
 		return
 	}
 	raw, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
+	if err != nil || bytes.Equal(raw, s.saved) {
 		return
 	}
 	tmp := s.path + ".tmp"
-	if os.WriteFile(tmp, raw, 0o600) == nil {
-		os.Rename(tmp, s.path)
+	if os.WriteFile(tmp, raw, 0o600) == nil && os.Rename(tmp, s.path) == nil {
+		s.saved = raw
 	}
+}
+
+// edit changes bookkeeping in memory. The scheduler flushes its edits once
+// before firing runs, so a scan does not rewrite the whole file per thread.
+func (s *State) edit(now time.Time, fn func(*State)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.roll(now)
+	fn(s)
+}
+
+func (s *State) flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.save()
 }
 
 // Update runs fn under the lock, rolling the day first, and persists.

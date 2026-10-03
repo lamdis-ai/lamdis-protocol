@@ -8,6 +8,7 @@
 package agent
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -56,6 +58,13 @@ type Usage struct {
 // Model completes a conversation, optionally calling tools.
 type Model interface {
 	Complete(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, Usage, error)
+}
+
+// Streamer is optional so small test models and integrations can keep using
+// the simple completion interface. Interactive clients use it to render the
+// first useful words while the provider is still generating the turn.
+type Streamer interface {
+	Stream(context.Context, []Message, []ToolSpec, func(string)) (Message, Usage, error)
 }
 
 // DefaultModel is cheap, long-context, and handles tool calls. Override with
@@ -163,6 +172,104 @@ func (o *OpenRouter) Complete(ctx context.Context, msgs []Message, tools []ToolS
 		}
 	}
 	return Message{}, Usage{}, last
+}
+
+// Stream implements the OpenAI-compatible SSE chat stream. Tool-call deltas
+// are accumulated just like a normal completion; only assistant text is
+// exposed to the terminal as it arrives.
+func (o *OpenRouter) Stream(ctx context.Context, msgs []Message, tools []ToolSpec, onText func(string)) (Message, Usage, error) {
+	req := map[string]any{"model": o.Model, "messages": msgs, "temperature": 0.2, "stream": true}
+	if o.isOpenRouter() {
+		req["provider"] = map[string]any{"data_collection": "deny"}
+	}
+	if len(tools) > 0 {
+		var ts []map[string]any
+		for _, t := range tools {
+			ts = append(ts, map[string]any{"type": "function", "function": map[string]any{"name": t.Name, "description": t.Description, "parameters": t.Parameters}})
+		}
+		req["tools"], req["tool_choice"] = ts, "auto"
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return Message{}, Usage{}, err
+	}
+	hr, err := http.NewRequestWithContext(ctx, "POST", o.Endpoint(), bytes.NewReader(body))
+	if err != nil {
+		return Message{}, Usage{}, err
+	}
+	if o.Key != "" && o.keyGoesHere() {
+		hr.Header.Set("Authorization", "Bearer "+o.Key)
+	}
+	hr.Header.Set("Content-Type", "application/json")
+	hr.Header.Set("Accept", "text/event-stream")
+	resp, err := o.HTTP.Do(hr)
+	if err != nil {
+		return Message{}, Usage{}, friendly(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return Message{}, Usage{}, fmt.Errorf("the model returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var content strings.Builder
+	var calls []ToolCall
+	var usage Usage
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 4096), 1<<20)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" {
+			break
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+			} `json:"choices"`
+			Usage struct {
+				Prompt     int `json:"prompt_tokens"`
+				Completion int `json:"completion_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
+			continue
+		}
+		c := chunk.Choices[0]
+		if c.Delta.Content != "" {
+			content.WriteString(c.Delta.Content)
+			if onText != nil {
+				onText(c.Delta.Content)
+			}
+		}
+		for _, tc := range c.Delta.ToolCalls {
+			for len(calls) <= tc.Index {
+				calls = append(calls, ToolCall{Type: "function"})
+			}
+			if tc.ID != "" {
+				calls[tc.Index].ID = tc.ID
+			}
+			calls[tc.Index].Function.Name += tc.Function.Name
+			calls[tc.Index].Function.Arguments += tc.Function.Arguments
+		}
+		usage.Prompt, usage.Completion = chunk.Usage.Prompt, chunk.Usage.Completion
+	}
+	if err := scanner.Err(); err != nil {
+		return Message{}, usage, friendly(err)
+	}
+	return Message{Role: "assistant", Content: content.String(), ToolCalls: calls}, usage, nil
 }
 
 // retryable marks a failure that is likely to pass on its own.
@@ -277,6 +384,44 @@ func (o *OpenRouter) complete(ctx context.Context, msgs []Message, tools []ToolS
 func (o *OpenRouter) isOpenRouter() bool {
 	b := strings.TrimRight(o.BaseURL, "/")
 	return b == "" || b == openRouterURL
+}
+
+// ListModels returns the live OpenRouter catalog for the model picker.
+func (o *OpenRouter) ListModels(ctx context.Context) ([]string, error) {
+	if !o.isOpenRouter() || o.Key == "" {
+		return nil, fmt.Errorf("model listing needs an OpenRouter key")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(o.BaseURL, "/")+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+o.Key)
+	resp, err := o.HTTP.Do(req)
+	if err != nil {
+		return nil, friendly(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return nil, fmt.Errorf("OpenRouter returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var out struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Context int    `json:"context_length"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(out.Data))
+	for _, m := range out.Data {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 // SearchCostFetches is how much of the day's fetch budget one web search

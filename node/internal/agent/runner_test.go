@@ -235,8 +235,8 @@ func TestToolCapEndsRunWithRecord(t *testing.T) {
 	}
 	f := setup(t, &script{turns: turns})
 	res := f.r.Run(context.Background(), Trigger{Kind: TriggerManual, Thread: f.thread})
-	if res.Outcome != "error" || !strings.Contains(res.Error, "tool calls") {
-		t.Fatalf("expected the cap to stop the run: %+v", res)
+	if res.Outcome != "posted" || !strings.Contains(res.Answer, "stopped") {
+		t.Fatalf("expected a stop report: %+v", res)
 	}
 	es := f.entries(t)
 	if es[len(es)-1].Kind != KindRun {
@@ -247,8 +247,8 @@ func TestToolCapEndsRunWithRecord(t *testing.T) {
 		Error   string `json:"error"`
 	}
 	json.Unmarshal(es[len(es)-1].Body, &rb)
-	if rb.Outcome != "error" || rb.Error == "" {
-		t.Fatalf("run record does not say what went wrong: %+v", rb)
+	if rb.Outcome != "posted" {
+		t.Fatalf("run record does not record the stop report: %+v", rb)
 	}
 }
 

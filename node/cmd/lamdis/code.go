@@ -39,6 +39,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	dir := fs.String("dir", "", "workspace directory (default: the git root of the current directory)")
 	quiet := fs.Bool("q", false, "print only the answer")
 	verbose := fs.Bool("verbose", false, "show each tool call while working")
+	effortFlag := fs.String("effort", os.Getenv("LAMDIS_EFFORT"), "low, medium or high: how far it explores, and how many repair and review rounds a change gets")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -104,7 +105,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		}
 	}
 	runner := &agent.Runner{Store: s, PersonKey: priv, Person: pid, AgentKey: agentKey, Agent: agentPID,
-		Model: base, ModelName: envModel, RunTimeout: 30 * time.Minute,
+		Model: base, ModelName: envModel, RunTimeout: agent.EffortTimeout(*effortFlag), Effort: *effortFlag,
 		OwnModelCredential: strings.TrimSpace(os.Getenv("LAMDIS_OPENROUTER_KEY")) != "",
 		RunToCompletion:    true, SharedOnly: true,
 		DataDir: dataDir, Names: names, Embedder: embedderFromEnv(),
@@ -115,6 +116,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	spin := newSpinner(os.Stderr)
 	interactive := task == ""
 	var actionCount int
+	streamed := false
 	if !*quiet {
 		// What it just did goes above the line; what it is doing now stays
 		// on it. So a wait always says something, and the transcript
@@ -135,6 +137,10 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		runner.OnStep = func(what string, args map[string]any) {
 			status := doing(what, args)
 			spin.Say(status)
+		}
+		runner.OnText = func(text string) {
+			streamed = true
+			spin.Note("%s", text)
 		}
 	}
 
@@ -193,6 +199,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	}
 	ask := func(text string) error {
 		actionCount = 0
+		streamed = false
 		runStarted := time.Now()
 		q, err := personAppendCLI(ctx, s, priv, thread, protolog.Draft{Kind: agent.KindQuestion, Lane: protolog.LaneContent,
 			Body: map[string]any{"text": text, "workspace": root}})
@@ -237,7 +244,15 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 			}
 			fmt.Fprintf(os.Stderr, "\033[32m  ✓ done · %d %s · %s total\033[0m\n\n", actionCount, steps, elapsed(time.Since(runStarted)))
 		}
-		fmt.Println(res.Answer)
+		if !streamed {
+			fmt.Println(res.Answer)
+		} else if i := strings.LastIndex(res.Answer, "\n\nLamdis checked: "); i >= 0 {
+			// The model's words were streamed as they came; what the harness
+			// verified was added after, so it still needs saying.
+			fmt.Printf("\n\n\033[2m%s\033[0m\n", strings.TrimSpace(res.Answer[i:]))
+		} else {
+			fmt.Println()
+		}
 		// And send what was written, so it shows up wherever the person is
 		// looking, then say so rather than leaving them to wonder.
 		if reached, err := syncPeers(ctx, dataDir, s, priv, pid, agentPID); err != nil {
@@ -295,9 +310,39 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 		case "/help", "help", "?":
 			fmt.Fprint(os.Stderr, cliHelp(ws != nil, thread))
 			continue
+		case "/effort", "/effort low", "/effort medium", "/effort high":
+			if level := strings.TrimSpace(strings.TrimPrefix(line, "/effort")); level != "" {
+				runner.Effort, runner.RunTimeout = level, agent.EffortTimeout(level)
+			}
+			level := runner.Effort
+			if level == "" {
+				level = "medium"
+			}
+			fmt.Fprintf(os.Stderr, "\033[2mEffort: %s. low = one explorer, one repair round, no review; medium = explorers, two repairs, a review; high = more of each and a longer run. /effort low|medium|high to change.\033[0m\n", level)
+			continue
 		case "/model":
 			fmt.Fprintf(os.Stderr, "\033[2mCurrent model: %s\033[0m\n", mname)
-			fmt.Fprintln(os.Stderr, "\033[2mUse /model vendor/model-id to switch, or /model default to use the default.\033[0m")
+			fmt.Fprintln(os.Stderr, "\033[2mUse /models to browse live OpenRouter models, then /model vendor/model-id to switch.\033[0m")
+			continue
+		case "/models":
+			key := strings.TrimSpace(os.Getenv("LAMDIS_OPENROUTER_KEY"))
+			if key == "" {
+				key = cfg.OpenRouterKey
+			}
+			if key == "" {
+				fmt.Fprintln(os.Stderr, "\033[31mSet an OpenRouter key first; model listing is unavailable without one.\033[0m")
+				continue
+			}
+			catalog := agent.NewOpenRouter(key, "")
+			ids, err := catalog.ListModels(ctx)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "\033[31mCould not load OpenRouter models: %v\033[0m\n", err)
+				continue
+			}
+			fmt.Fprintln(os.Stderr, "\033[1mOpenRouter models\033[0m")
+			for _, id := range ids {
+				fmt.Fprintf(os.Stderr, "  %s\n", id)
+			}
 			continue
 		case "/trust":
 			if err := cmdTrust(ctx, dataDir, nil); err != nil {
@@ -352,7 +397,8 @@ func cliHelp(canWork bool, thread string) string {
 	if canWork {
 		s += "  " + d + "a task" + z + "        add a test for the login bug\n" +
 			"  " + d + "a question" + z + "    why does auth fail on refresh?\n" +
-			"  " + d + "it reads, edits and runs your tests, then reports back\n" + z
+			"  " + d + "it explores, edits, then checks its own work (build, lint, tests, a review)\n" + z +
+			"  " + d + "before saying it is done, and reports what it actually verified\n" + z
 	} else {
 		s += "  " + d + "a question" + z + "    what did we decide about the Acme rate?\n" +
 			"  " + d + "a note" + z + "        anything you tell it is kept and searchable\n" +
@@ -362,6 +408,7 @@ func cliHelp(canWork bool, thread string) string {
 		"  /threads     " + d + "everything in your record" + z + "\n" +
 		"  /trust       " + d + "how much of this machine it may use" + z + "\n" +
 		"  /model       " + d + "show or change the model" + z + "\n" +
+		"  /effort      " + d + "low, medium or high: how hard it checks its own work" + z + "\n" +
 		"  /app         " + d + "open it in a browser" + z + "\n" +
 		"  /here        " + d + "where you are and what is answering" + z + "\n" +
 		"  /quit        " + d + "or Ctrl-D" + z + "\n\n" +
@@ -412,8 +459,11 @@ func promptDecision(ctx context.Context, s store.Store, thread string, res agent
 func codeThread(ctx context.Context, s store.Store, priv ed25519.PrivateKey, pid, root string, inProject bool) (string, error) {
 	title := "code: " + filepath.Base(root)
 	if !inProject {
-		// Not a project, so this is just where terminal conversations go.
-		title = "terminal"
+		// A terminal session is a conversation boundary. Reusing one global
+		// "terminal" thread makes a fresh shell inherit unrelated old context
+		// and causes the model to answer the previous session's question. Keep
+		// the durable record, but give every process its own session thread.
+		title = fmt.Sprintf("terminal: %s · %d", filepath.Base(root), time.Now().UnixNano())
 	}
 	ids, err := s.Threads(ctx)
 	if err != nil {

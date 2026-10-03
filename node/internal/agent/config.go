@@ -50,6 +50,12 @@ type Config struct {
 	// ModelURL is an OpenAI-compatible base URL for a local or private
 	// model server, e.g. http://localhost:11434/v1. No key needed.
 	ModelURL string `json:"model_url,omitempty"`
+	// Models picks a model per role for coding tasks, on the same endpoint
+	// and key: "explore" (cheap and fast), "review" (strong reasoning) and
+	// "fallback" (used when the main model fails). Empty roles use Model.
+	// LAMDIS_EXPLORE_MODEL, LAMDIS_REVIEW_MODEL and LAMDIS_FALLBACK_MODEL
+	// override it.
+	Models map[string]string `json:"models,omitempty"`
 	// Trust is how much of this machine the agent may work in without
 	// asking: "project" where you started it, "home" everything under your
 	// home directory, "all" the whole machine. Set once, remembered.

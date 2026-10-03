@@ -161,10 +161,37 @@ func run(args []string) error {
 		defaultData = filepath.Join(home, ".lamdis")
 	}
 	dataDir := fs.String("data", defaultData, "data directory")
-	if err := fs.Parse(args); err != nil {
+	// The agent's own flags (-model, -effort, -q…) come before the task, as
+	// in `lamdis -effort high "fix the refresh bug"`. Only -data belongs to
+	// this level; everything else from the first other flag on is the
+	// agent's to parse.
+	var top, agentArgs []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-data" || a == "--data":
+			top = append(top, a)
+			if i+1 < len(args) {
+				top = append(top, args[i+1])
+				i++
+			}
+		case strings.HasPrefix(a, "-data=") || strings.HasPrefix(a, "--data="):
+			top = append(top, a)
+		case strings.HasPrefix(a, "-") && a != "-h" && a != "--help" && a != "-help":
+			agentArgs = args[i:]
+			i = len(args)
+		default:
+			top = append(top, args[i:]...)
+			i = len(args)
+		}
+	}
+	if err := fs.Parse(top); err != nil {
 		return err
 	}
 	rest := fs.Args()
+	if agentArgs != nil {
+		rest = agentArgs
+	}
 	// No subcommand, or a first word that is not one: the agent, here, now.
 	if len(rest) == 0 || !knownCommand(rest[0]) {
 		loadDotEnv(*dataDir)

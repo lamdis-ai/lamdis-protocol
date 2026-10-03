@@ -180,7 +180,7 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 		var pending string
 		var lastNew time.Time
 		var lastRun string
-		s.State.Update(now, func(state *State) {
+		s.State.edit(now, func(state *State) {
 			ts := state.thread(id)
 			if !ts.Seen {
 				for k, seq := range heads {
@@ -246,7 +246,7 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 			} else {
 				fire = append(fire, Trigger{Kind: kind, Thread: id, Entry: eid, Chain: c})
 			}
-			s.State.Update(now, func(state *State) { state.thread(id).Pending = "" })
+			s.State.edit(now, func(state *State) { state.thread(id).Pending = "" })
 		}
 		// Rhythms: the hours this thread's agent stands back and thinks.
 		// Marked as run before the run happens, so a failure is a missed
@@ -261,9 +261,9 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 					name = rh.At
 				}
 				var last string
-				s.State.Update(now, func(st *State) { last = st.thread(id).Rhythms[name] })
+				s.State.edit(now, func(st *State) { last = st.thread(id).Rhythms[name] })
 				if due, today := rh.Due(now, last); due {
-					s.State.Update(now, func(st *State) { st.thread(id).Rhythms[name] = today })
+					s.State.edit(now, func(st *State) { st.thread(id).Rhythms[name] = today })
 					fire = append(fire, Trigger{Kind: TriggerReflect, Thread: id, Rhythm: name, Prompt: rh.Prompt, Persona: rh.Persona})
 				}
 			}
@@ -322,6 +322,9 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 			}
 		}
 	}
+	// Persist the whole scan once, including consumed messages and due
+	// rhythms, before any run can write or fail. Unchanged state is not written.
+	s.State.flush()
 	for _, t := range fire {
 		res := r.Run(ctx, t)
 		s.logf("agent: %s run on %s: %s %s", t.Kind, t.Thread, res.Outcome, res.Error)

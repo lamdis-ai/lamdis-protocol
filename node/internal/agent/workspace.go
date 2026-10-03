@@ -310,7 +310,7 @@ func (w *Workspace) Specs() []ToolSpec {
 	}
 	str := func(d string) map[string]any { return map[string]any{"type": "string", "description": d} }
 	num := func(d string) map[string]any { return map[string]any{"type": "integer", "description": d} }
-	return []ToolSpec{
+	specs := []ToolSpec{
 		{Name: "read_file", Description: "Read a file, or a line range of it. Paths are relative to the workspace.",
 			Parameters: obj(map[string]any{"path": str("file path"), "start": num("first line, 1-based (optional)"), "end": num("last line, inclusive (optional)")}, "path")},
 		{Name: "list_files", Description: "List files under a directory (default: the workspace root), one level deep unless recursive.",
@@ -328,6 +328,7 @@ func (w *Workspace) Specs() []ToolSpec {
 		{Name: "where", Description: "List the directories you are currently allowed to work in.",
 			Parameters: obj(map[string]any{})},
 	}
+	return append(specs, codeSpecs()...)
 }
 
 // Call runs one workspace tool. Errors come back as text for the model.
@@ -339,6 +340,9 @@ func (w *Workspace) Call(ctx context.Context, name string, args map[string]any) 
 	n := func(k string) int {
 		v, _ := args[k].(float64)
 		return int(v)
+	}
+	if out, ok := w.callCode(ctx, name, args); ok {
+		return out, true
 	}
 	switch name {
 	case "read_file":
