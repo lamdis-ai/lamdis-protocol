@@ -199,7 +199,10 @@ func (h *harness) judge(ctx context.Context, files []string, res checkResult) ch
 func syntaxCheck(path string) []string {
 	switch filepath.Ext(path) {
 	case ".py":
-		return []string{"python3", "-m", "py_compile", path}
+		// -I: the file's own directory may hold modules that shadow the
+		// standard library (a package's warnings.py), which would break
+		// the compiler itself rather than report on the file.
+		return []string{"python3", "-I", "-m", "py_compile", path}
 	case ".go":
 		return []string{"gofmt", "-e", "-l", path}
 	case ".js", ".mjs", ".cjs":
@@ -228,7 +231,7 @@ func parses(ctx context.Context, path string) (bool, string) {
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, argv[0], argv[1:]...)
-	cmd.Dir = filepath.Dir(path)
+	cmd.Dir = os.TempDir() // never the project, whose modules could shadow the checker's
 	out, err := cmd.CombinedOutput()
 	if err != nil && cctx.Err() == nil {
 		return false, strings.TrimSpace(lastLines(string(out), 3))

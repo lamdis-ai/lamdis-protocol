@@ -334,7 +334,7 @@ func (p *codeProject) checks(files []string, full bool) []check {
 			}
 		}
 		if len(py) > 0 {
-			out = append(out, mk("build", "python3 -m py_compile "+shellJoin(py)))
+			out = append(out, mk("build", "python3 -I -m py_compile "+shellJoin(py)))
 		}
 		tests := []string{}
 		if !full {

@@ -199,3 +199,16 @@ func TestUntestedChangeGoesBack(t *testing.T) {
 		t.Fatalf("sent back more than once: %d turns", turn)
 	}
 }
+
+// A package that shadows a standard module does not make its files look
+// unparseable.
+func TestParsesIgnoresShadowingModules(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"warnings.py": "raise RuntimeError('shadowed')\n", "capture.py": "X = 1\n"})
+	if ok, why := parses(context.Background(), filepath.Join(dir, "capture.py")); !ok {
+		t.Fatalf("a valid file was called unparseable: %s", why)
+	}
+}

@@ -62,7 +62,7 @@ def solve_docker(inst, model, timeout, logdir):
     containers.add(name)
     log = open(os.path.join(logdir, iid + ".log"), "w")
     script = ('source /opt/miniconda3/bin/activate testbed 2>/dev/null; cd /testbed; '
-              'git config --global --add safe.directory /testbed; '
+              'git config --global --add safe.directory /testbed; git config core.fileMode false; '
               'lamdis -data /lamdis -offline ' + " ".join(EXTRA) + ' -dir /testbed "$PROMPT"')
     p = subprocess.Popen(["docker", "exec", "-e", "PROMPT=" + PROMPT_DOCKER.format(issue=inst["problem_statement"]),
                           "-e", "LAMDIS_MODEL=" + model, name, "bash", "-c", script],
@@ -79,7 +79,7 @@ def solve_docker(inst, model, timeout, logdir):
         status = "killed (cap)"
     patch = ""
     r = subprocess.run(["docker", "exec", name, "bash", "-c",
-                        "cd /testbed && git add -A && git diff --cached " + inst["base_commit"]],
+                        "cd /testbed && git config core.fileMode false && git add -A && git diff --cached " + inst["base_commit"]],
                        capture_output=True, text=True)
     if r.returncode == 0:
         patch = r.stdout
