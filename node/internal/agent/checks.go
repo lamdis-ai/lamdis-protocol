@@ -339,9 +339,12 @@ func (p *codeProject) checks(files []string, full bool) []check {
 		tests := []string{}
 		if !full {
 			for _, f := range files {
-				for _, t := range relatedTests(p.Dir, f) {
+				for _, t := range testsCovering(p.Dir, f, maxScopedTests) {
 					tests = append(tests, rel(t))
 				}
+			}
+			if len(tests) > maxScopedTests {
+				tests = dedupe(tests)[:maxScopedTests]
 			}
 		}
 		if len(tests) > 0 {
@@ -515,6 +518,100 @@ func relatedTests(root, file string) []string {
 		}
 		if names[d.Name()] {
 			out = append(out, p)
+		}
+		return nil
+	})
+	return out
+}
+
+// maxScopedTests bounds how many test files a scoped check runs, so a
+// change to a module half the project imports does not become the full suite.
+const maxScopedTests = 8
+
+// testsCovering is the tests that exercise a source file: the ones named
+// after it first, then the ones that import it. A test that imports the
+// changed module is the nearest evidence the change broke something, and
+// it is often not named after the file at all.
+func testsCovering(root, file string, max int) []string {
+	out := relatedTests(root, file)
+	seen := map[string]bool{}
+	for _, t := range out {
+		seen[t] = true
+	}
+	for _, t := range importingTests(root, file, max) {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// importingTests finds test files, in the same language, that import the
+// file's module: by its dotted path for Python, by its stem otherwise. Only
+// test files are opened.
+func importingTests(root, file string, max int) []string {
+	base := filepath.Base(file)
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	if isTestFile(base) || len(stem) < 3 || stem == "index" || stem == "main" || stem == "__init__" || stem == "mod" {
+		return nil
+	}
+	var re *regexp.Regexp
+	sameLang := func(name string) bool { return filepath.Ext(name) == ext }
+	switch {
+	case ext == ".py":
+		// pkg/sub/mod.py is imported as pkg.sub.mod, or mod from pkg.sub.
+		rel, err := filepath.Rel(root, strings.TrimSuffix(file, ext))
+		if err != nil {
+			return nil
+		}
+		parts := strings.Split(filepath.ToSlash(rel), "/")
+		for i := range parts {
+			if parts[i] == "src" || parts[i] == "lib" {
+				continue
+			}
+			parts = parts[i:]
+			break
+		}
+		dotted := regexp.QuoteMeta(strings.Join(parts, "."))
+		parent := regexp.QuoteMeta(strings.Join(parts[:len(parts)-1], "."))
+		pat := `(?m)^\s*(import\s+` + dotted + `\b|from\s+` + dotted + `\s+import\b`
+		if parent != "" {
+			pat += `|from\s+` + parent + `\s+import\s+[^\n]*\b` + regexp.QuoteMeta(stem) + `\b`
+		}
+		re = regexp.MustCompile(pat + `)`)
+	case jsSource.MatchString(base):
+		sameLang = func(name string) bool { return jsSource.MatchString(name) }
+		re = regexp.MustCompile(`(import|require|from)\b[^\n]*['"/]` + regexp.QuoteMeta(stem) + `(\.[a-z]+)?['"]`)
+	case ext == ".go":
+		return nil // a Go package's tests sit beside it, named after it
+	default:
+		re = regexp.MustCompile(`(import|require|from|use)\b.*\b` + regexp.QuoteMeta(stem) + `\b`)
+	}
+	var out []string
+	n := 0
+	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if p != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if n++; n > 30000 {
+			return filepath.SkipAll
+		}
+		if !isTestFile(d.Name()) || !sameLang(d.Name()) || p == file {
+			return nil
+		}
+		if raw, err := os.ReadFile(p); err == nil && len(raw) < 1_000_000 && re.Match(raw) {
+			out = append(out, p)
+			if len(out) >= max {
+				return filepath.SkipAll
+			}
 		}
 		return nil
 	})

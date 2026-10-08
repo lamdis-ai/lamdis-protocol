@@ -228,6 +228,19 @@ type runRec struct {
 
 const maxTurns = 16
 
+// reserveReached reports whether a run is into the share of its time kept
+// for checking and reviewing what it changed: a fifth of the run, at least
+// ninety seconds and at most four minutes.
+func reserveReached(ctx context.Context, start time.Time) bool {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return false
+	}
+	reserve := deadline.Sub(start) / 5
+	reserve = max(90*time.Second, min(4*time.Minute, reserve))
+	return time.Until(deadline) < reserve
+}
+
 // turnRetries is how many more times one model turn is asked after it times
 // out or fails transiently, each with a fresh turn allowance.
 const turnRetries = 2
@@ -321,6 +334,15 @@ func (r *Runner) complete(ctx context.Context, model Model, msgs []Message, tool
 	// stalled one by silence rather than by a clock.
 	if streamed, ok := model.(Streamer); ok {
 		return streamed.Stream(ctx, msgs, tools, r.OnText)
+	}
+	return model.Complete(ctx, msgs, tools)
+}
+
+// completeAny is one model call for the harness's own helpers, the
+// reviewer and the explorers, streamed for the same reason as a turn.
+func completeAny(ctx context.Context, model Model, msgs []Message, tools []ToolSpec) (Message, Usage, error) {
+	if streamed, ok := model.(Streamer); ok {
+		return streamed.Stream(ctx, msgs, tools, nil)
 	}
 	return model.Complete(ctx, msgs, tools)
 }
@@ -575,7 +597,7 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		}
 		return len(texts) > 0
 	}
-	loopStart, nudged := time.Now(), 0
+	loopStart, nudged, wrappedUp := time.Now(), 0, false
 	for turn := 0; turn < turnLimit; turn++ {
 		drainInterjections()
 		if h != nil && transcriptSize(msgs) > eff.CompactAt {
@@ -587,6 +609,17 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < 25*time.Second {
 			stopReason = "the run is nearing its deadline"
 			break
+		}
+		// The last part of the budget belongs to checking and review, not
+		// to more editing: a change made in the final seconds is a change
+		// nobody verified. Once a task has a change and reaches its reserve,
+		// it is asked for its report with no tools, which hands the change
+		// to the harness's checks and reviewer while there is time to run them.
+		wrapTurn := false
+		if h != nil && !wrappedUp && (reserveReached(ctx, loopStart) || turnLimit-turn <= 2) && len(h.changed(ctx)) > 0 {
+			wrappedUp, wrapTurn = true, true
+			msgs = append(msgs, Message{Role: "user", Content: "Harness: this task is nearly out of time. Stop changing code now. " +
+				"Reply with your final report (what changed, what you ran, what is left open); Lamdis will check and review the change in the time that remains."})
 		}
 		if h != nil && nudged < 2 {
 			used := float64(turn) / float64(turnLimit)
@@ -620,7 +653,11 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		var err error
 		for attempt := 0; ; attempt++ {
 			modelCtx, modelCancel := context.WithTimeout(ctx, turnTimeout)
-			m, u, err = r.complete(modelCtx, model, msgs, tools)
+			turnTools := tools
+			if wrapTurn {
+				turnTools = nil
+			}
+			m, u, err = r.complete(modelCtx, model, msgs, turnTools)
 			timedOut := errors.Is(modelCtx.Err(), context.DeadlineExceeded)
 			modelCancel()
 			rec.Tokens["prompt"] += u.Prompt
@@ -834,6 +871,10 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	// What the harness itself vouches for goes under the model's report, and
 	// its account of the task into the signed run record.
 	if h != nil {
+		// However the run ended, it does not leave a file it broke.
+		guardCtx, guardCancel := context.WithTimeout(context.WithoutCancel(ctx), 45*time.Second)
+		h.guardSyntax(guardCtx)
+		guardCancel()
 		h.explores = min(explores, eff.Explores)
 		if f := h.footer(ctx); f != "" && outcome != "waiting" {
 			final = strings.TrimSpace(final + "\n\n" + f)
@@ -963,9 +1004,12 @@ func (r *Runner) systemPrompt(b Brief, g gate, canWrite bool, st *perm.State) st
 	if r.Workspace != nil {
 		sb.WriteString("\nYou are working in a code repository with file and shell tools, inside a harness that verifies your work. " +
 			"Work in this order: understand the task; find the relevant code (find_symbol, find_references, find_tests, search_files; for a broad question, explore, several in parallel if they are independent); make the smallest change that does the job with edit_file; then check it with run_tests or run_checks. " +
+			"Fix the cause, not only the example in the report: find the code path the example goes through, ask which other inputs take the same path (other types, operand orders, encodings, empty and edge values), and make the fix cover them; then check those variants, not just the reported one. " +
+			"Change only what the task needs: no unrelated refactors, no helpers nothing calls. Run the existing tests nearest the change (find_tests) before you call it done. " +
+			"Keep each edit complete and valid on its own, so the code parses after every step. " +
 			"Read before you edit. Use write_file only for new files. If a command fails, read its output and change the approach before trying again; repeating the same call is refused. " +
 			"When you say you are finished, Lamdis runs the project's build, lint and tests on what changed and may have a reviewer read the diff; failures come back to you to fix, so do not stop at a first draft. Never claim something is verified unless a command showed it. " +
-			"If the task is unclear or would touch something outside it, ask_person first (in full auto, make the reasonable call and say so). The final message is a short report: what changed, what was run, anything left open.\n")
+			"If the task is unclear or would touch something outside it, ask_person first (in full auto, make the reasonable call and say so). The final message is a short report: what changed, what was run, anything left open. Say fixed only when a test you ran exercises the problem and passes; otherwise say what was changed and that it is not yet verified.\n")
 	}
 	if b.Text != "" {
 		sb.WriteString("\nStanding instructions from " + r.name(r.Person) + " for this thread:\n" + strings.TrimSpace(b.Text) + "\n")

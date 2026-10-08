@@ -103,13 +103,30 @@ type harness struct {
 	notes        []string
 	compactions  int
 	skippedCheck bool
+	toldBefore   bool // the model has heard which failures predate the change
 }
 
 func newHarness(ctx context.Context, r *Runner, goal string) *harness {
 	h := &harness{r: r, ws: r.Workspace, root: resolveSymlinks(r.Workspace.Root), effort: effortFor(r.Effort),
 		goal: strings.TrimSpace(goal), phase: phaseUnderstand, originals: map[string][]byte{}}
+	// A run that died while comparing against the originals left them in
+	// place of the change; put the change back before anything else.
+	for _, p := range h.recoverSwap() {
+		h.notes = append(h.notes, "restored "+p+" after an interrupted check")
+	}
 	h.baseline, h.git = h.gitState(ctx)
 	return h
+}
+
+// timeShort reports whether the run has too little time left for another
+// round of model work and checks, and how much it has.
+func timeShort(ctx context.Context) (bool, string) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return false, ""
+	}
+	left := time.Until(deadline)
+	return left < 90*time.Second, left.Round(time.Second).String()
 }
 
 // gitState is every path git reports as not clean, with a hash of what is
@@ -314,7 +331,7 @@ func (h *harness) gate(ctx context.Context, rec *runRec, msgs []Message) string 
 					break
 				}
 				h.step("verify", map[string]any{"command": c.Command})
-				res := runCheck(ctx, c)
+				res := h.judge(ctx, files, runCheck(ctx, c))
 				h.checks = append(h.checks, res)
 				rec.ToolCalls = append(rec.ToolCalls, "harness:"+c.Kind)
 				if res.Status == "failed" || res.Status == "timed_out" {
@@ -328,6 +345,11 @@ func (h *harness) gate(ctx context.Context, rec *runRec, msgs []Message) string 
 			return ""
 		}
 		if failing := h.failing(); len(failing) > 0 {
+			if short, left := timeShort(ctx); short {
+				h.unresolved = appendOnce(h.unresolved, "checks still failing with "+left+" left, too little for another repair: "+failing[0].Command)
+				h.phase = phaseComplete
+				return ""
+			}
 			if h.repairs >= h.effort.Repairs {
 				h.unresolved = appendOnce(h.unresolved, "checks still failing after "+fmt.Sprint(h.repairs)+" repair rounds: "+failing[0].Command)
 				h.phase = phaseComplete
@@ -338,6 +360,23 @@ func (h *harness) gate(ctx context.Context, rec *runRec, msgs []Message) string 
 			return "Lamdis ran the project's checks on your change, and the task is not done yet.\n\n" + describeChecks(h.checks) +
 				tailOf(h.checks) + fmt.Sprintf("\n\nFix the cause and finish again; the checks will run again (repair round %d of %d). "+
 				"Do not weaken, skip or delete tests to make them pass. If a failure is unrelated to this task and was already failing before, say so in your final report instead of changing it.", h.repairs, h.effort.Repairs)
+		}
+		// Failures that were there before the change are the project's,
+		// not the change's: the model hears about them once, since making
+		// them pass may be the task itself, and they never use up repair
+		// rounds meant for what the change broke.
+		if before := h.failingBefore(); len(before) > 0 {
+			if short, _ := timeShort(ctx); !h.toldBefore && !short {
+				h.toldBefore = true
+				h.repairs++
+				h.phase = phaseRepair
+				return "Lamdis ran the project's checks on your change. These fail, but they failed the same way with your change taken out:\n\n" +
+					describeChecks(before) + tailOf(before) +
+					"\n\nIf making them pass is part of this task, fix them now. If not, leave them alone and say in your final report that they were already failing."
+			}
+			for _, c := range before {
+				h.unresolved = appendOnce(h.unresolved, c.Command+" was failing before this change and still fails")
+			}
 		}
 		h.verifiedAt = fp
 	}
@@ -371,6 +410,16 @@ func (h *harness) gate(ctx context.Context, rec *runRec, msgs []Message) string 
 	return ""
 }
 
+func (h *harness) failingBefore() []checkResult {
+	var out []checkResult
+	for _, c := range h.checks {
+		if c.Status == statusFailingBefore {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 func (h *harness) failing() []checkResult {
 	var out []checkResult
 	for _, c := range h.checks {
@@ -392,6 +441,10 @@ func (h *harness) step(what string, args map[string]any) {
 func (h *harness) footer(ctx context.Context) string {
 	files := h.changed(ctx)
 	if len(files) == 0 {
+		// Nothing changed in the end, but what was undone still needs saying.
+		if len(h.unresolved) > 0 {
+			return "Lamdis checked: No change was kept. Unresolved: " + strings.Join(h.unresolved, ". Unresolved: ") + "."
+		}
 		return ""
 	}
 	var parts []string
@@ -412,6 +465,16 @@ func (h *harness) footer(ctx context.Context) string {
 		parts = append(parts, "Checks: "+strings.Join(cs, "; ")+".")
 		if fingerprint(files) != h.verifiedAt && len(h.failing()) == 0 {
 			parts = append(parts, "Files changed after the last check run, so the final state is not verified.")
+		}
+		tested := false
+		for _, c := range h.checks {
+			if c.Kind == "test" && c.Status == "passed" {
+				tested = true
+			}
+		}
+		if !tested {
+			// A file that compiles is not a fix that works; say which this is.
+			parts = append(parts, "No test run by Lamdis passed on this change, so it is not verified to work.")
 		}
 	case h.skippedCheck:
 		parts = append(parts, "No build or test command was detected, so nothing was checked automatically.")

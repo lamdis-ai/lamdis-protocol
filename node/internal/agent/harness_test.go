@@ -94,7 +94,9 @@ func TestHarnessReportsUnresolvedFailures(t *testing.T) {
 	f.r.RunToCompletion = true
 	f.r.Effort = "low"
 	res := f.r.Run(context.Background(), Trigger{Kind: TriggerCode, Thread: f.thread})
-	if !strings.Contains(res.Answer, "go test . failed") || !strings.Contains(res.Answer, "Unresolved") {
+	// The test failed before the edit too, so it is reported as the
+	// project's failure, not passed off and not blamed on the change.
+	if !strings.Contains(res.Answer, "go test . failing before") || !strings.Contains(res.Answer, "Unresolved: go test . was failing before") {
 		t.Fatalf("%q", res.Answer)
 	}
 }

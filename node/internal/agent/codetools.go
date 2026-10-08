@@ -230,16 +230,8 @@ func (w *Workspace) callCode(ctx context.Context, name string, args map[string]a
 			return "error: " + err.Error(), true
 		}
 		found := map[string]bool{}
-		for _, t := range relatedTests(root, abs) {
+		for _, t := range testsCovering(root, abs, 40) {
 			found[w.rel(t)] = true
-		}
-		// Tests that import it by its stem, wherever they live.
-		stem := strings.TrimSuffix(filepath.Base(abs), filepath.Ext(abs))
-		if len(stem) >= 3 && stem != "index" && stem != "main" && stem != "__init__" {
-			re := regexp.MustCompile(`(import|require|from)\b.*\b` + regexp.QuoteMeta(stem) + `\b`)
-			for _, h := range w.grepFiles(root, re, isTestFile, 40) {
-				found[h] = true
-			}
 		}
 		if len(found) == 0 {
 			return "no tests found for " + w.rel(abs), true
@@ -299,7 +291,7 @@ func (w *Workspace) callCode(ctx context.Context, name string, args map[string]a
 // failure lines alone sometimes miss the context a fix needs.
 func tailOf(rs []checkResult) string {
 	for _, r := range rs {
-		if r.Status == "failed" || r.Status == "timed_out" {
+		if r.Status == "failed" || r.Status == "timed_out" || r.Status == statusFailingBefore {
 			return "\nOutput of " + r.Command + ":\n" + trunc(r.Output, 6000)
 		}
 	}
