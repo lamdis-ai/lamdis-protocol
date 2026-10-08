@@ -104,6 +104,8 @@ type harness struct {
 	compactions  int
 	skippedCheck bool
 	toldBefore   bool // the model has heard which failures predate the change
+	ranSinceEdit bool // the model ran a command after its last edit
+	toldUntested bool // the model has been sent back once for running nothing
 	proof        []proofStep
 }
 
@@ -219,6 +221,7 @@ func (h *harness) observe(name string, args map[string]any, out string) {
 			if abs, err := h.ws.resolve(p); err == nil {
 				h.modified = appendOnce(h.modified, abs)
 			}
+			h.ranSinceEdit = false
 			if h.phase != phaseRepair {
 				h.phase = phaseImplement
 			}
@@ -228,6 +231,7 @@ func (h *harness) observe(name string, args map[string]any, out string) {
 		if cmd == "" {
 			cmd = name
 		}
+		h.ranSinceEdit = true
 		h.commands = append(h.commands, trunc(cmd, 160))
 		if len(h.commands) > 40 {
 			h.commands = h.commands[1:]
@@ -402,6 +406,18 @@ func (h *harness) gate(ctx context.Context, rec *runRec, msgs []Message) string 
 		}
 		h.verifiedAt = fp
 	}
+	// A change nobody ran is a guess. When Lamdis has no passing test of
+	// its own on this change and the model ran nothing after its last edit,
+	// it is sent back once to run the tests nearest the change.
+	if !h.toldUntested && !h.ranSinceEdit && !h.testPassed() && h.inProject(files) {
+		if short, _ := timeShort(ctx); !short {
+			h.toldUntested = true
+			h.phase = phaseVerify
+			return "Nothing has run this change yet: Lamdis has no passing test of it, and you ran no command after your last edit. " +
+				"Before finishing, find the existing tests nearest the change (find_tests) and run them with the project's own test runner, " +
+				"and where you can, run the case from the task to see it behave. If they cannot run here, say why in your final report."
+		}
+	}
 	if h.reviews < h.effort.Reviews && fp != h.reviewedAt && ctx.Err() == nil {
 		h.phase = phaseReview
 		h.step("review", nil)
@@ -430,6 +446,26 @@ func (h *harness) gate(ctx context.Context, rec *runRec, msgs []Message) string 
 	}
 	h.phase = phaseComplete
 	return ""
+}
+
+// inProject reports whether any changed file belongs to a project Lamdis
+// recognises, where there are tests to look for.
+func (h *harness) inProject(files []string) bool {
+	for _, f := range files {
+		if projectFor(h.root, f) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *harness) testPassed() bool {
+	for _, c := range h.checks {
+		if c.Kind == "test" && c.Status == "passed" {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *harness) failingBefore() []checkResult {

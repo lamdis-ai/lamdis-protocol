@@ -603,7 +603,9 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	fallback, fallbackName := r.roleModel(mcfg, "fallback", model)
 	exploreModel, _ := r.roleModel(mcfg, "explore", model)
 	turnTimeout := 60 * time.Second
-	if h != nil {
+	// A coding task gets the long turn limit whether or not the proof state
+	// is on: the ablation must differ only in the proof, not in patience.
+	if r.Workspace != nil {
 		turnTimeout = 3 * time.Minute // a long-context coding turn is slow, not stuck
 		if _, ok := model.(Streamer); ok {
 			// A stream that goes quiet is caught by its own idle limit, so
@@ -655,10 +657,12 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 				stalling = true // hand what there is to the checks first
 			}
 		}
-		if h != nil && transcriptSize(msgs) > eff.CompactAt {
-			if out, ok := compactMessages(msgs, 6, h.summary()); ok {
+		if r.Workspace != nil && transcriptSize(msgs) > eff.CompactAt {
+			if out, ok := compactMessages(msgs, 6, taskSummary(h)); ok {
 				msgs = out
-				h.compactions++
+				if h != nil {
+					h.compactions++
+				}
 			}
 		}
 		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < 25*time.Second {
@@ -734,11 +738,13 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 			// Recovery before giving up: a prompt that grew too long is
 			// compacted hard and retried; a failing model hands over to the
 			// fallback, once.
-			if h != nil && isContextOverflow(err) && !overflowRetried {
+			if r.Workspace != nil && isContextOverflow(err) && !overflowRetried {
 				overflowRetried = true
-				if out, ok := compactMessages(msgs, 2, h.summary()); ok {
+				if out, ok := compactMessages(msgs, 2, taskSummary(h)); ok {
 					msgs = out
-					h.compactions++
+					if h != nil {
+						h.compactions++
+					}
 					turn--
 					continue
 				}
@@ -1863,4 +1869,13 @@ func chimePrompt(who, where, entry string, trig *protolog.Entry, p *Persona, dir
 	}
 	return head + "You are " + role + ". Reply when this is said to the agents (a greeting to everyone, a question to the group, \"you\" or \"guys\", your name) or when you have something genuinely useful to add from your role: an answer, a fact from the record or the web, a correction, a risk, or doing what was asked. " +
 		"Reply exactly NOTHING only when it is clearly meant for another person, or another agent has already said what you would say. Keep any reply short."
+}
+
+// taskSummary is the harness's account of a coding task, or nothing when
+// the proof state is off.
+func taskSummary(h *harness) string {
+	if h == nil {
+		return ""
+	}
+	return h.summary()
 }

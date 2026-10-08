@@ -164,3 +164,38 @@ func TestTheReserveIsAFifthOfTheRun(t *testing.T) {
 		t.Fatal("three minutes left of twenty is inside the four-minute reserve")
 	}
 }
+
+// A change to project code that nothing ran goes back once, to be run.
+func TestUntestedChangeGoesBack(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"setup.py": "from setuptools import setup\nsetup()\n", "pkg/mod.py": "X = 1\n"})
+	var sentBack bool
+	turn := 0
+	m := executionModel(func(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, Usage, error) {
+		if len(tools) == 1 && tools[0].Name == "submit_review" {
+			return call("submit_review", map[string]any{"approved": true, "issues": []map[string]any{}}), Usage{}, nil
+		}
+		turn++
+		switch turn {
+		case 1:
+			return call("edit_file", map[string]any{"path": "pkg/mod.py", "old": "X = 1", "new": "X = 2"}), Usage{}, nil
+		case 2:
+			return say("Changed X."), Usage{}, nil
+		case 3:
+			sentBack = strings.Contains(msgs[len(msgs)-1].Content, "Nothing has run this change yet")
+			return call("run", map[string]any{"command": "python3 -c 'import pkg.mod'"}), Usage{}, nil
+		}
+		return say("Changed X and imported it."), Usage{}, nil
+	})
+	f := setup(t, m)
+	f.r.Workspace = &Workspace{Root: root}
+	f.r.RunToCompletion = true
+	q := f.post(t, KindQuestion, map[string]any{"text": "set X to 2"}, nil)
+	f.r.Run(context.Background(), Trigger{Kind: TriggerCode, Thread: f.thread, Entry: q.ID})
+	if !sentBack {
+		t.Fatal("an untested change was accepted without being sent back")
+	}
+	if turn > 4 {
+		t.Fatalf("sent back more than once: %d turns", turn)
+	}
+}
