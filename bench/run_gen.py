@@ -63,7 +63,7 @@ def checkout(inst):
     with lk:
         if not os.path.exists(mirror):
             subprocess.run(["git", "clone", "-q", "--bare", f"https://github.com/{repo}.git", mirror], check=True)
-    d = os.path.join(WORK, inst["instance_id"])
+    d = os.path.join(WORK, TAG[0], inst["instance_id"])
     shutil.rmtree(d, ignore_errors=True)
     subprocess.run(["git", "clone", "-q", "--shared", "--no-checkout", mirror, d], check=True)
     subprocess.run(["git", "-c", "advice.detachedHead=false", "checkout", "-q", inst["base_commit"]], cwd=d, check=True)
@@ -79,18 +79,22 @@ procs = set()
 stop = threading.Event()
 
 
+EXTRA = []
+TAG = [""]  # separate checkouts per arm, so two arms can run at once
+
+
 def solve(inst, model, timeout, logdir):
     if stop.is_set():
         return None
     t0 = time.time()
     d = checkout(inst)
-    data = os.path.join(DATA, "runs", inst["instance_id"])
+    data = os.path.join(DATA, "runs", TAG[0], inst["instance_id"])
     shutil.rmtree(data, ignore_errors=True)
     setup_data(model, data)
     log = open(os.path.join(logdir, inst["instance_id"] + ".log"), "w")
     # Offline: the score has to come from the repository, not from finding
     # the upstream fix on the web.
-    p = subprocess.Popen([BIN, "-data", data, "-q", "-offline", "-dir", d, PROMPT.format(issue=inst["problem_statement"])],
+    p = subprocess.Popen([BIN, "-data", data, "-q", "-offline", *EXTRA, "-dir", d, PROMPT.format(issue=inst["problem_statement"])],
                          cwd=d, stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "LAMDIS_MODEL": model})
     procs.add(p)
     try:
@@ -117,8 +121,10 @@ def main():
     ap.add_argument("--sample", default=os.path.join(HERE, "sample50.json"))
     ap.add_argument("--ids", default="", help="comma-separated instance ids to run (default: the first -n)")
     ap.add_argument("--tag", default="", help="suffix for the results directory, to keep runs apart")
+    ap.add_argument("--lamdis-args", default="", help="extra lamdis flags, e.g. -proof=false")
     a = ap.parse_args()
 
+    EXTRA[:] = a.lamdis_args.split()
     insts = json.load(open(a.sample))
     if a.ids:
         want = set(a.ids.split(","))
@@ -126,6 +132,7 @@ def main():
     else:
         insts = insts[: a.n]
     tag = a.model.replace("/", "_") + (("-" + a.tag) if a.tag else "")
+    TAG[0] = a.tag or "default"
     out = os.path.join(HERE, "results", tag)
     os.makedirs(os.path.join(out, "logs"), exist_ok=True)
     preds_path = os.path.join(out, "predictions.jsonl")

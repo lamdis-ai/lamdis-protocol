@@ -104,6 +104,7 @@ type harness struct {
 	compactions  int
 	skippedCheck bool
 	toldBefore   bool // the model has heard which failures predate the change
+	proof        []proofStep
 }
 
 func newHarness(ctx context.Context, r *Runner, goal string) *harness {
@@ -314,7 +315,7 @@ func commitNudge(level int, turnsLeft int, timeLeft time.Duration) string {
 // nowhere, whatever they cost.
 func (h *harness) progress(ctx context.Context) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "read=%d change=%s", len(h.read), fingerprint(h.changed(ctx)))
+	fmt.Fprintf(&sb, "level=%d read=%d change=%s", h.advance(ctx), len(h.read), fingerprint(h.changed(ctx)))
 	for _, c := range h.checks {
 		fmt.Fprintf(&sb, " %s=%s/%d", c.Kind, c.Status, len(c.Failures))
 	}
@@ -515,6 +516,8 @@ func (h *harness) footer(ctx context.Context) string {
 	for _, u := range h.unresolved {
 		parts = append(parts, "Unresolved: "+u+".")
 	}
+	l := h.advance(ctx)
+	parts = append(parts, fmt.Sprintf("Proof: %s (level %d of %d).", l, int(l), int(levelReviewed)))
 	return "Lamdis checked: " + strings.Join(parts, " ")
 }
 
@@ -569,6 +572,9 @@ type taskRecord struct {
 	Compactions int           `json:"compactions,omitempty"`
 	Unresolved  []string      `json:"unresolved,omitempty"`
 	Notes       []string      `json:"notes,omitempty"`
+	Level       int           `json:"level"`
+	LevelName   string        `json:"level_name"`
+	Proof       []proofStep   `json:"proof,omitempty"`
 }
 
 func (h *harness) record(ctx context.Context) *taskRecord {
@@ -577,6 +583,8 @@ func (h *harness) record(ctx context.Context) *taskRecord {
 	for _, f := range h.changed(ctx) {
 		tr.Changed = append(tr.Changed, h.ws.rel(f))
 	}
+	l := h.advance(ctx)
+	tr.Level, tr.LevelName, tr.Proof = int(l), l.String(), h.proof
 	return tr
 }
 
