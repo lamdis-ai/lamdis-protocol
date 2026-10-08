@@ -316,10 +316,11 @@ func (r *Runner) Ready() bool {
 }
 
 func (r *Runner) complete(ctx context.Context, model Model, msgs []Message, tools []ToolSpec) (Message, Usage, error) {
-	if r.OnText != nil {
-		if streamed, ok := model.(Streamer); ok {
-			return streamed.Stream(ctx, msgs, tools, r.OnText)
-		}
+	// Streamed whenever the model can, shown or not: a stream says whether
+	// the model is still working, so a long answer is told apart from a
+	// stalled one by silence rather than by a clock.
+	if streamed, ok := model.(Streamer); ok {
+		return streamed.Stream(ctx, msgs, tools, r.OnText)
 	}
 	return model.Complete(ctx, msgs, tools)
 }
@@ -541,6 +542,11 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	turnTimeout := 60 * time.Second
 	if h != nil {
 		turnTimeout = 3 * time.Minute // a long-context coding turn is slow, not stuck
+		if _, ok := model.(Streamer); ok {
+			// A stream that goes quiet is caught by its own idle limit, so
+			// this only stops a turn that is running away.
+			turnTimeout = 10 * time.Minute
+		}
 	}
 	if r.TurnTimeout > 0 {
 		turnTimeout = r.TurnTimeout

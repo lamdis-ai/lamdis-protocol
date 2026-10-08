@@ -145,3 +145,64 @@ func TestOfflineTakesTheWebAwayEverywhere(t *testing.T) {
 		}
 	}
 }
+
+// A stream that produces nothing is stalled and asked again, even while
+// a router keeps it open with keep-alives; one that is slow but producing,
+// reasoning included, is left to finish.
+func TestNoProgressNotSlownessEndsAStream(t *testing.T) {
+	old := streamIdle
+	streamIdle = 300 * time.Millisecond
+	defer func() { streamIdle = old }()
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		if atomic.AddInt32(&calls, 1) == 1 {
+			for { // open, kept alive, and going nowhere
+				if _, err := fmt.Fprint(w, ": PROCESSING\n\n"); err != nil {
+					return
+				}
+				w.(http.Flusher).Flush()
+				select {
+				case <-r.Context().Done():
+					return
+				case <-time.After(100 * time.Millisecond):
+				}
+			}
+		}
+		for i := 0; i < 5; i++ { // a second and a quarter of thinking
+			fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"reasoning\":\"hmm \"}}]}\n\n")
+			w.(http.Flusher).Flush()
+			time.Sleep(250 * time.Millisecond)
+		}
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"thought it through\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	m, _, err := client(srv.URL).Stream(context.Background(), []Message{{Content: "x"}}, nil, nil)
+	if err != nil || m.Content != "thought it through" {
+		t.Fatalf("stream: %v %q after %d calls", err, m.Content, calls)
+	}
+	if calls != 2 {
+		t.Fatalf("want the stalled stream retried once, got %d calls", calls)
+	}
+}
+
+// A provider that fails after the stream has begun says so in a chunk;
+// that is a failure to retry, not an empty answer.
+func TestAnErrorChunkIsNotAnEmptyAnswer(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if atomic.AddInt32(&calls, 1) == 1 {
+			fmt.Fprint(w, "data: {\"error\":{\"message\":\"upstream overloaded\"}}\n\n")
+			return
+		}
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+	m, _, err := client(srv.URL).Stream(context.Background(), []Message{{Content: "x"}}, nil, nil)
+	if err != nil || m.Content != "ok" {
+		t.Fatalf("stream: %v %q", err, m.Content)
+	}
+}

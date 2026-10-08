@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -217,7 +218,20 @@ func (o *OpenRouter) Stream(ctx context.Context, msgs []Message, tools []ToolSpe
 	return Message{}, Usage{}, last
 }
 
+// streamIdle is how long a stream may go without producing anything, before
+// the first token or between two, before it is treated as stalled. Output
+// counts, reasoning included: a model thinking for minutes is producing.
+// Keep-alive comments do not count. A router keeps sending them while its
+// provider has stopped working on the request, and counting them let a
+// hung request look alive for ten minutes.
+var streamIdle = 120 * time.Second
+
 func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpec, onText func(string)) (Message, Usage, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var stalled atomic.Bool
+	idle := time.AfterFunc(streamIdle, func() { stalled.Store(true); cancel() })
+	defer idle.Stop()
 	req := map[string]any{"model": o.Model, "messages": msgs, "temperature": 0.2, "stream": true}
 	if o.isOpenRouter() {
 		req["provider"] = map[string]any{"data_collection": "deny"}
@@ -242,14 +256,35 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 	}
 	hr.Header.Set("Content-Type", "application/json")
 	hr.Header.Set("Accept", "text/event-stream")
+	hr.Header.Set("HTTP-Referer", "https://lamdis.ai")
+	hr.Header.Set("X-Title", "Lamdis")
+	gone := func(err error) error {
+		if stalled.Load() {
+			return retryable{fmt.Errorf("the model stopped sending anything for %s", streamIdle)}
+		}
+		return friendly(err)
+	}
 	resp, err := o.HTTP.Do(hr)
 	if err != nil {
-		return Message{}, Usage{}, friendly(err)
+		return Message{}, Usage{}, gone(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return Message{}, Usage{}, fmt.Errorf("the model returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		msg := fmt.Sprintf("the model returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		var e struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(raw, &e) == nil && e.Error.Message != "" {
+			msg = e.Error.Message
+		}
+		// Busy and broken pass; refused and unpaid do not.
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return Message{}, Usage{}, retryable{fmt.Errorf("%s", msg)}
+		}
+		return Message{}, Usage{}, fmt.Errorf("%s", msg)
 	}
 	var content strings.Builder
 	var calls []ToolCall
@@ -266,10 +301,15 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 			break
 		}
 		var chunk struct {
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
 			Choices []struct {
 				Delta struct {
-					Content   string `json:"content"`
-					ToolCalls []struct {
+					Content          string `json:"content"`
+					Reasoning        string `json:"reasoning"`
+					ReasoningContent string `json:"reasoning_content"`
+					ToolCalls        []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Function struct {
@@ -284,10 +324,22 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 				Completion int `json:"completion_tokens"`
 			} `json:"usage"`
 		}
-		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
+		if json.Unmarshal([]byte(data), &chunk) != nil {
+			continue
+		}
+		// A provider that fails after the stream has started says so in a
+		// chunk rather than a status code; without this it reads as an
+		// empty answer.
+		if chunk.Error != nil {
+			return Message{}, usage, retryable{fmt.Errorf("the model failed mid-answer: %s", chunk.Error.Message)}
+		}
+		if len(chunk.Choices) == 0 {
 			continue
 		}
 		c := chunk.Choices[0]
+		if c.Delta.Content != "" || c.Delta.Reasoning != "" || c.Delta.ReasoningContent != "" || len(c.Delta.ToolCalls) > 0 {
+			idle.Reset(streamIdle)
+		}
 		if c.Delta.Content != "" {
 			content.WriteString(c.Delta.Content)
 			if onText != nil {
@@ -307,7 +359,7 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 		usage.Prompt, usage.Completion = chunk.Usage.Prompt, chunk.Usage.Completion
 	}
 	if err := scanner.Err(); err != nil {
-		return Message{}, usage, friendly(err)
+		return Message{}, usage, gone(err)
 	}
 	return Message{Role: "assistant", Content: content.String(), ToolCalls: calls}, usage, nil
 }
