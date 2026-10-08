@@ -1,0 +1,8 @@
+.venv/
+.bin/
+.lamdis-data/
+.repos/
+.work/
+logs/
+results/
+images.txt

@@ -6,8 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
+	"math"
 	"net/url"
 	"sort"
 	"strings"
@@ -51,6 +52,14 @@ type Runner struct {
 	// OwnModelCredential marks a credential loaded from the local process
 	// environment as belonging to this machine's user.
 	OwnModelCredential bool
+	// Offline takes the web tools away for every run, whatever the trigger:
+	// for private code, a machine with no network, or a measurement that
+	// must come from the workspace alone. Commands the agent runs are
+	// governed by the workspace, not by this.
+	Offline bool
+	// TurnTimeout overrides how long one model turn may take before it is
+	// asked again. Zero means the default for the kind of run.
+	TurnTimeout time.Duration
 	// RunToCompletion gives interactive coding tasks a larger, finite turn budget.
 	// Every run still reserves a final response when that budget is exhausted.
 	RunToCompletion bool
@@ -219,6 +228,10 @@ type runRec struct {
 
 const maxTurns = 16
 
+// turnRetries is how many more times one model turn is asked after it times
+// out or fails transiently, each with a fresh turn allowance.
+const turnRetries = 2
+
 // ModelFor resolves which model answers, from the environment and the
 // config, without a restart. Environment wins for the key; the config's
 // model id and URL win over the startup defaults so a person can switch
@@ -266,7 +279,7 @@ func (r *Runner) ModelFor(cfg Config) (Model, string) {
 		return nil, name
 	}
 	return &OpenRouter{Key: key, Model: name, BaseURL: url, KeyIsForBaseURL: forBase,
-		HTTP: &http.Client{Timeout: 120 * time.Second}}, name
+		HTTP: newModelClient()}, name
 }
 
 // allowedModel reports whether a model id is on a list.
@@ -529,6 +542,9 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	if h != nil {
 		turnTimeout = 3 * time.Minute // a long-context coding turn is slow, not stuck
 	}
+	if r.TurnTimeout > 0 {
+		turnTimeout = r.TurnTimeout
+	}
 	overflowRetried := false
 	var recentKeys []string
 	var final, outcome, stopReason string
@@ -553,6 +569,7 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		}
 		return len(texts) > 0
 	}
+	loopStart, nudged := time.Now(), 0
 	for turn := 0; turn < turnLimit; turn++ {
 		drainInterjections()
 		if h != nil && transcriptSize(msgs) > eff.CompactAt {
@@ -565,11 +582,48 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 			stopReason = "the run is nearing its deadline"
 			break
 		}
-		modelCtx, modelCancel := context.WithTimeout(ctx, turnTimeout)
-		m, u, err := r.complete(modelCtx, model, msgs, tools)
-		modelCancel()
-		rec.Tokens["prompt"] += u.Prompt
-		rec.Tokens["completion"] += u.Completion
+		if h != nil && nudged < 2 {
+			used := float64(turn) / float64(turnLimit)
+			var timeLeft time.Duration
+			if deadline, ok := ctx.Deadline(); ok {
+				timeLeft = time.Until(deadline)
+				if total := deadline.Sub(loopStart); total > 0 {
+					used = math.Max(used, 1-float64(timeLeft)/float64(total))
+				}
+			}
+			level := 0
+			switch {
+			case used >= 0.75:
+				level = 2
+			case used >= 0.5:
+				level = 1
+			}
+			if level > nudged {
+				nudged = level
+				if len(h.changed(ctx)) == 0 {
+					msgs = append(msgs, Message{Role: "user", Content: commitNudge(level, turnLimit-turn, timeLeft)})
+				}
+			}
+		}
+		// A turn that runs out of time, or fails in a way that passes on its
+		// own, is asked again with a fresh turn allowance rather than ending
+		// the task: a slow answer from a busy provider is not a verdict on
+		// the work. The run's own deadline still bounds every attempt.
+		var m Message
+		var u Usage
+		var err error
+		for attempt := 0; ; attempt++ {
+			modelCtx, modelCancel := context.WithTimeout(ctx, turnTimeout)
+			m, u, err = r.complete(modelCtx, model, msgs, tools)
+			timedOut := errors.Is(modelCtx.Err(), context.DeadlineExceeded)
+			modelCancel()
+			rec.Tokens["prompt"] += u.Prompt
+			rec.Tokens["completion"] += u.Completion
+			if err == nil || ctx.Err() != nil || attempt >= turnRetries || !(timedOut || worthRetrying(err)) || isContextOverflow(err) {
+				break
+			}
+			rec.Problems = append(rec.Problems, "asked the model again after: "+trunc(err.Error(), 200))
+		}
 		if err != nil {
 			// Recovery before giving up: a prompt that grew too long is
 			// compacted hard and retried; a failing model hands over to the
@@ -851,6 +905,9 @@ func (r *Runner) gateFor(t Trigger, b Brief, cfg Config) gate {
 			g.tools[n] = true
 		}
 		g.postOther = t.Kind != TriggerPeer
+	}
+	if r.Offline {
+		g.web, g.anyHost = false, false
 	}
 	return g
 }

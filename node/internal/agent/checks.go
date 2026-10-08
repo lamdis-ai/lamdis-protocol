@@ -48,18 +48,31 @@ type checkResult struct {
 	Output   string   `json:"-"`
 }
 
-var manifests = []string{"go.mod", "package.json", "Cargo.toml", "pyproject.toml", "setup.py", "pytest.ini", "Makefile"}
+var manifests = []string{"go.mod", "package.json", "Cargo.toml", "pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "Makefile"}
 
 // detectProject reads the manifest in dir, or returns nil when there is none.
+// A directory with more than one manifest answers with the first of them.
 func detectProject(dir string) *codeProject {
+	if ps := detectProjects(dir); len(ps) > 0 {
+		return ps[0]
+	}
+	return nil
+}
+
+// detectProjects reads every manifest in dir. One directory is often more
+// than one project: a Python package with a package.json for its front-end
+// assets, a Go module with a Makefile. Which one verifies a change depends
+// on the files changed, so none of them may hide the others.
+func detectProjects(dir string) []*codeProject {
+	var out []*codeProject
 	has := func(name string) bool {
 		_, err := os.Stat(filepath.Join(dir, name))
 		return err == nil
 	}
-	switch {
-	case has("go.mod"):
-		return &codeProject{Dir: dir, Kind: "go", Stack: []string{"Go"}}
-	case has("package.json"):
+	if has("go.mod") {
+		out = append(out, &codeProject{Dir: dir, Kind: "go", Stack: []string{"Go"}})
+	}
+	if has("package.json") {
 		p := &codeProject{Dir: dir, Kind: "node", PM: "npm", scripts: map[string]string{}, deps: map[string]bool{}}
 		var pkg struct {
 			Scripts         map[string]string `json:"scripts"`
@@ -102,10 +115,12 @@ func detectProject(dir string) *codeProject {
 		if has("turbo.json") {
 			p.Stack = append(p.Stack, "Turborepo")
 		}
-		return p
-	case has("Cargo.toml"):
-		return &codeProject{Dir: dir, Kind: "rust", Stack: []string{"Rust"}}
-	case has("pyproject.toml") || has("setup.py") || has("pytest.ini"):
+		out = append(out, p)
+	}
+	if has("Cargo.toml") {
+		out = append(out, &codeProject{Dir: dir, Kind: "rust", Stack: []string{"Rust"}})
+	}
+	if has("pyproject.toml") || has("setup.py") || has("setup.cfg") || has("pytest.ini") {
 		p := &codeProject{Dir: dir, Kind: "python", Stack: []string{"Python"}}
 		raw, _ := os.ReadFile(filepath.Join(dir, "pyproject.toml"))
 		for _, d := range []struct{ marker, name string }{{"pytest", "pytest"}, {"django", "Django"}, {"fastapi", "FastAPI"}, {"flask", "Flask"}, {"ruff", "Ruff"}, {"mypy", "mypy"}} {
@@ -113,11 +128,12 @@ func detectProject(dir string) *codeProject {
 				p.Stack = append(p.Stack, d.name)
 			}
 		}
-		return p
-	case has("Makefile"):
-		return &codeProject{Dir: dir, Kind: "make", Stack: []string{"Make"}}
+		out = append(out, p)
 	}
-	return nil
+	if has("Makefile") {
+		out = append(out, &codeProject{Dir: dir, Kind: "make", Stack: []string{"Make"}})
+	}
+	return out
 }
 
 // hasUp looks for a file in the parents of dir, for lockfiles that live at a
@@ -135,21 +151,46 @@ func hasUp(dir, name string) bool {
 }
 
 // projectFor finds the project a file belongs to: the nearest manifest at or
-// above it, never above root.
+// above it, never above root, for the file's own language. A .py file next to
+// a package.json belongs to the Python project above it, not to npm. When no
+// manifest speaks the file's language, the nearest one still answers.
 func projectFor(root, file string) *codeProject {
 	dir := file
 	if st, err := os.Stat(file); err != nil || !st.IsDir() {
 		dir = filepath.Dir(file)
 	}
+	var nearest *codeProject
 	for {
-		if p := detectProject(dir); p != nil {
-			return p
+		for _, p := range detectProjects(dir) {
+			if nearest == nil {
+				nearest = p
+			}
+			if p.owns(file) {
+				return p
+			}
 		}
 		if dir == root || !strings.HasPrefix(dir, root) || dir == filepath.Dir(dir) {
-			return nil
+			return nearest
 		}
 		dir = filepath.Dir(dir)
 	}
+}
+
+// owns reports whether a file is written in this project's language. A
+// Makefile drives whatever it is pointed at, so it owns nothing in
+// particular and only ever answers as the nearest manifest.
+func (p *codeProject) owns(file string) bool {
+	switch p.Kind {
+	case "go":
+		return strings.HasSuffix(file, ".go")
+	case "node":
+		return jsSource.MatchString(file)
+	case "rust":
+		return strings.HasSuffix(file, ".rs")
+	case "python":
+		return strings.HasSuffix(file, ".py") || strings.HasSuffix(file, ".pyi")
+	}
+	return false
 }
 
 // projectsUnder lists every project at the root and one or two levels down,
@@ -162,9 +203,7 @@ func projectsUnder(root string) []*codeProject {
 			return
 		}
 		seen[dir] = true
-		if p := detectProject(dir); p != nil {
-			out = append(out, p)
-		}
+		out = append(out, detectProjects(dir)...)
 	}
 	add(root)
 	for depth, dirs := 0, []string{root}; depth < 2; depth++ {

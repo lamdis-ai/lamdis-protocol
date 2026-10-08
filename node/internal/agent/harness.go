@@ -263,6 +263,27 @@ func (h *harness) changed(ctx context.Context) []string {
 	return sortedKeys(set)
 }
 
+// commitNudge is what the harness says when a task has spent much of its
+// budget and nothing has changed yet. Without it, a model that is still
+// reading when the turns or the clock run out leaves a good plan and no
+// change, and the plan is lost with the run. level is 1 at half the budget
+// and 2 at three quarters; the words leave room for a task that only wanted
+// an answer.
+func commitNudge(level int, turnsLeft int, timeLeft time.Duration) string {
+	left := fmt.Sprintf("%d model turns", turnsLeft)
+	if timeLeft > 0 {
+		left += fmt.Sprintf(" and about %d minutes", max(1, int(timeLeft.Round(time.Minute).Minutes())))
+	}
+	if level >= 2 {
+		return "Harness: three quarters of this task's budget is used and no file has changed (" + left + " left). " +
+			"If the task needs a change, make it now with what you already know, then verify it; do not investigate further first. " +
+			"If it only needs an answer, give the answer now."
+	}
+	return "Harness: half of this task's budget is used and no file has changed yet (" + left + " left). " +
+		"If the task needs a change, move from investigating to making it: you can still check and refine it after. " +
+		"If it only needs an answer, give it."
+}
+
 func fingerprint(files []string) string {
 	h := sha256.New()
 	for _, f := range files {

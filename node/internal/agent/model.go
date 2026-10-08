@@ -130,17 +130,25 @@ func NewOpenRouter(key, model string) *OpenRouter {
 	if model == "" {
 		model = DefaultModel
 	}
-	return &OpenRouter{Key: key, Model: model, HTTP: &http.Client{Timeout: 120 * time.Second,
-		Transport: &http.Transport{
-			// The default dialer waits thirty seconds on a handshake that
-			// has already failed. Ten is long enough to be patient and
-			// short enough that a retry still feels immediate.
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 110 * time.Second,
-			MaxIdleConnsPerHost:   4,
-			IdleConnTimeout:       90 * time.Second,
-			ForceAttemptHTTP2:     true,
-		}}}
+	return &OpenRouter{Key: key, Model: model, HTTP: newModelClient()}
+}
+
+// newModelClient is the transport every model call uses. It has no overall
+// timeout on purpose: a long-context completion that is not streamed sends
+// nothing at all until the last token, and a fixed limit here cut off
+// answers that were simply long. The caller's context decides how long a
+// turn may take; the transport only gives up on connections that never
+// open.
+func newModelClient() *http.Client {
+	return &http.Client{Transport: &http.Transport{
+		// The default dialer waits thirty seconds on a handshake that
+		// has already failed. Ten is long enough to be patient and
+		// short enough that a retry still feels immediate.
+		TLSHandshakeTimeout: 10 * time.Second,
+		MaxIdleConnsPerHost: 4,
+		IdleConnTimeout:     90 * time.Second,
+		ForceAttemptHTTP2:   true,
+	}}
 }
 
 // Complete asks the model, and rides out the ordinary failures of talking
@@ -178,6 +186,38 @@ func (o *OpenRouter) Complete(ctx context.Context, msgs []Message, tools []ToolS
 // are accumulated just like a normal completion; only assistant text is
 // exposed to the terminal as it arrives.
 func (o *OpenRouter) Stream(ctx context.Context, msgs []Message, tools []ToolSpec, onText func(string)) (Message, Usage, error) {
+	// The same patience as Complete, for as long as nothing has reached the
+	// screen. Once text has been shown, a retry would show it twice, so a
+	// failure after that point is the caller's to handle.
+	var last error
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			wait := time.Duration(1<<uint(attempt-1)) * time.Second
+			select {
+			case <-ctx.Done():
+				return Message{}, Usage{}, ctx.Err()
+			case <-time.After(wait):
+			}
+		}
+		shown := false
+		m, u, err := o.stream(ctx, msgs, tools, func(t string) {
+			shown = true
+			if onText != nil {
+				onText(t)
+			}
+		})
+		if err == nil {
+			return m, u, nil
+		}
+		last = err
+		if shown || !worthRetrying(err) || ctx.Err() != nil {
+			return Message{}, u, err
+		}
+	}
+	return Message{}, Usage{}, last
+}
+
+func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpec, onText func(string)) (Message, Usage, error) {
 	req := map[string]any{"model": o.Model, "messages": msgs, "temperature": 0.2, "stream": true}
 	if o.isOpenRouter() {
 		req["provider"] = map[string]any{"data_collection": "deny"}
@@ -335,7 +375,9 @@ func (o *OpenRouter) complete(ctx context.Context, msgs []Message, tools []ToolS
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return Message{}, Usage{}, err
+		// A body cut off part-way is the same transient failure as one
+		// that never started, and is retried the same way.
+		return Message{}, Usage{}, friendly(err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		// The provider's own words: "insufficient credits" is actionable,

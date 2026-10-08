@@ -39,6 +39,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	dir := fs.String("dir", "", "workspace directory (default: the git root of the current directory)")
 	quiet := fs.Bool("q", false, "print only the answer")
 	verbose := fs.Bool("verbose", false, "show each tool call while working")
+	offline := fs.Bool("offline", false, "no web search, fetch or browser: work from the workspace alone")
 	effortFlag := fs.String("effort", os.Getenv("LAMDIS_EFFORT"), "low, medium or high: how far it explores, and how many repair and review rounds a change gets")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -107,7 +108,7 @@ func cmdCode(ctx context.Context, dataDir string, s store.Store, args []string) 
 	runner := &agent.Runner{Store: s, PersonKey: priv, Person: pid, AgentKey: agentKey, Agent: agentPID,
 		Model: base, ModelName: envModel, RunTimeout: agent.EffortTimeout(*effortFlag), Effort: *effortFlag,
 		OwnModelCredential: strings.TrimSpace(os.Getenv("LAMDIS_OPENROUTER_KEY")) != "",
-		RunToCompletion:    true, SharedOnly: true,
+		RunToCompletion:    true, SharedOnly: true, Offline: *offline,
 		DataDir: dataDir, Names: names, Embedder: embedderFromEnv(),
 		State: agent.LoadState(dataDir), Workspace: ws}
 	if !runner.Ready() {
