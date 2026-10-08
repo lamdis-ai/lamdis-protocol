@@ -57,6 +57,13 @@ type Runner struct {
 	// must come from the workspace alone. Commands the agent runs are
 	// governed by the workspace, not by this.
 	Offline bool
+	// UntilStuck runs a coding task with no deadline and no fixed turn
+	// count: it continues while the task's state keeps advancing (new code
+	// read, a new change, a check result that moved, a review) and stops
+	// after a stretch of turns in which nothing advanced. A complete answer
+	// that takes forty minutes beats a cut-off one that took twelve; effort
+	// sets how long a stretch without progress is tolerated.
+	UntilStuck bool
 	// TurnTimeout overrides how long one model turn may take before it is
 	// asked again. Zero means the default for the kind of run.
 	TurnTimeout time.Duration
@@ -355,7 +362,14 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 	if timeout <= 0 {
 		timeout = 4 * time.Minute
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	var cancel context.CancelFunc
+	if r.UntilStuck {
+		// No clock: the task runs while it is getting somewhere, and the
+		// loop below stops it when it is not. The caller can still cancel.
+		ctx, cancel = context.WithCancel(ctx)
+	} else {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+	}
 	defer cancel()
 	start := r.now()
 	cfg, _ := LoadConfig(r.DataDir)
@@ -551,11 +565,23 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 
 	tools := r.toolSpecs(g, canWrite, ex)
 	calls, explores, writes := 0, 0, 0
-	const interactiveToolCeiling = 200
+	interactiveToolCeiling := 200
 	turnLimit := maxTurns
 	eff := effortFor(r.Effort)
 	if r.RunToCompletion {
 		turnLimit = eff.Turns
+	}
+	// Until-stuck runs replace the turn budget with a stall window. The
+	// ceilings that remain are only there to stop a model that is looping
+	// in a way the progress signal cannot see.
+	stallWindow := 0
+	if r.UntilStuck && h != nil {
+		stallWindow = max(8, eff.Turns/2)
+		turnLimit, interactiveToolCeiling = 600, 2000
+	}
+	expected := turnLimit // what the commit nudges measure against
+	if stallWindow > 0 {
+		expected = eff.Turns
 	}
 	// Roles: exploration can run on something cheap, and a failing model
 	// can hand over to another rather than ending the task.
@@ -598,8 +624,22 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		return len(texts) > 0
 	}
 	loopStart, nudged, wrappedUp := time.Now(), 0, false
+	lastProgress, lastAdvance := "", 0
 	for turn := 0; turn < turnLimit; turn++ {
 		drainInterjections()
+		stalling := false
+		if stallWindow > 0 {
+			if p := h.progress(ctx); p != lastProgress {
+				lastProgress, lastAdvance = p, turn
+			}
+			if turn-lastAdvance >= stallWindow {
+				if wrappedUp || len(h.changed(ctx)) == 0 {
+					stopReason = fmt.Sprintf("nothing advanced in %d turns", stallWindow)
+					break
+				}
+				stalling = true // hand what there is to the checks first
+			}
+		}
 		if h != nil && transcriptSize(msgs) > eff.CompactAt {
 			if out, ok := compactMessages(msgs, 6, h.summary()); ok {
 				msgs = out
@@ -616,13 +656,17 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		// it is asked for its report with no tools, which hands the change
 		// to the harness's checks and reviewer while there is time to run them.
 		wrapTurn := false
-		if h != nil && !wrappedUp && (reserveReached(ctx, loopStart) || turnLimit-turn <= 2) && len(h.changed(ctx)) > 0 {
+		if h != nil && !wrappedUp && (stalling || reserveReached(ctx, loopStart) || turnLimit-turn <= 2) && len(h.changed(ctx)) > 0 {
 			wrappedUp, wrapTurn = true, true
-			msgs = append(msgs, Message{Role: "user", Content: "Harness: this task is nearly out of time. Stop changing code now. " +
-				"Reply with your final report (what changed, what you ran, what is left open); Lamdis will check and review the change in the time that remains."})
+			why := "this task is nearly out of time"
+			if stalling {
+				why = fmt.Sprintf("nothing has advanced in %d turns", stallWindow)
+			}
+			msgs = append(msgs, Message{Role: "user", Content: "Harness: " + why + ". Stop changing code now. " +
+				"Reply with your final report (what changed, what you ran, what is left open); Lamdis will check and review the change now."})
 		}
 		if h != nil && nudged < 2 {
-			used := float64(turn) / float64(turnLimit)
+			used := float64(turn) / float64(expected)
 			var timeLeft time.Duration
 			if deadline, ok := ctx.Deadline(); ok {
 				timeLeft = time.Until(deadline)
@@ -640,7 +684,11 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 			if level > nudged {
 				nudged = level
 				if len(h.changed(ctx)) == 0 {
-					msgs = append(msgs, Message{Role: "user", Content: commitNudge(level, turnLimit-turn, timeLeft)})
+					left := turnLimit - turn
+					if stallWindow > 0 {
+						left = -1 // no budget to count down; the nudge is about the work
+					}
+					msgs = append(msgs, Message{Role: "user", Content: commitNudge(level, left, timeLeft)})
 				}
 			}
 		}

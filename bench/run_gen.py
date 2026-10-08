@@ -37,16 +37,18 @@ def usage(key):
     return json.load(urllib.request.urlopen(req, timeout=30))["data"]["usage"]
 
 
-def setup_data(model):
-    """A data dir of its own, so the bench never lands in the person's record."""
-    os.makedirs(DATA, exist_ok=True)
+def setup_data(model, data=DATA):
+    """A data dir of its own, so the bench never lands in the person's record.
+    Each instance gets a fresh one: lamdis files every task in a thread named
+    after the repository, so a shared one lets one task read another's."""
+    os.makedirs(data, exist_ok=True)
     src = os.path.expanduser("~/.lamdis")
     for f in ("person.key", "agent.key", "name", ".env"):
-        if os.path.exists(os.path.join(src, f)) and not os.path.exists(os.path.join(DATA, f)):
-            shutil.copy(os.path.join(src, f), os.path.join(DATA, f))
+        if os.path.exists(os.path.join(src, f)) and not os.path.exists(os.path.join(data, f)):
+            shutil.copy(os.path.join(src, f), os.path.join(data, f))
     cfg = {"model": model, "trust": "project", "unguarded": True, "max_tool_calls": 200,
            "max_runs_per_day": 100000, "max_fetches_per_day": 100000, "max_tokens_per_day": 1000000000}
-    json.dump(cfg, open(os.path.join(DATA, "agent.json"), "w"), indent=2)
+    json.dump(cfg, open(os.path.join(data, "agent.json"), "w"), indent=2)
 
 
 _clone_locks = {}
@@ -82,10 +84,13 @@ def solve(inst, model, timeout, logdir):
         return None
     t0 = time.time()
     d = checkout(inst)
+    data = os.path.join(DATA, "runs", inst["instance_id"])
+    shutil.rmtree(data, ignore_errors=True)
+    setup_data(model, data)
     log = open(os.path.join(logdir, inst["instance_id"] + ".log"), "w")
     # Offline: the score has to come from the repository, not from finding
     # the upstream fix on the web.
-    p = subprocess.Popen([BIN, "-data", DATA, "-q", "-offline", "-dir", d, PROMPT.format(issue=inst["problem_statement"])],
+    p = subprocess.Popen([BIN, "-data", data, "-q", "-offline", "-dir", d, PROMPT.format(issue=inst["problem_statement"])],
                          cwd=d, stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "LAMDIS_MODEL": model})
     procs.add(p)
     try:
@@ -128,7 +133,6 @@ def main():
     if os.path.exists(preds_path):
         done = {json.loads(l)["instance_id"] for l in open(preds_path)}
     todo = [i for i in insts if i["instance_id"] not in done]
-    setup_data(a.model)
     key = env_key()
     start = usage(key)
     print(f"{len(todo)} to run ({len(done)} already done), cap ${a.cap:.2f}", flush=True)

@@ -287,6 +287,13 @@ func (h *harness) changed(ctx context.Context) []string {
 // and 2 at three quarters; the words leave room for a task that only wanted
 // an answer.
 func commitNudge(level int, turnsLeft int, timeLeft time.Duration) string {
+	if turnsLeft < 0 {
+		// An until-stuck run has no budget to count down, only the work.
+		if level >= 2 {
+			return "Harness: you have investigated for a long time and no file has changed. If the task needs a change, make it now with what you already know, then verify it. If it only needs an answer, give it now."
+		}
+		return "Harness: you have been investigating for a while and no file has changed yet. If the task needs a change, move from investigating to making it: you can still check and refine it after. If it only needs an answer, give it."
+	}
 	left := fmt.Sprintf("%d model turns", turnsLeft)
 	if timeLeft > 0 {
 		left += fmt.Sprintf(" and about %d minutes", max(1, int(timeLeft.Round(time.Minute).Minutes())))
@@ -299,6 +306,20 @@ func commitNudge(level int, turnsLeft int, timeLeft time.Duration) string {
 	return "Harness: half of this task's budget is used and no file has changed yet (" + left + " left). " +
 		"If the task needs a change, move from investigating to making it: you can still check and refine it after. " +
 		"If it only needs an answer, give it."
+}
+
+// progress is the task's state reduced to what counts as advancing: code
+// read, the change itself, what the checks say, and how far review and
+// repair have got. Turns that leave it unchanged are turns spent going
+// nowhere, whatever they cost.
+func (h *harness) progress(ctx context.Context) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "read=%d change=%s", len(h.read), fingerprint(h.changed(ctx)))
+	for _, c := range h.checks {
+		fmt.Fprintf(&sb, " %s=%s/%d", c.Kind, c.Status, len(c.Failures))
+	}
+	fmt.Fprintf(&sb, " reviews=%d repairs=%d", h.reviews, h.repairs)
+	return sb.String()
 }
 
 func fingerprint(files []string) string {

@@ -206,3 +206,43 @@ func TestAnErrorChunkIsNotAnEmptyAnswer(t *testing.T) {
 		t.Fatalf("stream: %v %q", err, m.Content)
 	}
 }
+
+// With no clock, a task that keeps advancing runs past the old turn budget,
+// and one that stops advancing is stopped.
+func TestUntilStuckFollowsProgressNotTheClock(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{}
+	for i := 0; i < 40; i++ {
+		files[fmt.Sprintf("f%02d.txt", i)] = "x\n"
+	}
+	writeFiles(t, root, files)
+	run := func(next func(turn int) Message) (int, Result) {
+		turn := 0
+		m := executionModel(func(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, Usage, error) {
+			turn++
+			return next(turn), Usage{}, nil
+		})
+		f := setup(t, m)
+		f.r.Workspace = &Workspace{Root: root}
+		f.r.RunToCompletion, f.r.UntilStuck, f.r.Effort = true, true, "low" // low: 24 turns, stall window 12
+		res := f.r.Run(context.Background(), Trigger{Kind: TriggerCode, Thread: f.thread})
+		return turn, res
+	}
+	// Reading a new file every turn is advancing: it outlives 24 turns.
+	turns, _ := run(func(turn int) Message {
+		if turn <= 36 {
+			return call("read_file", map[string]any{"path": fmt.Sprintf("f%02d.txt", turn)})
+		}
+		return say("Read them all.")
+	})
+	if turns < 37 {
+		t.Fatalf("a task that was advancing was stopped after %d turns", turns)
+	}
+	// Listing directories forever, never the same call twice, is not.
+	turns, res := run(func(turn int) Message {
+		return call("list_files", map[string]any{"path": fmt.Sprintf("nowhere%d", turn)})
+	})
+	if turns > 30 || !strings.Contains(res.Answer, "nothing advanced") {
+		t.Fatalf("a stuck task ran %d turns: %q", turns, res.Answer)
+	}
+}
