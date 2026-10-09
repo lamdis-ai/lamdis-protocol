@@ -246,3 +246,16 @@ func TestUntilStuckFollowsProgressNotTheClock(t *testing.T) {
 		t.Fatalf("a stuck task ran %d turns: %q", turns, res.Answer)
 	}
 }
+
+func TestAnnouncesStep(t *testing.T) {
+	for _, s := range []string{"Now let me check the Django version in this testbed and look at the test mentioned in the issue:", "I'll run the tests next.", "Let me look at the caller"} {
+		if !announcesStep(s) {
+			t.Errorf("missed %q", s)
+		}
+	}
+	for _, s := range []string{"Fixed: the redirect now uses request.path.", "No change is needed: the behaviour is intended, see line 40."} {
+		if announcesStep(s) {
+			t.Errorf("false hit %q", s)
+		}
+	}
+}

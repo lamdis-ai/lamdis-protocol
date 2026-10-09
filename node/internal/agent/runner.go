@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -641,6 +642,7 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		return len(texts) > 0
 	}
 	loopStart, nudged, wrappedUp := time.Now(), 0, false
+	endedBare := 0
 	lastProgress, lastAdvance := "", 0
 	for turn := 0; turn < turnLimit; turn++ {
 		drainInterjections()
@@ -763,6 +765,18 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 		if len(m.ToolCalls) == 0 {
 			// Don't discard a completed answer just because a new paste arrived.
 			final = strings.TrimSpace(m.Content)
+			// A coding task whose turn ends on a next step ("Now let me
+			// check the tests:") with nothing edited ended by accident: the
+			// model announced a call and did not make it. It is asked to go
+			// on, twice at most; a model that has concluded no change is
+			// needed says so again and is believed.
+			if final != "" && r.Workspace != nil && t.Kind == TriggerCode && endedBare < 2 && !madeEdit(rec.ToolCalls) && announcesStep(final) {
+				endedBare++
+				msgs = append(msgs, Message{Role: "user", Content: "Your turn ended with no tool call, and no file has been changed yet. " +
+					"If the task needs a change, continue now with your next tool call. If you have concluded that no change is needed, reply again with that conclusion and the evidence for it."})
+				final = ""
+				continue
+			}
 			if final != "" {
 				// The model saying it is done is a claim. The harness checks
 				// what changed and sends it back if the work does not hold.
@@ -1878,4 +1892,24 @@ func taskSummary(h *harness) string {
 		return ""
 	}
 	return h.summary()
+}
+
+var nextStep = regexp.MustCompile(`(?is)(:\s*$|\b(let me|let's|i'll|i will|i need to|now i)\b[^.!?\n]*[.:!]?\s*$)`)
+
+// announcesStep reports whether a reply ends on a step still to be taken.
+func announcesStep(text string) bool {
+	if len(text) > 400 {
+		text = text[len(text)-400:]
+	}
+	return nextStep.MatchString(text)
+}
+
+// madeEdit reports whether a run's tool calls include an edit.
+func madeEdit(calls []string) bool {
+	for _, c := range calls {
+		if c == "edit_file" || c == "write_file" {
+			return true
+		}
+	}
+	return false
 }
