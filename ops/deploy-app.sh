@@ -33,93 +33,22 @@ until docker push -q "$REPO:${TAG}" >/dev/null; do
   aws ecr get-login-password --profile "$PROFILE" --region "$REGION" | docker login -u AWS --password-stdin "${REPO%/*}" >/dev/null
 done
 
-say "Registering a task definition with ${TAG}…"
-aws ecs describe-task-definition --task-definition lamdis-app --profile "$PROFILE" --region "$REGION" \
-  --query taskDefinition > "$TMP/cur.json"
-python3 - "$TMP" "${TAG}" <<'EOF'
-import json, sys
-tmp, tag = sys.argv[1], sys.argv[2]
-d = json.load(open(tmp + "/cur.json"))
-for k in ["taskDefinitionArn", "revision", "status", "requiresAttributes", "compatibilities",
-          "registeredAt", "registeredBy", "deregisteredAt"]:
-    d.pop(k, None)
-for c in d["containerDefinitions"]:
-    if "lamdis-app" in c["image"]:
-        c["image"] = c["image"].rsplit(":", 1)[0] + ":" + tag
-        env = [e for e in c.get("environment", []) if e["name"] != "LAMDIS_BROWSER_CDP"]
-        env.append({"name": "LAMDIS_BROWSER_CDP", "value": "http://127.0.0.1:9222"})
-        c["environment"] = env
-# The agents' browser: headless Chrome beside the app, reachable only on the
-# task's own loopback (no port mapping, bound to 127.0.0.1). Not essential:
-# if it falls over, the app keeps serving and the browser tool says so.
-browser = {
-    "name": "browser",
-    "image": "730082756200.dkr.ecr.us-east-1.amazonaws.com/lamdis-browser:chrome151",
-    "essential": False,
-    "entryPoint": ["/headless-shell/headless-shell"],
-    "command": ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader",
-                "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=9222",
-                "--disable-dev-shm-usage"],
-    "logConfiguration": next(c for c in d["containerDefinitions"] if "lamdis-app" in c["image"]).get("logConfiguration"),
-}
-if browser["logConfiguration"]:
-    browser["logConfiguration"] = json.loads(json.dumps(browser["logConfiguration"]))
-    browser["logConfiguration"].setdefault("options", {})["awslogs-stream-prefix"] = "browser"
-d["containerDefinitions"] = [c for c in d["containerDefinitions"] if c["name"] != "browser"] + [browser]
-d["cpu"], d["memory"] = "1024", "3072"
-json.dump(d, open(tmp + "/new.json", "w"))
-EOF
-NEW="$(aws ecs register-task-definition --cli-input-json "file://$TMP/new.json" --profile "$PROFILE" --region "$REGION" \
-  --query taskDefinition.taskDefinitionArn --output text)"
-say "  $NEW"
-
-say "Stopping the running server…"
-aws ecs update-express-gateway-service --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE" \
-  --scaling-target 'minTaskCount=0,maxTaskCount=0' --query 'service.status.statusCode' --output text >/dev/null
-i=0
-while [ "$(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'length(taskArns)' --output text)" != "0" ]; do
-  i=$((i+1)); [ $i -gt 60 ] && { say "still running after 10 minutes; stopping here"; exit 1; }
-  sleep 10
-done
-# EFS releases a stopped client's file locks after a short lease.
-sleep 30
-
-say "Starting ${TAG} alone…"
-aws ecs update-express-gateway-service --service-arn "$SERVICE" --task-definition-arn "$NEW" \
-  --profile "$PROFILE" --region "$REGION" --query 'service.serviceArn' --output text >/dev/null
-# Switching the task definition starts an ECS Express canary that cannot
-# finish at zero tasks, so do not wait for it: ask for one server at once, on
-# both the service and its autoscaling target (the Express update alone has
-# been seen not to apply), and let the check below keep it to one. The Express
-# service also stores its own scaling target (zero, from the stop above) and
-# reapplies it, stopping new tasks, so that is set first.
-aws ecs update-express-gateway-service --profile "$PROFILE" --region "$REGION" --service-arn "$SERVICE" \
-  --scaling-target 'minTaskCount=1,maxTaskCount=1' --query 'service.status.statusCode' --output text >/dev/null
-aws application-autoscaling register-scalable-target --service-namespace ecs --resource-id service/lamdis/lamdis-app \
-  --scalable-dimension ecs:service:DesiredCount --min-capacity 1 --max-capacity 1 --profile "$PROFILE" --region "$REGION" >/dev/null
-aws ecs update-service --cluster lamdis --service lamdis-app --desired-count 1 --profile "$PROFILE" --region "$REGION" >/dev/null
+# Since 2026-10-10 app.lamdis.ai runs on the shared prototype box (EC2 shared-box,
+# 54.85.29.91, docker compose in /opt/box; the EFS is mounted at /mnt/lamdis), behind
+# CloudFront E1RHFILNB4M2UF -> app-origin.lamdis.ai. The ECS Express service and its ALB
+# were deleted. `docker compose up` recreates the container, stopping the old one
+# before the new one starts, so there is still exactly one writer on each account file.
+BOX="${BOX:-ec2-user@54.85.29.91}"
+say "Starting ${TAG} on the shared box…"
+ssh -i "$HOME/.ssh/shared-box.pem" "$BOX" "set -e; cd /opt/box
+  aws ecr get-login-password --region $REGION | sudo docker login -u AWS --password-stdin ${REPO%/*} >/dev/null
+  sudo sed -i '/^LAMDIS_TAG=/d' .env 2>/dev/null || true
+  echo LAMDIS_TAG=${TAG} | sudo tee -a .env >/dev/null
+  sudo docker compose --profile lamdis pull -q lamdis-app
+  sudo docker compose --profile lamdis up -d lamdis-app"
 i=0
 until [ "$(curl -s -o /dev/null -w '%{http_code}' https://app.lamdis.ai/healthz)" = "200" ]; do
-  i=$((i+1)); [ $i -gt 90 ] && { say "not healthy after 15 minutes"; exit 1; }
-  sleep 10
-done
-# Healthy is not enough: make sure only one server is left. ECS Express can
-# bring the previous (same-version) deployment back up beside the primary one
-# while it bakes; any task not started by the primary deployment is stopped.
-PRIMARY="$(aws ecs describe-services --cluster lamdis --services lamdis-app --profile "$PROFILE" --region "$REGION" \
-  --query 'services[0].deployments[?status==`PRIMARY`].id | [0]' --output text)"
-TASKS="$(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'taskArns[]' --output text)"
-# Only ever trim down to one: never stop the last server, whoever started it.
-[ "$(echo $TASKS | wc -w)" -gt 1 ] && for t in $TASKS; do
-  by="$(aws ecs describe-tasks --cluster lamdis --tasks "$t" --profile "$PROFILE" --region "$REGION" --query 'tasks[0].startedBy' --output text)"
-  if [ "$by" != "$PRIMARY" ]; then
-    say "  stopping $t (not the primary deployment's)"
-    aws ecs stop-task --cluster lamdis --task "$t" --reason "one writer on EFS" --profile "$PROFILE" --region "$REGION" >/dev/null
-  fi
-done
-i=0
-until [ "$(aws ecs list-tasks --cluster lamdis --desired-status RUNNING --profile "$PROFILE" --region "$REGION" --query 'length(taskArns)' --output text)" = "1" ]; do
-  i=$((i+1)); [ $i -gt 60 ] && { say "more than one server is still running; look before deploying again"; exit 1; }
+  i=$((i+1)); [ $i -gt 30 ] && { say "not healthy after 5 minutes: ssh -i ~/.ssh/shared-box.pem $BOX 'cd /opt/box && sudo docker compose --profile lamdis logs --tail 50 lamdis-app'"; exit 1; }
   sleep 10
 done
 say "Live: ${TAG}"
