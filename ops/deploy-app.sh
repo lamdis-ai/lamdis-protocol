@@ -44,6 +44,7 @@ ssh -i "$HOME/.ssh/shared-box.pem" "$BOX" "set -e; cd /opt/box
   aws ecr get-login-password --region $REGION | sudo docker login -u AWS --password-stdin ${REPO%/*} >/dev/null
   sudo sed -i '/^LAMDIS_TAG=/d' .env 2>/dev/null || true
   echo LAMDIS_TAG=${TAG} | sudo tee -a .env >/dev/null
+  sudo /opt/box/fetch-env.sh >/dev/null  # env (incl. secrets) from Secrets Manager shared-box/env
   sudo docker compose --profile lamdis pull -q lamdis-app
   sudo docker compose --profile lamdis up -d lamdis-app"
 i=0
