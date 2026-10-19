@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -74,12 +75,15 @@ func TestBusyIsRetriedAndRefusedIsNot(t *testing.T) {
 	refuse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&tries, 1)
 		w.WriteHeader(http.StatusPaymentRequired)
-		json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"message": "Insufficient credits"}})
+		json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"message": providerCreditWords}})
 	}))
 	defer refuse.Close()
 	_, _, err := client(refuse.URL).Complete(context.Background(), []Message{{Content: "x"}}, nil)
-	if err == nil || !strings.Contains(err.Error(), "Insufficient credits") {
-		t.Fatalf("the provider's own words should reach the person: %v", err)
+	if !errors.As(err, new(OutOfCredit)) {
+		t.Fatalf("running out of credit should be recognised: %v", err)
+	}
+	if strings.Contains(err.Error(), "openrouter.ai/workspaces") || strings.Contains(err.Error(), "9717d") {
+		t.Fatalf("the key's dashboard link reached the person: %v", err)
 	}
 	if tries != 1 {
 		t.Fatalf("a refusal was retried %d times", tries)
@@ -118,5 +122,26 @@ func TestItGivesUpRatherThanHangingOn(t *testing.T) {
 	}
 	if d := time.Since(start); d > 20*time.Second {
 		t.Fatalf("it held on for %s", d.Round(time.Second))
+	}
+}
+
+// What OpenRouter said on 2026-10-19 when the host key ran dry: it names the
+// key's dashboard, which belongs to whoever runs the host.
+const providerCreditWords = "This request requires more credits, or fewer max_tokens. You requested up to 65536 tokens, but can only afford 49434. To increase, visit https://openrouter.ai/workspaces/default/keys/9717d9994a78e29ea09e8fc7a0b99edcc62d75321 and adjust the key's total limit."
+
+func TestRunningDryEvenMidStreamSaysWhatToDo(t *testing.T) {
+	// Some providers report it inside a 200 stream; the wording is the tell.
+	if !errors.As(creditError(200, providerCreditWords), new(OutOfCredit)) {
+		t.Fatal("credit wording inside a stream was not recognised")
+	}
+	if creditError(400, "tool schema invalid") != nil {
+		t.Fatal("an ordinary refusal was taken for running out of credit")
+	}
+	shared, own := (&Runner{}).creditNote(Config{}), (&Runner{}).creditNote(Config{OpenRouterKey: "sk-or-x"})
+	if !strings.Contains(shared, "openrouter.ai/keys") || !strings.Contains(shared, "Settings") {
+		t.Fatalf("someone on the host's key should be told how to bring their own: %q", shared)
+	}
+	if strings.Contains(own, "free") || !strings.Contains(own, "Add credit") {
+		t.Fatalf("someone on their own key should be told to top it up: %q", own)
 	}
 }

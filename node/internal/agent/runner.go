@@ -269,6 +269,15 @@ func (r *Runner) limited(cfg Config) bool {
 	return !(r.SharedOnly && own)
 }
 
+// creditNote is what the person reads when the key paying for the agent runs
+// dry: on a host's shared key, how to bring their own; on theirs, where to top up.
+func (r *Runner) creditNote(cfg Config) string {
+	if cfg.OpenRouterKey != "" || r.OwnModelCredential {
+		return "Your OpenRouter key has run out of credit or reached its limit. Add credit or raise the key's limit at openrouter.ai, then ask again. Nothing in this channel is lost."
+	}
+	return "The free model allowance here has run out for now. To keep going, use your own OpenRouter key: create one at openrouter.ai/keys, then paste it in Settings under Model (Settings asks you to add your email first). Nothing in this channel is lost."
+}
+
 func (r *Runner) ModelFor(cfg Config) (Model, string) {
 	base, _ := r.Model.(*OpenRouter)
 	key, name, url := "", r.ModelName, ""
@@ -750,6 +759,11 @@ func (r *Runner) Run(ctx context.Context, t Trigger) Result {
 					turn--
 					continue
 				}
+			}
+			if errors.As(err, new(OutOfCredit)) {
+				final = r.creditNote(cfg)
+				stopReason = "the model key is out of credit"
+				break
 			}
 			if fallback != nil && ctx.Err() == nil && !isContextOverflow(err) {
 				rec.Problems = append(rec.Problems, "switched to "+fallbackName+" after: "+trunc(err.Error(), 200))

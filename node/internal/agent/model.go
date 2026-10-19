@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -280,6 +281,9 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 		if json.Unmarshal(raw, &e) == nil && e.Error.Message != "" {
 			msg = e.Error.Message
 		}
+		if err := creditError(resp.StatusCode, msg); err != nil {
+			return Message{}, Usage{}, err
+		}
 		// Busy and broken pass; refused and unpaid do not.
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			return Message{}, Usage{}, retryable{fmt.Errorf("%s", msg)}
@@ -331,6 +335,9 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 		// chunk rather than a status code; without this it reads as an
 		// empty answer.
 		if chunk.Error != nil {
+			if err := creditError(0, chunk.Error.Message); err != nil {
+				return Message{}, usage, err
+			}
 			return Message{}, usage, retryable{fmt.Errorf("the model failed mid-answer: %s", chunk.Error.Message)}
 		}
 		if len(chunk.Choices) == 0 {
@@ -362,6 +369,20 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 		return Message{}, usage, gone(err)
 	}
 	return Message{Role: "assistant", Content: content.String(), ToolCalls: calls}, usage, nil
+}
+
+// OutOfCredit is the model key's balance or limit running out. The
+// provider's own wording names the key and links its dashboard, so it never
+// reaches the person; the runner says what they can do instead.
+type OutOfCredit struct{ error }
+
+var creditWords = regexp.MustCompile(`(?i)more credits|can only afford|insufficient (credits|balance|funds)|key limit|limit exceeded|credit limit`)
+
+func creditError(status int, msg string) error {
+	if status == http.StatusPaymentRequired || creditWords.MatchString(msg) {
+		return OutOfCredit{errors.New("the model key is out of credit")}
+	}
+	return nil
 }
 
 // retryable marks a failure that is likely to pass on its own.
@@ -442,6 +463,9 @@ func (o *OpenRouter) complete(ctx context.Context, msgs []Message, tools []ToolS
 		msg := fmt.Sprintf("the model returned HTTP %d", resp.StatusCode)
 		if json.Unmarshal(raw, &e) == nil && e.Error.Message != "" {
 			msg = e.Error.Message
+		}
+		if err := creditError(resp.StatusCode, msg); err != nil {
+			return Message{}, Usage{}, err
 		}
 		// Busy and broken pass; refused and unpaid do not.
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
