@@ -167,6 +167,11 @@ func (h *Host) Start(ctx context.Context) error {
 		if !e.IsDir() {
 			continue
 		}
+		if moved, err := agent.MoveToMasterKey(filepath.Join(h.Root, e.Name())); err != nil {
+			h.logf("host: account %s kept its own vault key: %v", e.Name(), err)
+		} else if moved {
+			h.logf("host: account %s secrets now sealed under the master key", e.Name())
+		}
 		if _, err := h.load(e.Name(), ""); err != nil {
 			h.logf("host: account %s did not load: %v", e.Name(), err)
 			continue

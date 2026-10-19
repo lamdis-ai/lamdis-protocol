@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -87,26 +88,81 @@ func seal(key []byte, plain string) (string, error) {
 }
 
 func unseal(key []byte, stored string) string {
+	plain, _ := opened(key, stored)
+	return plain
+}
+
+// opened is unseal that also says whether the key fit.
+func opened(key []byte, stored string) (string, bool) {
 	if !strings.HasPrefix(stored, sealPrefix) {
-		return stored // written before the vault; sealed on the next save
+		return stored, true // written before the vault; sealed on the next save
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(stored, sealPrefix))
 	if err != nil {
-		return ""
+		return "", false
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil || len(raw) < gcm.NonceSize() {
-		return ""
+		return "", false
 	}
 	plain, err := gcm.Open(nil, raw[:gcm.NonceSize()], raw[gcm.NonceSize():], []byte("lamdis-secret"))
 	if err != nil {
-		return ""
+		return "", false
 	}
-	return string(plain)
+	return string(plain), true
+}
+
+// fileKey is a directory's own key file, the only key before a master key was
+// set. With a master key it is read, never created: it can still open what
+// was sealed before, until MoveToMasterKey retires it.
+func fileKey(dataDir string) []byte {
+	if strings.TrimSpace(os.Getenv("LAMDIS_VAULT_KEY")) == "" {
+		return nil
+	}
+	if raw, err := os.ReadFile(filepath.Join(dataDir, "vault.key")); err == nil && len(raw) == 32 {
+		return raw
+	}
+	return nil
+}
+
+// MoveToMasterKey reseals a directory's secrets under the master key and then
+// deletes its key file, so the data volume alone no longer opens them. It
+// deletes nothing unless every secret opens with the master key afterwards.
+func MoveToMasterKey(dataDir string) (bool, error) {
+	if fileKey(dataDir) == nil {
+		return false, nil
+	}
+	if _, err := os.Stat(configPath(dataDir)); err == nil {
+		c, err := LoadConfig(dataDir)
+		if err != nil {
+			return false, err
+		}
+		if err := SaveConfig(dataDir, c); err != nil {
+			return false, err
+		}
+		raw, err := os.ReadFile(configPath(dataDir))
+		if err != nil {
+			return false, err
+		}
+		var back Config
+		if err := json.Unmarshal(raw, &back); err != nil {
+			return false, err
+		}
+		key, err := vaultKey(dataDir)
+		if err != nil {
+			return false, err
+		}
+		for _, p := range secrets(&back) {
+			if _, ok := opened(key, *p); !ok {
+				return false, errors.New("a secret did not reopen under the master key; key file kept")
+			}
+		}
+	}
+	return true, os.Remove(filepath.Join(dataDir, "vault.key"))
 }
 
 // secrets lists every credential field in a config, so sealing and opening
@@ -179,7 +235,15 @@ func openSecrets(dataDir string, c *Config) {
 		}
 		return
 	}
+	old := fileKey(dataDir)
 	for _, p := range ptrs {
-		*p = unseal(key, *p)
+		v, ok := opened(key, *p)
+		if !ok && old != nil {
+			v, ok = opened(old, *p)
+		}
+		if !ok {
+			v = ""
+		}
+		*p = v
 	}
 }
