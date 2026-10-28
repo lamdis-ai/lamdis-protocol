@@ -42,6 +42,8 @@ type Scheduler struct {
 	pmu sync.Mutex
 	// claimed: entries already answered straight away, never again on a round.
 	claimed map[string]bool
+	// holding: timed runs are waiting for the person to come back; said once.
+	holding bool
 }
 
 // Claim marks a message as being answered now, so the next round does not
@@ -294,11 +296,13 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 	// rather than thinking out loud to an empty room. Anything they write
 	// brings it all back on the next round.
 	if len(timed) > 0 {
-		if now.Sub(lastHuman) < awayAfter {
+		away := now.Sub(lastHuman) >= awayAfter
+		if !away {
 			fire = append(fire, timed...)
-		} else {
-			s.logf("agent: nobody here since %s, holding %d timed runs", lastHuman.Format("2006-01-02"), len(timed))
+		} else if !s.holding {
+			s.logf("agent: nobody here since %s, holding timed runs until they write", lastHuman.Format("2006-01-02"))
 		}
+		s.holding = away
 	}
 	if !first {
 		s.pmu.Lock()
