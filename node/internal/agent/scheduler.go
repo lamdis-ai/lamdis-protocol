@@ -145,6 +145,9 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}
 }
 
+// awayAfter is how long the person can be gone before timed runs wait.
+const awayAfter = 7 * 24 * time.Hour
+
 // poll looks at every thread once and fires whatever is due.
 func (s *Scheduler) poll(ctx context.Context, first bool) {
 	r := s.Runner
@@ -153,7 +156,8 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 		return
 	}
 	now := r.now()
-	var fire []Trigger
+	var fire, timed []Trigger
+	var lastHuman time.Time
 	structure := ReadStructure(ctx, r.Store, r.Person)
 	projBriefs := map[string]Brief{}
 	projHas := map[string]bool{}
@@ -176,6 +180,13 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 		st := perm.Fold(id, tl.Entries())
 		brief, has := LoadBrief(tl, r.Person)
 		heads := tl.Heads()
+		for _, e := range tl.Entries() {
+			if e.Author == r.Person && e.OnBehalfOf == "" {
+				if at, err := time.Parse(time.RFC3339, e.TS); err == nil && at.After(lastHuman) {
+					lastHuman = at
+				}
+			}
+		}
 
 		var pending string
 		var lastNew time.Time
@@ -264,7 +275,7 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 				s.State.edit(now, func(st *State) { last = st.thread(id).Rhythms[name] })
 				if due, today := rh.Due(now, last); due {
 					s.State.edit(now, func(st *State) { st.thread(id).Rhythms[name] = today })
-					fire = append(fire, Trigger{Kind: TriggerReflect, Thread: id, Rhythm: name, Prompt: rh.Prompt, Persona: rh.Persona})
+					timed = append(timed, Trigger{Kind: TriggerReflect, Thread: id, Rhythm: name, Prompt: rh.Prompt, Persona: rh.Persona})
 				}
 			}
 		}
@@ -274,9 +285,19 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 			if every, err := time.ParseDuration(brief.Every); err == nil && every >= 10*time.Minute {
 				last, _ := time.Parse(time.RFC3339, lastRun)
 				if now.Sub(last) >= every {
-					fire = append(fire, Trigger{Kind: TriggerSchedule, Thread: id})
+					timed = append(timed, Trigger{Kind: TriggerSchedule, Thread: id})
 				}
 			}
+		}
+	}
+	// Nobody has been here in a week: rhythms and schedules wait for them
+	// rather than thinking out loud to an empty room. Anything they write
+	// brings it all back on the next round.
+	if len(timed) > 0 {
+		if now.Sub(lastHuman) < awayAfter {
+			fire = append(fire, timed...)
+		} else {
+			s.logf("agent: nobody here since %s, holding %d timed runs", lastHuman.Format("2006-01-02"), len(timed))
 		}
 	}
 	if !first {

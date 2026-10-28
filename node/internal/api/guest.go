@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // guestSecret is the key the host signs visitor tokens with. It lives beside
@@ -115,7 +116,24 @@ func (h *Host) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeStatusJSON(w, http.StatusInternalServerError, map[string]any{"error": "could not start"})
 		return
 	}
+	h.countStart(r)
 	writeJSON(w, map[string]any{"token": tok, "guest": true})
+}
+
+// countStart notes that somebody opened the app for the first time, and on
+// what. Guests who never type are reaped within a day, so without this the
+// people who looked and left would leave no trace at all.
+func (h *Host) countStart(r *http.Request) {
+	client := "web"
+	if ua := r.UserAgent(); strings.Contains(ua, "CFNetwork") || strings.Contains(ua, "Darwin") {
+		client = "ios"
+	}
+	f, err := os.OpenFile(filepath.Join(h.Root, ".starts.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %s\n", h.now().UTC().Format(time.RFC3339), client)
 }
 
 // attach binds an email identity to the node somebody already started, so

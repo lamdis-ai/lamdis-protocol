@@ -105,3 +105,40 @@ func TestSchedulerIdlePollDoesNotRewriteState(t *testing.T) {
 		}
 	}
 }
+
+// A schedule keeps running while somebody is around, waits once they have
+// been gone a week, and comes back the moment they write again.
+func TestTimedRunsWaitForSomebodyToComeBack(t *testing.T) {
+	f := setup(t, &script{turns: []Message{say("one"), say("two"), say("three")}})
+	f.post(t, KindBrief, map[string]any{"text": "", "every": "1h"}, nil)
+	clock := time.Now().Add(time.Hour)
+	f.r.Now = func() time.Time { return clock }
+	s := &Scheduler{Runner: f.r, State: f.r.State, Logf: func(string, ...any) {}}
+	ctx := context.Background()
+	runs := func() int {
+		n := 0
+		for _, e := range f.entries(t) {
+			if e.Kind == KindRun {
+				n++
+			}
+		}
+		return n
+	}
+	s.poll(ctx, true)
+	s.poll(ctx, false)
+	if runs() != 1 {
+		t.Fatalf("the schedule did not run while somebody was around: %d runs", runs())
+	}
+	clock = clock.Add(awayAfter + time.Hour)
+	s.poll(ctx, false)
+	if runs() != 1 {
+		t.Fatal("the schedule kept running for an empty account")
+	}
+	f.r.Now = time.Now
+	f.post(t, KindNote, map[string]any{"text": "back"}, nil)
+	f.r.State.edit(time.Now(), func(st *State) { st.thread(f.thread).LastRun = "" })
+	s.poll(ctx, false)
+	if runs() < 2 {
+		t.Fatal("writing again did not bring the schedule back")
+	}
+}
