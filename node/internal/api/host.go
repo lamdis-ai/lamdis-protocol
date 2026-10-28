@@ -93,8 +93,10 @@ type Host struct {
 	mu       sync.Mutex
 	accounts map[string]*Account
 	secret   []byte
-	ctx      context.Context
-	stop     context.CancelFunc
+	// push carries agent replies to phones; nil until a key is configured.
+	push *apns
+	ctx  context.Context
+	stop context.CancelFunc
 }
 
 // SignIn is the hosted user pool's browser endpoints.
@@ -157,6 +159,12 @@ func (h *Host) Start(ctx context.Context) error {
 	h.mu.Unlock()
 	if err := os.MkdirAll(h.Root, 0o700); err != nil {
 		return err
+	}
+	if p, err := newAPNS(); err != nil {
+		h.logf("host: push is off: %v", err)
+	} else if p != nil {
+		h.push = p
+		h.logf("host: push is on")
 	}
 	entries, err := os.ReadDir(h.Root)
 	if err != nil {
@@ -279,6 +287,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 	sched := &agent.Scheduler{Runner: runner, State: state,
 		Logf: func(f string, a ...any) { h.logf("host: "+id+": "+f, a...) }}
 	sched.Sync = func(ctx context.Context) error { return hostSync(ctx, dir, st, key, self, agentPID) }
+	sched.Notify = func(thread, title, text string) { h.notify(dir, thread, title, pushLine(text)) }
 
 	app := &App{Store: st, Key: key, Self: self, DataDir: dir, Model: h.Model,
 		FileURL: func(fid string) string { return h.fileURL(id, fid) },
@@ -569,6 +578,7 @@ func (h *Host) Handler() http.Handler {
 	mux.HandleFunc("POST /app/api/email/confirm", h.handleEmailConfirm)
 	mux.HandleFunc("GET /app/api/handle", h.handleHandle)
 	mux.HandleFunc("POST /app/api/handle", h.handleHandle)
+	mux.HandleFunc("POST /app/api/push", h.handlePush)
 	mux.HandleFunc("GET /app/api/people", h.handlePeople)
 	mux.HandleFunc("POST /app/api/invite", h.handleInvite)
 	mux.HandleFunc("GET /app/api/invites", h.handleInvites)

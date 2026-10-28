@@ -30,6 +30,9 @@ type Scheduler struct {
 	Sync func(ctx context.Context) error
 	// Logf reports what happened; stderr in serve.
 	Logf func(format string, args ...any)
+	// Notify tells the person's phone what a run said while they were away:
+	// the channel's title and the text. Nil when nobody listens.
+	Notify func(thread, title, text string)
 
 	wake chan struct{}
 	// projPending: news in a project's channel that the project's own agent
@@ -354,6 +357,19 @@ func (s *Scheduler) poll(ctx context.Context, first bool) {
 		res := r.Run(ctx, t)
 		s.logf("agent: %s run on %s: %s %s", t.Kind, t.Thread, res.Outcome, res.Error)
 		s.consumeOwn(ctx, t.Thread)
+		if s.Notify != nil && (res.Outcome == "posted" || res.Outcome == "answered" || res.Outcome == "waiting") {
+			title := "Lamdis"
+			if tl, err := r.Store.Thread(ctx, t.Thread); err == nil {
+				if st := perm.Fold(t.Thread, tl.Entries()); st.Title != "" {
+					title = "# " + st.Title
+				}
+			}
+			text := res.Answer
+			if res.Outcome == "waiting" || text == "" {
+				text = "Your agent has a question for you."
+			}
+			s.Notify(t.Thread, title, text)
+		}
 		// Whoever asked is waiting, so send the answer rather than letting
 		// it sit until the next round.
 		if s.Sync != nil && res.Outcome != "nothing" {
