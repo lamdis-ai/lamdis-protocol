@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lamdis · Appeal a health insurance denial</title>
+<meta name="description" content="Add your denial letter. Lamdis finds your appeal deadline, explains the decision, and drafts an appeal checked against your own documents. Free.">
+<meta name="robots" content="noindex">
+<meta name="apple-itunes-app" content="app-id=6815970352">
+<link rel="icon" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f5f1;--card:#ffffff;--ink:#15181d;--ink2:#2b3038;--muted:#5a6270;--line:#e2dfd6;--soft:#efede6;
+  --accent:#1f4fd1;--accent-ink:#ffffff;--accent-soft:#e8eefc;
+  --ok:#1d7349;--ok-soft:#e5f3eb;--warn:#8a5a00;--warn-soft:#fff4d6;--bad:#b3261e;--bad-soft:#fdeceb;
+  --sans:'Figtree',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --display:'Bricolage Grotesque','Avenir Next',system-ui,sans-serif;
+  --serif:Georgia,'Times New Roman',serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111316;--card:#1a1d22;--ink:#eef0f3;--ink2:#d6dae1;--muted:#a3abb8;--line:#2c3038;--soft:#22262c;
+  --accent:#7aa2ff;--accent-ink:#0d1220;--accent-soft:#1d2740;
+  --ok:#5fc98f;--ok-soft:#173326;--warn:#f0c264;--warn-soft:#3a2f12;--bad:#ff8a80;--bad-soft:#3a1916;}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px 80px}
+header.top{display:flex;align-items:center;justify-content:space-between;padding:16px 0 8px}
+.brand{display:flex;align-items:center;gap:8px;font:700 19px/1 var(--display);color:var(--ink);text-decoration:none}
+.toplinks{display:flex;gap:14px;font-size:15px}
+.toplinks a,.toplinks button{color:var(--muted);text-decoration:none;background:none;border:0;padding:6px 0;cursor:pointer}
+h1{font:800 34px/1.12 var(--display);letter-spacing:-.01em;margin:18px 0 10px}
+h2{font:700 20px/1.25 var(--display);margin:0 0 10px}
+h3{font-size:17px;margin:0 0 6px}
+p{margin:0 0 12px}
+.lede{font-size:19px;color:var(--ink2);max-width:620px}
+.muted{color:var(--muted)}.small{font-size:15px}.tiny{font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0}
+.card.flat{background:transparent}
+.btn{appearance:none;border:0;border-radius:12px;padding:14px 20px;font-weight:650;font-size:17px;line-height:1.1;background:var(--accent);color:var(--accent-ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--line)}
+.btn.quiet{background:var(--soft);color:var(--ink)}
+.btn.small{padding:9px 14px;font-size:15px;min-height:40px;border-radius:10px}
+.btn.danger{background:transparent;color:var(--bad);border:1.5px solid var(--line)}
+.btn.wide{width:100%}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stack>*+*{margin-top:10px}
+.drop{border:2px dashed var(--line);border-radius:16px;padding:26px 18px;text-align:center;background:var(--card);transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop .big{font:700 20px/1.3 var(--display);margin:6px 0 4px}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:10px;margin:14px 0 0}
+.thumb{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--soft);aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted);text-align:center;padding:4px}
+.thumb img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.thumb button{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:14px;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:16px;line-height:28px;padding:0}
+.trust{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:22px 0}
+.trust div{font-size:15px;color:var(--ink2)}
+.trust b{display:block;color:var(--ink);font-size:16px;margin-bottom:2px}
+.list a.item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none}
+.list a.item:last-child{border-bottom:0}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:13px;font-weight:650;background:var(--soft);color:var(--ink2);white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.info{background:var(--accent-soft);color:var(--accent)}
+.deadline{display:flex;gap:16px;align-items:center}
+.deadline .num{font:800 44px/1 var(--display);min-width:84px;text-align:center}
+.deadline .num small{display:block;font:600 13px/1.2 var(--sans);color:var(--muted);margin-top:4px}
+.deadline.urgent{border-color:var(--bad);background:var(--bad-soft)}
+.deadline.urgent .num{color:var(--bad)}
+.deadline .date{font:700 20px/1.25 var(--display)}
+blockquote{margin:10px 0;padding:10px 14px;border-left:3px solid var(--line);background:var(--soft);border-radius:0 10px 10px 0;font-family:var(--serif);font-size:16px;color:var(--ink2)}
+blockquote cite{display:block;font:500 13px/1.4 var(--sans);color:var(--muted);font-style:normal;margin-top:6px}
+ul.clean{list-style:none;padding:0;margin:0}
+.steps li{display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
+.steps li:first-child{border-top:0;padding-top:4px}
+.check{flex:none;width:28px;height:28px;border-radius:8px;border:2px solid var(--line);background:var(--card);cursor:pointer;display:flex;align-items:center;justify-content:center;color:transparent;font-weight:800;padding:0}
+.check.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.steps .t{font-weight:650}
+.steps .d{color:var(--muted);font-size:15px;margin:4px 0 8px}
+.letter{font-family:var(--serif);font-size:17px;line-height:1.6;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px}
+.letter p{margin:0 0 14px}
+.letter .meta{white-space:pre-line;color:var(--ink2);margin-bottom:14px}
+.s{border-radius:4px;cursor:pointer;transition:background .15s}
+.s.verified{text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--ok) 55%,transparent);text-decoration-thickness:2px;text-underline-offset:4px}
+.s.verified:hover,.s.verified.open{background:var(--ok-soft)}
+.s.unsupported{background:var(--warn-soft);outline:1.5px dashed var(--warn);outline-offset:1px}
+.s.removed{text-decoration:line-through;color:var(--muted);opacity:.6}
+.s.confirmed{background:var(--accent-soft)}
+.pop{font-family:var(--sans);font-size:15px;line-height:1.45;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0 14px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+.pop .q{font-family:var(--serif);color:var(--ink2);margin:6px 0}
+.summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 14px}
+.qcard .opts{display:grid;gap:10px;margin-top:12px}
+.qcard .opt{text-align:left;padding:14px 16px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-size:17px}
+.qcard .opt:hover{border-color:var(--accent)}
+input[type=text],input[type=email],input[type=date],input[type=tel],select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);font-size:17px}
+textarea{min-height:110px;resize:vertical}
+label.lbl{display:block;font-weight:600;margin:10px 0 6px}
+.reading{text-align:center;padding:36px 10px}
+.reading ol{list-style:none;padding:0;margin:22px auto 0;max-width:340px;text-align:left}
+.reading li{padding:8px 0;color:var(--muted);display:flex;gap:10px;align-items:center}
+.reading li.on{color:var(--ink);font-weight:600}
+.reading li.done{color:var(--ok)}
+.dot{width:10px;height:10px;border-radius:5px;background:var(--line);flex:none}
+.on .dot{background:var(--accent);animation:pulse 1s infinite}
+.done .dot{background:var(--ok)}
+@keyframes pulse{50%{opacity:.35}}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:12px;padding:12px 14px;margin:12px 0}
+.note{background:var(--warn-soft);color:var(--warn);border-radius:12px;padding:12px 14px;margin:12px 0;font-size:15px}
+.docs li{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.docs li:first-child{border-top:0}
+.docs .ic{width:40px;height:52px;border-radius:6px;background:var(--soft);border:1px solid var(--line);flex:none;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted)}
+.docs .ic img{width:100%;height:100%;object-fit:cover}
+.timeline li{padding:8px 0;border-top:1px solid var(--line);font-size:15px}
+.timeline li:first-child{border-top:0}
+.timeline time{color:var(--muted);font-size:13px;display:block}
+.linkbox{display:flex;gap:8px;margin:10px 0}
+.linkbox input{font-size:14px}
+.back{display:inline-block;margin:6px 0 0;color:var(--muted);text-decoration:none;font-size:15px}
+.foot{margin-top:40px;font-size:13px;color:var(--muted)}
+.foot a{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20;padding:16px}
+.modal .sheet{background:var(--card);border-radius:18px;padding:22px;max-width:520px;width:100%;max-height:90vh;overflow:auto}
+@media (min-width:640px){.modal{align-items:center}h1{font-size:42px}}
+@media print{header.top,.noprint{display:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="brand" href="#" id="home" aria-label="Lamdis home">
+    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="3" y="11" width="7" height="7" rx="1.5" fill="currentColor" opacity=".8"/><rect x="11" y="11" width="7" height="7" rx="1.5" fill="currentColor" opacity=".6"/><rect x="3" y="19" width="15" height="2.5" rx="1.25" fill="currentColor" opacity=".5"/></svg>
+    Lamdis</a>
+  <nav class="toplinks"><a href="https://lamdis.ai/appeal/" target="_blank" rel="noopener">How appeals work</a><button id="signin" type="button">Sign in</button></nav>
+</header>
+<main id="view" aria-live="polite"></main>
+<footer class="foot">
+  <p>Lamdis drafts; you decide and send. It isn't a law firm or a doctor and doesn't give legal or medical advice. Free.</p>
+  <p><a href="https://lamdis.ai/consumer-health-data/">Consumer health data policy</a> · <a href="https://lamdis.ai/privacy/">Privacy</a> · <a href="https://lamdis.ai/terms/">Terms</a> · <a href="mailto:support@lamdis.ai">support@lamdis.ai</a></p>
+</footer>
+</div>
+<script>
+(function(){
+"use strict";
+var view=document.getElementById("view");
+var state={cases:null,caseId:null,c:null,pages:[],timer:null,openCite:null,email:null};
+
+// ---- auth ----
+function token(){try{return localStorage.getItem("lamdis.session")||localStorage.getItem("lamdis.guest")||""}catch(e){return ""}}
+function setToken(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function start(){
+  if(token())return Promise.resolve(token());
+  return fetch("/app/api/start",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
+    .then(function(r){return r.json()}).then(function(j){if(!j.token)throw new Error(j.error||"Could not start.");setToken("lamdis.guest",j.token);return j.token});
+}
+function api(path,opts){
+  opts=opts||{};
+  return start().then(function(tok){
+    var h={"Authorization":"Bearer "+tok};
+    if(opts.json!==undefined){h["Content-Type"]="application/json";opts.body=JSON.stringify(opts.json)}
+    return fetch("/app/api/"+path,{method:opts.method||(opts.body?"POST":"GET"),headers:h,body:opts.body});
+  }).then(function(r){
+    if(r.status===401){try{localStorage.removeItem("lamdis.guest");localStorage.removeItem("lamdis.session")}catch(e){}}
+    var ct=r.headers.get("Content-Type")||"";
+    if(ct.indexOf("json")<0)return r.text().then(function(t){if(!r.ok)throw new Error("Something went wrong.");return t});
+    return r.json().then(function(j){if(!r.ok||j.error)throw new Error(j.error||"Something went wrong.");return j});
+  });
+}
+
+// ---- helpers ----
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function el(html){var d=document.createElement("div");d.innerHTML=html;return d}
+function fmtDate(d){if(!d)return "";var p=d.split("-");var dt=new Date(+p[0],+p[1]-1,+p[2]);return dt.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"})}
+function shortDate(d){if(!d)return "";var p=d.split("-");var dt=new Date(+p[0],+p[1]-1,+p[2]);return dt.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}
+function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function go(hash){if(location.hash!==hash)location.hash=hash;else route()}
+function stopPoll(){if(state.timer){clearTimeout(state.timer);state.timer=null}}
+function errBox(msg){return '<div class="err" role="alert">'+esc(msg)+'</div>'}
+function oddsPill(l){return {strong:'<span class="pill ok">Worth appealing</span>',possible:'<span class="pill info">Could go either way</span>',long_shot:'<span class="pill warn">A long shot</span>',unclear:'<span class="pill">Not clear yet</span>'}[l]||""}
+function statusPill(c){
+  if(c.outcome==="won")return '<span class="pill ok">Won</span>';
+  if(c.outcome==="partial")return '<span class="pill ok">Partly won</span>';
+  if(c.outcome==="lost")return '<span class="pill bad">Turned down</span>';
+  var d=c.next_deadline;
+  if(c.status==="reading")return '<span class="pill">Reading…</span>';
+  if(c.status==="sent")return '<span class="pill info">Sent</span>';
+  if(d){var cls=d.days_left<=7?"bad":d.days_left<=21?"warn":"";return '<span class="pill '+cls+'">'+(d.days_left===0?"Due today":d.days_left+" days left")+'</span>'}
+  return "";
+}
+
+// ---- router ----
+function route(){
+  stopPoll();state.openCite=null;
+  var m=/case=(c_[0-9a-f]{18})/.exec(location.hash);
+  if(m){state.caseId=m[1];return loadCase(true)}
+  state.caseId=null;state.c=null;
+  if(location.hash==="#new"){return renderStart(false)}
+  view.innerHTML='<div class="reading"><p class="muted">Loading…</p></div>';
+  api("cases").then(function(j){state.cases=j.cases;renderStart(true)}).catch(function(e){state.cases=[];renderStart(true,e.message)});
+}
+window.addEventListener("hashchange",route);
+document.getElementById("home").onclick=function(e){e.preventDefault();go("#")};
+
+// ---- start ----
+function renderStart(showList,error){
+  var list="";
+  if(showList&&state.cases&&state.cases.length){
+    list='<section class="card"><h2>Your cases</h2><div class="list">'+state.cases.map(function(c){
+      return '<a class="item" href="#case='+c.id+'"><span><b>'+esc(c.title)+'</b><br><span class="muted small">'+(c.next_deadline?esc(c.next_deadline.label)+' · '+shortDate(c.next_deadline.date):"Updated "+new Date(c.updated).toLocaleDateString())+'</span></span>'+statusPill(c)+'</a>'}).join("")+'</div></section>';
+  }
+  var heading=(showList&&state.cases&&state.cases.length)?'<h2 style="margin-top:28px">Start a new case</h2>':
+    '<h1>Your insurance said no. Let’s appeal.</h1><p class="lede">Add the denial letter. Lamdis finds your deadline, explains the decision in plain words, and drafts an appeal in which every fact is checked against your own documents. Free.</p>';
+  view.innerHTML=(error?errBox(error):"")+list+heading+
+    '<div class="drop" id="drop"><div class="big">Add your denial letter</div><p class="muted small">Photos of each page, or the PDF. All pages, if there are several.</p>'+
+    '<div class="row" style="justify-content:center;margin-top:12px"><label class="btn" for="cam">Take photos</label><label class="btn ghost" for="pick">Choose files</label></div>'+
+    '<input class="sr" type="file" id="cam" accept="image/*" capture="environment" multiple><input class="sr" type="file" id="pick" accept="application/pdf,image/*" multiple>'+
+    '<div class="thumbs" id="thumbs"></div><div id="go" style="margin-top:16px"></div></div>'+
+    '<div class="trust"><div><b>Private</b>Your documents are used only for your case. Never sold, never used for ads.</div><div><b>Checked</b>Every fact in your letter is matched, word for word, to your documents.</div><div><b>Yours to delete</b>Delete a case, or everything, any time.</div></div>';
+  var drop=document.getElementById("drop");
+  ["cam","pick"].forEach(function(id){document.getElementById(id).onchange=function(e){addPages(e.target.files);e.target.value=""}});
+  drop.ondragover=function(e){e.preventDefault();drop.classList.add("over")};
+  drop.ondragleave=function(){drop.classList.remove("over")};
+  drop.ondrop=function(e){e.preventDefault();drop.classList.remove("over");addPages(e.dataTransfer.files)};
+  drawPages();
+}
+function addPages(files){
+  for(var i=0;i<files.length;i++){var f=files[i];if(state.pages.length>=20)break;state.pages.push({file:f,url:/^image\//.test(f.type)?URL.createObjectURL(f):null})}
+  drawPages();
+}
+function drawPages(){
+  var t=document.getElementById("thumbs"),g=document.getElementById("go");if(!t)return;
+  t.innerHTML=state.pages.map(function(p,i){return '<div class="thumb">'+(p.url?'<img alt="" src="'+p.url+'">':esc(p.file.name))+'<button type="button" aria-label="Remove page '+(i+1)+'" data-i="'+i+'">×</button></div>'}).join("");
+  Array.prototype.forEach.call(t.querySelectorAll("button"),function(b){b.onclick=function(){state.pages.splice(+b.dataset.i,1);drawPages()}});
+  g.innerHTML=state.pages.length?'<button class="btn wide" id="read">Read my letter ('+state.pages.length+' page'+(state.pages.length>1?"s":"")+')</button><p class="muted tiny" style="margin-top:8px">By continuing you agree to the <a href="https://lamdis.ai/terms/">terms</a> and the <a href="https://lamdis.ai/consumer-health-data/">health data policy</a>.</p>':"";
+  var b=document.getElementById("read");if(b)b.onclick=function(){uploadAll(state.pages.map(function(p){return p.file}),function(ids){
+    return api("cases",{json:{files:ids}}).then(function(c){state.pages=[];go("#case="+c.id)})})};
+}
+// shrink resizes a photo so uploads are quick on a phone connection.
+function shrink(file){
+  if(!/^image\/(jpeg|png|webp|heic|heif)/.test(file.type)||file.size<1.2e6)return Promise.resolve(file);
+  return new Promise(function(res){
+    var img=new Image(),url=URL.createObjectURL(file);
+    img.onload=function(){var s=Math.min(1,2200/Math.max(img.width,img.height));var c=document.createElement("canvas");c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);c.toBlob(function(b){URL.revokeObjectURL(url);res(b?new File([b],(file.name||"page").replace(/\.\w+$/,"")+".jpg",{type:"image/jpeg"}):file)},"image/jpeg",0.82)};
+    img.onerror=function(){res(file)};img.src=url;
+  });
+}
+function uploadAll(files,then){
+  var g=document.getElementById("go")||view;var ids=[],i=0;
+  function next(){
+    if(i>=files.length){g.innerHTML='<p class="muted">Starting…</p>';return then(ids).catch(function(e){g.innerHTML=errBox(e.message)})}
+    g.innerHTML='<p class="muted">Uploading page '+(i+1)+' of '+files.length+'…</p>';
+    return shrink(files[i]).then(function(f){return api("upload?name="+encodeURIComponent(f.name||("page-"+(i+1)+".jpg")),{method:"POST",body:f})})
+      .then(function(ref){ids.push(ref.id);i++;return next()})
+      .catch(function(e){g.innerHTML=errBox(e.message+" ")+'<button class="btn" id="retryup">Try again</button>';document.getElementById("retryup").onclick=next});
+  }
+  next();
+}
+
+// ---- case ----
+function loadCase(first){
+  return api("cases/"+state.caseId).then(function(c){
+    state.c=c;renderCase();
+    if(c.status==="reading"||c.letter.status==="drafting"){stopPoll();state.timer=setTimeout(function(){loadCase(false)},2000)}
+  }).catch(function(e){if(first)view.innerHTML=errBox(e.message)+'<a class="btn ghost" href="#">Back</a>'});
+}
+function post(path,body){
+  return api("cases/"+state.caseId+"/"+path,{json:body||{}}).then(function(c){if(c&&c.id){state.c=c;renderCase();if(c.status==="reading"||c.letter.status==="drafting"){stopPoll();state.timer=setTimeout(function(){loadCase(false)},2000)}}return c});
+}
+var readSteps=["Reading your letter","Finding your deadline","Checking your plan's rules","Weighing your odds"];
+function renderCase(){
+  var c=state.c;if(!c)return;
+  if(c.status==="reading"){
+    var n=Math.min(readSteps.length-1,Math.floor((Date.now()-new Date(c.updated).getTime())/9000));
+    view.innerHTML='<a class="back" href="#">← All cases</a><div class="card reading"><h2>Reading your pages</h2><p class="muted">This usually takes under a minute. You can leave this page; your case is saved.</p><ol>'+
+      readSteps.map(function(s,i){return '<li class="'+(i<n?"done":i===n?"on":"")+'"><span class="dot"></span>'+s+'</li>'}).join("")+'</ol></div>';
+    return;
+  }
+  if(c.status==="error"){
+    view.innerHTML='<a class="back" href="#">← All cases</a><h1>'+esc(c.title)+'</h1>'+errBox(c.error||"Something went wrong.")+'<div class="row"><button class="btn" id="retry">Try again</button><a class="btn ghost" href="#">Back</a></div>';
+    document.getElementById("retry").onclick=function(){post("retry")};
+    return;
+  }
+  var required=c.questions.filter(function(q){return !q.optional});
+  if(required.length){return renderQuestion(required[0],true)}
+  var h='<a class="back" href="#">← All cases</a>';
+  h+='<h1>'+esc(c.title)+'</h1><p class="muted">'+esc(c.plan.label)+(c.denial.label?' · '+esc(c.denial.label):"")+'</p>';
+  h+=outcomeBanner(c)+deadlineCard(c);
+  h+=whatHappened(c)+oddsCard(c)+stepsCard(c)+letterCard(c)+optionalQuestions(c)+docsCard(c)+remindCard()+historyCard(c);
+  h+='<div class="row noprint" style="margin-top:22px"><button class="btn danger small" id="del">Delete this case</button></div>';
+  view.innerHTML=h;
+  wireCase(c);
+}
+function outcomeBanner(c){
+  if(c.outcome.result==="won")return '<div class="card" style="border-color:var(--ok);background:var(--ok-soft)"><h2>You won this appeal.</h2><p>Keep the decision letter with your records. If a bill still arrives for this, call the plan and point to the decision.</p></div>';
+  if(c.outcome.result==="partial")return '<div class="card" style="border-color:var(--ok);background:var(--ok-soft)"><h2>You partly won.</h2><p>Check what was still denied. You can appeal the rest; the next step is below.</p></div>';
+  if(c.outcome.result==="lost")return '<div class="card"><h2>The plan said no again.</h2><p>That isn’t the end. The next level is decided by someone outside your insurance company. The steps are below.</p></div>';
+  return "";
+}
+function deadlineCard(c){
+  var d=c.next_deadline;
+  if(!d){
+    if(c.sent_date)return "";
+    return '<div class="card"><h2>Your deadline</h2><p class="muted">We couldn’t work out a date yet. Look for words like “you have 180 days” or “within 60 days” on the letter, and answer the questions below if there are any.</p></div>';
+  }
+  var urgent=d.days_left<=7&&d.kind!=="decision";
+  var also=c.deadlines.filter(function(x){return x!==d&&x.date!==d.date&&x.days_left>=0});
+  return '<div class="card deadline'+(urgent?" urgent":"")+'"><div class="num">'+d.days_left+'<small>day'+(d.days_left===1?"":"s")+' left</small></div><div><div class="muted small">'+esc(d.label)+'</div><div class="date">'+fmtDate(d.date)+'</div><div class="muted small">'+esc(d.basis)+
+    (d.source?' · <a href="'+esc(d.source.url)+'" target="_blank" rel="noopener">'+esc(d.source.title)+'</a>':"")+'</div>'+
+    also.map(function(x){return '<div class="small" style="margin-top:6px">'+esc(x.label)+': <b>'+shortDate(x.date)+'</b> <span class="muted">('+esc(x.basis)+')</span></div>'}).join("")+'</div></div>';
+}
+function whatHappened(c){
+  var r=c.facts.reason;
+  return '<section class="card"><h2>What happened</h2><p>'+esc(c.denial.plain||"")+'</p>'+
+    (r&&r.verified?'<blockquote>“'+esc(r.quote)+'”<cite>From your denial letter</cite></blockquote>':"")+
+    factsTable(c)+'</section>';
+}
+function factsTable(c){
+  var f=c.facts,rows=[["Insurer",f.insurer],["Member ID",f.member_id],["Claim or reference",f.claim_number],["What was denied",f.service],["Date on the letter",f.notice_date],["Send appeals to",f.appeal_address],["Appeals fax",f.appeal_fax],["Phone",f.appeal_phone]];
+  var out=rows.filter(function(r){return r[1]&&r[1].value}).map(function(r){return '<tr><th style="text-align:left;font-weight:500;color:var(--muted);padding:6px 12px 6px 0;vertical-align:top;width:40%">'+r[0]+'</th><td style="padding:6px 0">'+esc(r[1].value)+(r[1].verified?"":' <span class="pill warn" title="We couldn’t match this to the letter word for word">check</span>')+'</td></tr>'}).join("");
+  return out?'<details style="margin-top:10px"><summary style="cursor:pointer;color:var(--accent);font-weight:600">Details from your letter</summary><table style="width:100%;border-collapse:collapse;font-size:16px;margin-top:8px">'+out+'</table></details>':"";
+}
+function oddsCard(c){
+  var o=c.odds;if(!o||!o.headline)return "";
+  return '<section class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Your odds</h2>'+oddsPill(o.level)+'</div><p style="margin-top:10px">'+esc(o.headline)+'</p>'+
+    (o.reasons.length?'<ul>'+o.reasons.map(function(r){return '<li>'+esc(r.text)+(r.quote?'<blockquote>“'+esc(r.quote)+'”</blockquote>':"")+'</li>'}).join("")+'</ul>':"")+
+    (o.alternatives.length?'<h3 style="margin-top:12px">Other routes</h3><ul>'+o.alternatives.map(function(a){return '<li>'+esc(a)+'</li>'}).join("")+'</ul>':"")+
+    '<p class="muted tiny">An honest read of your documents, not a promise. Insurers reverse many denials when people appeal; almost nobody does.</p></section>';
+}
+function stepsCard(c){
+  return '<section class="card"><h2>What to do</h2><ul class="clean steps">'+c.steps.map(function(s){
+    var act="";
+    if(!s.done){
+      if(s.action==="invite_doctor")act=c.doctor.link?'<div class="linkbox"><input type="text" readonly value="'+esc(c.doctor.link)+'" aria-label="Link for your doctor’s office"><button class="btn small" data-act="copylink">Copy</button></div><button class="btn ghost small" data-act="share">Share link</button>':'<button class="btn small" data-act="invite">Make a link for my doctor</button>';
+      if(s.action==="draft_letter"&&c.letter.status!=="drafting")act='<button class="btn small" data-act="draft">'+(c.letter.status==="drafted"?"Redraft":"Draft my appeal")+'</button>';
+      if(s.action==="send")act='<div class="row"><input type="date" id="sentdate" value="'+today()+'" style="max-width:200px" aria-label="Date you sent it"><button class="btn small" data-act="sent">I sent it</button></div>';
+      if(s.action==="record_decision"&&c.sent_date)act='<div class="row"><button class="btn small" data-act="won">We won</button><button class="btn quiet small" data-act="partial">Partly</button><button class="btn quiet small" data-act="lost">They said no</button></div>';
+    }
+    return '<li><button class="check'+(s.done?" on":"")+'" data-step="'+esc(s.id)+'" aria-label="'+(s.done?"Mark not done: ":"Mark done: ")+esc(s.title)+'" aria-pressed="'+(s.done?"true":"false")+'">✓</button><div style="flex:1;min-width:0"><div class="t">'+esc(s.title)+'</div><div class="d">'+esc(s.detail)+'</div>'+act+'</div></li>'}).join("")+'</ul></section>';
+}
+function letterCard(c){
+  var l=c.letter;
+  if(l.status==="none")return "";
+  if(l.status==="drafting")return '<section class="card" id="letter"><h2>Your appeal</h2><div class="reading" style="padding:16px"><ol style="margin-top:0"><li class="on"><span class="dot"></span>Writing from your documents</li><li><span class="dot"></span>Checking every fact against them</li></ol><p class="muted small">About a minute.</p></div></section>';
+  if(l.status==="error")return '<section class="card" id="letter"><h2>Your appeal</h2>'+errBox(l.error||"We couldn’t draft it.")+'<button class="btn small" data-act="draft">Try again</button></section>';
+  var k=l.checked,flagged=l.sentences.filter(function(s){return s.status==="unsupported"}).length;
+  var h='<section class="card" id="letter"><h2>Your appeal</h2><div class="summary"><span class="pill ok">'+k.verified+' of '+k.facts+' facts checked against your documents</span>'+(flagged?'<span class="pill warn">'+flagged+' to review</span>':"")+'</div>';
+  if(flagged)h+='<div class="note">Highlighted sentences say something we couldn’t find in your documents. Keep them only if they’re true; they stay out of the printed letter until you do.</div>';
+  h+='<p class="muted small">Tap an underlined sentence to see where it comes from.</p><div class="letter">';
+  if(l.to)h+='<div class="meta">'+esc(l.to)+'</div>';
+  if(l.subject)h+='<p><b>Re: '+esc(l.subject)+'</b></p>';
+  var para=-1,open=false;
+  l.sentences.forEach(function(s){
+    if(s.para!==para){if(open)h+='</p>';h+='<p>';open=true;para=s.para}
+    h+='<span class="s '+s.status+(state.openCite===s.id?" open":"")+'" data-s="'+s.id+'" tabindex="0" role="button">'+esc(s.text)+'</span> ';
+    if(state.openCite===s.id){h+='</p>'+citePop(s)+'<p>';}
+  });
+  if(open)h+='</p>';
+  if(l.enclosures.length)h+='<p class="small">Enclosures: '+l.enclosures.map(esc).join("; ")+'</p>';
+  h+='</div><div class="row noprint" style="margin-top:14px"><button class="btn" data-act="print">Open printable letter</button><button class="btn ghost" data-act="copytext">Copy text</button><button class="btn ghost" data-act="draft">Redraft</button></div>'+
+    '<p class="muted tiny" style="margin-top:10px">Read it through before you send it. Sign it, add the enclosures, and keep a copy.</p></section>';
+  return h;
+}
+function citePop(s){
+  var h='<div class="pop" role="note">';
+  if(s.status==="unsupported"){
+    h+='<b>We couldn’t find this in your documents.</b>';
+    s.cites.forEach(function(ct){if(ct.quote)h+='<div class="q">It claimed: “'+esc(ct.quote)+'” '+(ct.title?'<span class="muted">('+esc(ct.title)+')</span>':"")+'</div>'});
+    h+='<div class="row" style="margin-top:8px"><button class="btn small" data-keep="'+s.id+'">It’s true, keep it</button><button class="btn ghost small" data-drop="'+s.id+'">Remove</button></div>';
+  }else if(s.status==="removed"){
+    h+='Removed. <button class="btn ghost small" data-keep="'+s.id+'">Put it back</button>';
+  }else if(s.status==="plain"){
+    h+='This sentence asks for something or is a courtesy; there’s nothing in it to check.';
+  }else if(s.status==="confirmed"){
+    h+='You confirmed this is true. <button class="btn ghost small" data-drop="'+s.id+'">Remove</button>';
+  }else{
+    s.cites.forEach(function(ct){h+='<div><span class="pill ok">Found</span> <b>'+esc(ct.title)+'</b>'+(ct.url?' · <a href="'+esc(ct.url)+'" target="_blank" rel="noopener">read the rule</a>':"")+'<div class="q">“'+esc(ct.quote)+'”</div></div>'});
+    h+='<button class="btn ghost small" data-drop="'+s.id+'">Remove this sentence</button>';
+  }
+  return h+'</div>';
+}
+function optionalQuestions(c){
+  var qs=c.questions.filter(function(q){return q.optional});
+  if(!qs.length||c.sent_date)return "";
+  return qs.map(function(q){return '<section class="card qcard noprint"><h2>'+esc(q.text)+'</h2><p class="muted small">'+esc(q.why||"")+'</p>'+questionInput(q)+'</section>'}).join("");
+}
+function questionInput(q){
+  if(q.kind==="choice")return '<div class="opts">'+q.options.map(function(o){return '<button class="opt" data-q="'+esc(q.id)+'" data-v="'+esc(o.value)+'">'+esc(o.label)+'</button>'}).join("")+'</div>';
+  if(q.kind==="date")return '<input type="date" id="q-'+esc(q.id)+'" max="'+today()+'"><div class="row" style="margin-top:12px"><button class="btn" data-qsave="'+esc(q.id)+'">Save</button></div>';
+  return '<textarea id="q-'+esc(q.id)+'" maxlength="2000" placeholder="For example: my doctor prescribed it after metformin didn’t lower my A1c, and I’ve been on it for six months."></textarea><div class="row" style="margin-top:12px"><button class="btn" data-qsave="'+esc(q.id)+'">Save</button></div>';
+}
+function renderQuestion(q){
+  view.innerHTML='<a class="back" href="#">← All cases</a><h1>'+esc(state.c.title)+'</h1><section class="card qcard"><p class="muted small">One question before we can work out your deadline</p><h2>'+esc(q.text)+'</h2><p class="muted">'+esc(q.why||"")+'</p>'+questionInput(q)+'</section>';
+  wireQuestions();
+}
+function wireQuestions(){
+  Array.prototype.forEach.call(view.querySelectorAll("[data-q]"),function(b){b.onclick=function(){answer(b.dataset.q,b.dataset.v,b)}});
+  Array.prototype.forEach.call(view.querySelectorAll("[data-qsave]"),function(b){b.onclick=function(){var v=document.getElementById("q-"+b.dataset.qsave).value;if(!v.trim())return;answer(b.dataset.qsave,v,b)}});
+}
+function answer(id,v,btn){var a={};a[id]=v;if(btn)btn.disabled=true;post("answers",{answers:a}).catch(function(e){alertIn(e.message);if(btn)btn.disabled=false})}
+function alertIn(msg){var d=el(errBox(msg)).firstChild;view.insertBefore(d,view.firstChild);window.scrollTo(0,0)}
+function docsCard(c){
+  var kinds=[["denial","Denial letter"],["insurer_reply","Letter from the insurer"],["doctor_letter","Doctor’s letter"],["records","Medical records"],["policy","Plan document"],["other","Other"]];
+  return '<section class="card"><h2>Documents</h2><ul class="clean docs">'+c.docs.map(function(d){
+    return '<li><a class="ic" href="'+esc(d.url)+'" target="_blank" rel="noopener">'+(/^image\//.test(d.type)?'<img alt="" src="'+esc(d.url)+'">':"PDF")+'</a><div style="flex:1;min-width:0"><div><b>'+esc(kindLabel(d.kind))+'</b>'+(d.added_by==="doctor"?' <span class="pill info">from your doctor</span>':"")+'</div><div class="muted small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(d.name)+'</div></div>'+(d.read?"":'<span class="pill">Reading</span>')+'</li>'}).join("")+'</ul>'+
+    '<div class="noprint" style="margin-top:12px"><label class="lbl" for="kind">Add more</label><div class="row"><select id="kind" style="max-width:260px">'+kinds.map(function(k){return '<option value="'+k[0]+'">'+k[1]+'</option>'}).join("")+'</select><label class="btn ghost small" for="more">Choose files</label><input class="sr" id="more" type="file" accept="application/pdf,image/*" multiple></div><p class="muted tiny" style="margin-top:6px">A doctor’s letter, records, or the plan’s own coverage document make the appeal stronger. Redraft after adding them.</p><div id="go"></div></div></section>';
+}
+function kindLabel(k){return {denial:"Denial letter",insurer_reply:"Letter from the insurer",doctor_letter:"Doctor’s letter",records:"Medical records",policy:"Plan document"}[k]||"Document"}
+function remindCard(){
+  if(state.email&&state.email.confirmed)return '<section class="card flat noprint"><p class="small muted">Reminders go to <b>'+esc(state.email.email)+'</b> two weeks, one week and two days before your deadline.</p></section>';
+  if(state.email&&!state.email.can_send)return "";
+  return '<section class="card noprint" id="remind"><h2>Get a reminder before your deadline</h2><p class="muted small">We’ll email you two weeks, one week and two days before. Your email also lets you open your case on another device.</p><div class="row"><input type="email" id="em" placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:200px"><button class="btn" data-act="email">Send code</button></div><div id="emstep"></div></section>';
+}
+function historyCard(c){
+  if(!c.timeline.length)return "";
+  return '<section class="card"><h2>History</h2><ul class="clean timeline">'+c.timeline.slice().reverse().map(function(t){return '<li><time>'+new Date(t.at).toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})+'</time>'+esc(t.text)+'</li>'}).join("")+'</ul></section>';
+}
+function wireCase(c){
+  wireQuestions();
+  Array.prototype.forEach.call(view.querySelectorAll("[data-step]"),function(b){b.onclick=function(){post("step",{step:b.dataset.step,done:!b.classList.contains("on")})}});
+  Array.prototype.forEach.call(view.querySelectorAll("[data-s]"),function(s){var f=function(){state.openCite=state.openCite===s.dataset.s?null:s.dataset.s;renderCase()};s.onclick=f;s.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();f()}}});
+  Array.prototype.forEach.call(view.querySelectorAll("[data-keep]"),function(b){b.onclick=function(e){e.stopPropagation();post("letter/sentence",{sentence:b.dataset.keep,keep:true})}});
+  Array.prototype.forEach.call(view.querySelectorAll("[data-drop]"),function(b){b.onclick=function(e){e.stopPropagation();post("letter/sentence",{sentence:b.dataset.drop,keep:false})}});
+  Array.prototype.forEach.call(view.querySelectorAll("[data-act]"),function(b){b.onclick=function(){act(b.dataset.act,b)}});
+  var more=document.getElementById("more");
+  if(more)more.onchange=function(e){var kind=document.getElementById("kind").value;var files=Array.prototype.slice.call(e.target.files);if(!files.length)return;
+    uploadAll(files,function(ids){return post("docs",{files:ids,kind:kind})})};
+  document.getElementById("del").onclick=function(){
+    var b=this;if(b.dataset.sure){api("cases/"+c.id+"/delete",{json:{}}).then(function(){go("#")}).catch(function(e){alertIn(e.message)});return}
+    b.dataset.sure="1";b.textContent="Tap again to delete for good";setTimeout(function(){if(b.isConnected){b.dataset.sure="";b.textContent="Delete this case"}},5000);
+  };
+}
+function act(a,b){
+  var c=state.c;
+  if(a==="invite"){b.disabled=true;api("cases/"+c.id+"/invite",{json:{}}).then(function(){return loadCase(false)}).catch(function(e){alertIn(e.message)});return}
+  if(a==="copylink"){navigator.clipboard.writeText(c.doctor.link).then(function(){b.textContent="Copied"});return}
+  if(a==="share"){var msg="Hi, my insurance denied "+(c.facts.service?c.facts.service.value:"my treatment")+". I'm appealing. Could you add a letter of medical necessity here? There's a draft to edit and sign: ";
+    if(navigator.share)navigator.share({title:"Letter for my insurance appeal",text:msg,url:c.doctor.link}).catch(function(){});else navigator.clipboard.writeText(msg+c.doctor.link).then(function(){b.textContent="Message copied"});return}
+  if(a==="draft"){b.disabled=true;post("letter",{}).then(function(){var l=document.getElementById("letter");if(l)l.scrollIntoView({behavior:"smooth"})}).catch(function(e){alertIn(e.message);b.disabled=false});return}
+  if(a==="sent"){var d=document.getElementById("sentdate").value||today();post("event",{kind:"sent",date:d}).catch(function(e){alertIn(e.message)});return}
+  if(a==="won"||a==="partial"||a==="lost"){post("event",{kind:"decision",outcome:a,date:today()}).catch(function(e){alertIn(e.message)});return}
+  if(a==="print"){var w=window.open("","_blank");api("cases/"+c.id+"/letter.html").then(function(html){if(w){w.document.open();w.document.write(html);w.document.close()}else{var blob=new Blob([html],{type:"text/html"});location.href=URL.createObjectURL(blob)}}).catch(function(e){if(w)w.close();alertIn(e.message)});return}
+  if(a==="copytext"){var t=[],p=-1,line="";c.letter.sentences.forEach(function(s){if(s.status==="unsupported"||s.status==="removed")return;if(s.para!==p){if(line)t.push(line);line="";p=s.para}line+=(line?" ":"")+s.text});if(line)t.push(line);
+    var head=(c.letter.to?c.letter.to+"\n\n":"")+(c.letter.subject?"Re: "+c.letter.subject+"\n\n":"");navigator.clipboard.writeText(head+t.join("\n\n")).then(function(){b.textContent="Copied"});return}
+  if(a==="email"){var em=document.getElementById("em").value.trim();if(!em)return;b.disabled=true;
+    api("signin/email",{json:{email:em}}).then(function(j){
+      var step=document.getElementById("emstep");
+      if(j.already){state.email={email:em,confirmed:true};renderCase();return}
+      step.innerHTML='<p class="small" style="margin-top:10px">We sent a 6-digit code to <b>'+esc(j.sent_to)+'</b>.</p><div class="row"><input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="max-width:160px" placeholder="123456"><button class="btn" id="codego">Confirm</button></div>';
+      document.getElementById("codego").onclick=function(){var code=document.getElementById("code").value.trim();
+        var p=j.existing?api("signin/email/confirm",{json:{email:em,code:code}}).then(function(r){if(r.token){setToken("lamdis.session",r.token)}location.reload()}):
+          api("email/confirm",{json:{code:code}}).then(function(){state.email={email:em,confirmed:true};renderCase()});
+        p.catch(function(e){step.insertAdjacentHTML("beforeend",errBox(e.message))});
+      };
+    }).catch(function(e){b.disabled=false;alertIn(e.message)});return}
+}
+
+// ---- sign in from another device ----
+document.getElementById("signin").onclick=function(){
+  var m=el('<div class="modal" role="dialog" aria-modal="true" aria-label="Sign in"><div class="sheet"><h2>Open your cases on this device</h2><p class="muted small">Enter the email you confirmed for reminders. We’ll send a code.</p><input type="email" id="sem" placeholder="you@example.com" autocomplete="email"><div id="sstep" style="margin-top:12px"><div class="row"><button class="btn" id="sgo">Send code</button><button class="btn ghost" id="sx">Cancel</button></div></div></div></div>').firstChild;
+  document.body.appendChild(m);
+  var close=function(){m.remove()};m.onclick=function(e){if(e.target===m)close()};document.getElementById("sx").onclick=close;
+  document.getElementById("sgo").onclick=function(){var em=document.getElementById("sem").value.trim();if(!em)return;
+    api("signin/email",{json:{email:em}}).then(function(j){var s=document.getElementById("sstep");
+      if(j.already){close();return}
+      if(!j.existing){s.innerHTML='<p class="small">That email isn’t on a case yet. Start a case on this device, then add your email for reminders.</p><button class="btn ghost" id="sx2">Close</button>';document.getElementById("sx2").onclick=close;return}
+      s.innerHTML='<p class="small">Code sent to <b>'+esc(j.sent_to)+'</b>.</p><div class="row"><input type="text" id="scode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="max-width:160px"><button class="btn" id="sok">Sign in</button></div>';
+      document.getElementById("sok").onclick=function(){api("signin/email/confirm",{json:{email:em,code:document.getElementById("scode").value.trim()}}).then(function(r){if(r.token){setToken("lamdis.session",r.token)}location.hash="";location.reload()}).catch(function(e){s.insertAdjacentHTML("beforeend",errBox(e.message))})};
+    }).catch(function(e){document.getElementById("sstep").insertAdjacentHTML("afterbegin",errBox(e.message))});
+  };
+};
+
+api("email").then(function(j){state.email=j}).catch(function(){});
+route();
+})();
+</script>
+</body>
+</html>

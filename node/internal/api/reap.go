@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lamdis-ai/lamdis-protocol/node/internal/agent"
+	"github.com/lamdis-ai/lamdis-protocol/node/internal/cases"
 	protolog "github.com/lamdis-ai/lamdis-protocol/node/internal/log"
 )
 
@@ -41,6 +42,9 @@ func (h *Host) abandoned(id string, now time.Time) (bool, string) {
 		if st, err := os.Stat(filepath.Join(dir, f)); err == nil && st.Size() > 2 {
 			return false, "it was set up"
 		}
+	}
+	if cases.Has(dir) {
+		return false, "it holds an appeal"
 	}
 	if cfg, err := agent.LoadConfig(dir); err == nil {
 		if len(cfg.Tools) > 0 || cfg.OpenRouterKey != "" || cfg.ModelURL != "" ||

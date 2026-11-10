@@ -86,6 +86,11 @@ type Host struct {
 	Guests bool
 	// Try, when set, serves the public demo alongside the accounts.
 	Try *Try
+	// CaseModel and CaseKey read denial letters and draft appeals; the key
+	// falls back to SharedKey. CasePool is their own daily ceiling.
+	CaseModel string
+	CaseKey   string
+	CasePool  *agent.Pool
 
 	Now  func() time.Time
 	Logf func(format string, args ...any)
@@ -188,6 +193,7 @@ func (h *Host) Start(ctx context.Context) error {
 	}
 	h.logf("host: %d accounts running", n)
 	go h.Tidy(ctx)
+	go h.Remind(ctx)
 	return nil
 }
 
@@ -319,6 +325,7 @@ func (h *Host) load(id, email string) (*Account, error) {
 
 	mux := http.NewServeMux()
 	app.Register(mux)
+	h.registerCases(acct, mux)
 	acct.mux = mux
 
 	h.mu.Lock()
@@ -539,8 +546,17 @@ func (h *Host) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(hostedAppHTML(h.SignIn)))
 	}
-	mux.HandleFunc("GET /app", page)
-	mux.HandleFunc("GET /app/{$}", page)
+	// The appeals app is the product; the old workspace stays reachable for
+	// the few people who have threads in it.
+	appeals := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Referrer-Policy", "same-origin")
+		w.Write([]byte(appealsHTML))
+	}
+	mux.HandleFunc("GET /app", appeals)
+	mux.HandleFunc("GET /app/{$}", appeals)
+	mux.HandleFunc("GET /app/workspace", page)
 	// Starting is public: that is the whole point of it.
 	mux.HandleFunc("POST /app/api/start", h.handleStart)
 	// Redeeming a link code is public too: a machine has a keypair and a
@@ -595,6 +611,9 @@ func (h *Host) Handler() http.Handler {
 		}
 		acct.mux.ServeHTTP(w, r)
 	})
+
+	// A doctor's office adds its letter through a link the patient sends.
+	h.registerDoctor(mux)
 
 	// Share links carry the account in the path, because one address now
 	// serves many nodes and a capability names a thread, not a person.

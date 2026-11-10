@@ -85,6 +85,11 @@ type OpenRouter struct {
 	// host that is not OpenRouter.
 	KeyIsForBaseURL bool
 	HTTP            *http.Client
+	// ZDR restricts OpenRouter to endpoints with zero data retention, for
+	// work that carries somebody's health or money records.
+	ZDR bool
+	// MaxTokens caps the completion; 0 leaves it to the provider.
+	MaxTokens int
 }
 
 const openRouterURL = "https://openrouter.ai/api/v1"
@@ -235,7 +240,14 @@ func (o *OpenRouter) stream(ctx context.Context, msgs []Message, tools []ToolSpe
 	defer idle.Stop()
 	req := map[string]any{"model": o.Model, "messages": msgs, "temperature": 0.2, "stream": true}
 	if o.isOpenRouter() {
-		req["provider"] = map[string]any{"data_collection": "deny"}
+		prov := map[string]any{"data_collection": "deny"}
+		if o.ZDR {
+			prov["zdr"] = true
+		}
+		req["provider"] = prov
+	}
+	if o.MaxTokens > 0 {
+		req["max_tokens"] = o.MaxTokens
 	}
 	if len(tools) > 0 {
 		var ts []map[string]any
@@ -416,7 +428,14 @@ func (o *OpenRouter) complete(ctx context.Context, msgs []Message, tools []ToolS
 	req := map[string]any{"model": o.Model, "messages": msgs, "temperature": 0.2}
 	if o.isOpenRouter() {
 		// Only providers that neither store prompts nor train on them.
-		req["provider"] = map[string]any{"data_collection": "deny"}
+		prov := map[string]any{"data_collection": "deny"}
+		if o.ZDR {
+			prov["zdr"] = true
+		}
+		req["provider"] = prov
+	}
+	if o.MaxTokens > 0 {
+		req["max_tokens"] = o.MaxTokens
 	}
 	if len(tools) > 0 {
 		var ts []map[string]any

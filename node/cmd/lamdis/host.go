@@ -25,7 +25,7 @@ func cmdHost(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("host", flag.ContinueOnError)
 	addr := fs.String("addr", envOr("LAMDIS_ADDR", ":8080"), "listen address")
 	root := fs.String("root", envOr("LAMDIS_ACCOUNTS", "/data/accounts"), "directory holding one folder per account")
-	maxAccounts := fs.Int("max-accounts", envInt("LAMDIS_MAX_ACCOUNTS", 25), "refuse new sign-ups past this many accounts")
+	maxAccounts := fs.Int("max-accounts", envInt("LAMDIS_MAX_ACCOUNTS", 3000), "refuse new sign-ups past this many accounts")
 	starterCap := fs.Float64("starter", envFloat("LAMDIS_STARTER_CAP", 0.5), "credit to give each new account, in dollars; 0 for none")
 	guests := fs.Bool("guests", os.Getenv("LAMDIS_NO_GUESTS") == "", "let people start without signing up")
 	if err := fs.Parse(args); err != nil {
@@ -78,6 +78,9 @@ func cmdHost(ctx context.Context, args []string) error {
 		StartsPerHour:      envInt("LAMDIS_STARTS_PER_HOUR", 5),
 		StartsPerDay:       envInt("LAMDIS_STARTS_PER_DAY", 15),
 		SharedKey:          strings.TrimSpace(os.Getenv("LAMDIS_HOST_MODEL_KEY")),
+		CaseModel:          envOr("LAMDIS_CASE_MODEL", api.DefaultCaseModel),
+		CaseKey:            strings.TrimSpace(os.Getenv("LAMDIS_CASE_MODEL_KEY")),
+		CasePool:           &agent.Pool{Tokens: envInt("LAMDIS_CASE_TOKENS", 8_000_000)},
 		StarterCap:         *starterCap,
 		KeyCeiling:         ceiling(),
 		Logf:               func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
@@ -106,6 +109,7 @@ func cmdHost(ctx context.Context, args []string) error {
 	fmt.Printf("host       http://%s/app\n", shown)
 	fmt.Printf("accounts   %s · %d now · limit %d\n", *root, h.Count(), *maxAccounts)
 	fmt.Printf("model      %s\n", model)
+	fmt.Printf("appeals    %s, %d tokens a day across everyone, zero-retention providers only\n", h.CaseModel, h.CasePool.Tokens)
 	switch {
 	case h.Starter != nil:
 		fmt.Printf("starter    $%.2f each, stopping at a $%.2f ceiling\n", *starterCap, ceiling())

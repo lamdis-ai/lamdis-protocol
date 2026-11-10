@@ -1,0 +1,1864 @@
+{
+ "version": "2026-11-10",
+ "rules": [
+  {
+   "id": "aca_internal_appeal_180d",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "appeal",
+   "label": "Ask your plan to reconsider (internal appeal)",
+   "days": 180,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "any",
+   "service": "any",
+   "basis": "180 days from the day you receive the denial notice",
+   "cite": "29 CFR 2560.503-1(h)(3)(i)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(h)(3)(i)",
+   "quote": "Provide claimants at least 180 days following receipt of a notification of an adverse benefit determination within which to appeal the determination;",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i). 180 days is a floor: the plan may allow longer, never shorter. Counts from RECEIPT of the notice. Grandfathered private-employer plans are still bound by this ERISA rule; grandfathered government plans and grandfathered individual policies are not covered by 147.136, so check the plan documents and state law. Individual-market insurers must offer only one level of internal appeal (45 CFR 147.136(b)(3)(ii)(G))."
+  },
+  {
+   "id": "aca_appeal_decision_urgent_72h",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide an urgent appeal",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after the plan receives your urgent appeal",
+   "cite": "29 CFR 2560.503-1(i)(2)(i)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(i)(2)(i)",
+   "quote": "In the case of a claim involving urgent care, the plan administrator shall notify the claimant, in accordance with paragraph (j) of this section, of the plan's benefit determination on review as soon as possible, taking into account the medical exigencies, but not later than 72 hours after receipt of the claimant's request for review of an adverse benefit determination by the plan.",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i). 'Urgent care' = waiting the normal time could seriously jeopardize life, health or ability to regain maximum function, or would cause severe unmanageable pain in a treating physician's opinion (29 CFR 2560.503-1(m)(1)). For ACA-covered plans the attending provider decides whether a claim is urgent (45 CFR 147.136(b)(2)(ii)(B))."
+  },
+  {
+   "id": "aca_appeal_decision_preservice_30d",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide your appeal (treatment not yet received)",
+   "days": 30,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "preservice",
+   "basis": "30 days after the plan receives your appeal",
+   "cite": "29 CFR 2560.503-1(i)(2)(ii)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(i)(2)(ii)",
+   "quote": "In the case of a group health plan that provides for one appeal of an adverse benefit determination, such notification shall be provided not later than 30 days after receipt by the plan of the claimant's request for review of an adverse benefit determination.",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i). If the plan has two internal appeal levels, each level must be decided within 15 days. Clock starts when the appeal is filed, even if information is missing (2560.503-1(i)(4))."
+  },
+  {
+   "id": "aca_appeal_decision_postservice_60d",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide your appeal (care already received / bill)",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "postservice",
+   "basis": "60 days after the plan receives your appeal",
+   "cite": "29 CFR 2560.503-1(i)(2)(iii)(A)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(i)(2)(iii)(A)",
+   "quote": "In the case of a group health plan that provides for one appeal of an adverse benefit determination, such notification shall be provided not later than 60 days after receipt by the plan of the claimant's request for review of an adverse benefit determination.",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i). If the plan has two internal appeal levels, each level must be decided within 30 days. Multiemployer plans whose board meets quarterly may instead decide at the next qualifying board meeting (2560.503-1(i)(2)(iii)(B))."
+  },
+  {
+   "id": "aca_free_claim_file",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Get free copies of your claim file",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "You can ask for every document used in your claim, free of charge",
+   "cite": "29 CFR 2560.503-1(h)(2)(iii)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(h)(2)(iii)",
+   "quote": "Provide that a claimant shall be provided, upon request and free of charge, reasonable access to, and copies of, all documents, records, and other information relevant to the claimant's claim for benefits. Whether a document, record, or other information is relevant to a claim for benefits shall be determined by reference to paragraph (m)(8) of this section;",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i). 'Relevant' is defined broadly in 2560.503-1(m)(8): includes anything submitted, considered or generated, even if not relied on."
+  },
+  {
+   "id": "aca_relevant_documents_definition",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "What counts as a 'relevant' document you can get",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Relevant documents include anything the plan relied on, considered or generated, plus its policy on your treatment",
+   "cite": "29 CFR 2560.503-1(m)(8)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(m)(8)",
+   "quote": "A document, record, or other information shall be considered “relevant” to a claimant's claim if such document, record, or other information (i) Was relied upon in making the benefit determination; (ii) Was submitted, considered, or generated in the course of making the benefit determination, without regard to whether such document, record, or other information was relied upon in making the benefit determination; (iii) Demonstrates compliance with the administrative processes and safeguards required pursuant to paragraph (b)(5) of this section in making the benefit determination; or (iv) In the case of a group health plan or a plan providing disability benefits, constitutes a statement of policy or guidance with respect to the plan concerning the denied treatment option or benefit for the claimant's diagnosis, without regard to whether such advice or statement was relied upon in making the benefit determination.",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i)."
+  },
+  {
+   "id": "aca_denial_specific_reasons",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Plan must tell you the specific reason for the denial",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The denial notice must state the specific reasons and the plan provisions it relied on",
+   "cite": "29 CFR 2560.503-1(g)(1)(i)-(ii)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(g)(1)",
+   "quote": "The notification shall set forth, in a manner calculated to be understood by the claimant— (i) The specific reason or reasons for the adverse determination; (ii) Reference to the specific plan provisions on which the determination is based;",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i). Same content is required in the appeal decision (2560.503-1(j)(1)-(2)). ACA plans must also give the denial code and its meaning and the plan's standard used (45 CFR 147.136(b)(2)(ii)(E)(3))."
+  },
+  {
+   "id": "aca_criteria_relied_on",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Get the internal rule or guideline used to deny you",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "If the plan used an internal rule, guideline or protocol, it must give it to you or offer it free",
+   "cite": "29 CFR 2560.503-1(g)(1)(v)(A)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(g)(1)(v)(A)",
+   "quote": "If an internal rule, guideline, protocol, or other similar criterion was relied upon in making the adverse determination, either the specific rule, guideline, protocol, or other similar criterion; or a statement that such a rule, guideline, protocol, or other similar criterion was relied upon in making the adverse determination and that a copy of such rule, guideline, protocol, or other criterion will be provided free of charge to the claimant upon request; or",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i)."
+  },
+  {
+   "id": "aca_clinical_judgment_explanation",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Get the medical reasoning behind a 'not medically necessary' denial",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "For medical-necessity or experimental denials, the plan must explain its clinical judgment applied to your case, free on request",
+   "cite": "29 CFR 2560.503-1(g)(1)(v)(B)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(g)(1)(v)(B)",
+   "quote": "If the adverse benefit determination is based on a medical necessity or experimental treatment or similar exclusion or limit, either an explanation of the scientific or clinical judgment for the determination, applying the terms of the plan to the claimant's medical circumstances, or a statement that such explanation will be provided free of charge upon request.",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i)."
+  },
+  {
+   "id": "aca_expedited_appeal_oral",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "You can request an urgent appeal by phone",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "any",
+   "basis": "Urgent appeals can be made orally or in writing; the plan must use phone, fax or similar fast methods",
+   "cite": "29 CFR 2560.503-1(h)(3)(vi)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(h)(3)(vi)",
+   "quote": "Provide, in the case of a claim involving urgent care, for an expedited review process pursuant to which— (A) A request for an expedited appeal of an adverse benefit determination may be submitted orally or in writing by the claimant; and (B) All necessary information, including the plan's benefit determination on review, shall be transmitted between the plan and the claimant by telephone, facsimile, or other available similarly expeditious method.",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i)."
+  },
+  {
+   "id": "aca_fresh_independent_review",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Your appeal must be a fresh review by someone new",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The appeal reviewer may not defer to the first denial and cannot be the person (or their subordinate) who denied you",
+   "cite": "29 CFR 2560.503-1(h)(3)(ii)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1#p-2560.503-1(h)(3)(ii)",
+   "quote": "Provide for a review that does not afford deference to the initial adverse benefit determination and that is conducted by an appropriate named fiduciary of the plan who is neither the individual who made the adverse benefit determination that is the subject of the appeal, nor the subordinate of such individual;",
+   "notes": "Applies directly to private-employer (ERISA) group health plans; applies to nonfederal governmental plans and to individual/marketplace insurers through 45 CFR 147.136(b)(2)(i) and (b)(3)(i). For medical-judgment denials the reviewer must consult an appropriately trained health care professional who was not consulted on the first denial (2560.503-1(h)(3)(iii), (v))."
+  },
+  {
+   "id": "erisa_present_evidence_testimony",
+   "plans": [
+    "employer"
+   ],
+   "kind": "right",
+   "label": "Present evidence and testimony; review your claim file",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "You may review the claim file and present evidence and testimony in your appeal",
+   "cite": "29 CFR 2590.715-2719(b)(2)(ii)(C)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(b)(2)(ii)(C)",
+   "quote": "A plan and issuer must allow a claimant to review the claim file and to present evidence and testimony as part of the internal claims and appeals process.",
+   "notes": "Private-employer (ERISA) group health plans (DOL rule). Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719. Any new evidence or new rationale must be sent to you free and in time to respond before the final decision ((C)(1)-(2))."
+  },
+  {
+   "id": "erisa_urgent_defined_by_provider",
+   "plans": [
+    "employer"
+   ],
+   "kind": "right",
+   "label": "Your doctor decides whether your appeal is urgent",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "any",
+   "basis": "If your treating provider says the claim is urgent, the plan must treat it as urgent",
+   "cite": "29 CFR 2590.715-2719(b)(2)(ii)(B)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(b)(2)(ii)(B)",
+   "quote": "a claim involving urgent care has the meaning given in 29 CFR 2560.503-1(m)(1), as determined by the attending provider, and the plan or issuer shall defer to such determination of the attending provider.",
+   "notes": "Private-employer (ERISA) group health plans (DOL rule). Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719."
+  },
+  {
+   "id": "erisa_deemed_exhaustion",
+   "plans": [
+    "employer"
+   ],
+   "kind": "right",
+   "label": "If the plan breaks the appeal rules, you can skip ahead",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "If the plan does not follow the claims-and-appeals rules, you may go straight to external review (or court)",
+   "cite": "29 CFR 2590.715-2719(b)(2)(ii)(F)(1)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(b)(2)(ii)(F)(1)",
+   "quote": "In the case of a plan or issuer that fails to strictly adhere to all the requirements of this paragraph (b)(2) with respect to a claim, the claimant is deemed to have exhausted the internal claims and appeals process of this paragraph (b), except as provided in paragraph (b)(2)(ii)(F)(2) of this section. Accordingly the claimant may initiate an external review under paragraph (c) or (d) of this section, as applicable.",
+   "notes": "Private-employer (ERISA) group health plans (DOL rule). Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719. Minor (de minimis) violations that cause no harm do not count ((F)(2)); you can ask the plan to explain a violation within 10 days."
+  },
+  {
+   "id": "aca_group_present_evidence_testimony",
+   "plans": [
+    "government_employer"
+   ],
+   "kind": "right",
+   "label": "Present evidence and testimony; review your claim file",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "You may review the claim file and present evidence and testimony in your appeal",
+   "cite": "45 CFR 147.136(b)(2)(ii)(C)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(2)(ii)(C)",
+   "quote": "A plan and issuer must allow a claimant to review the claim file and to present evidence and testimony as part of the internal claims and appeals process.",
+   "notes": "Nonfederal governmental (state/local government) group health plans and group insurers. Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719. Any new evidence or new rationale must be sent to you free and in time to respond before the final decision ((C)(1)-(2))."
+  },
+  {
+   "id": "aca_group_urgent_defined_by_provider",
+   "plans": [
+    "government_employer"
+   ],
+   "kind": "right",
+   "label": "Your doctor decides whether your appeal is urgent",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "any",
+   "basis": "If your treating provider says the claim is urgent, the plan must treat it as urgent",
+   "cite": "45 CFR 147.136(b)(2)(ii)(B)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(2)(ii)(B)",
+   "quote": "a claim involving urgent care has the meaning given in 29 CFR 2560.503-1(m)(1), as determined by the attending provider, and the plan or issuer shall defer to such determination of the attending provider.",
+   "notes": "Nonfederal governmental (state/local government) group health plans and group insurers. Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719."
+  },
+  {
+   "id": "aca_group_deemed_exhaustion",
+   "plans": [
+    "government_employer"
+   ],
+   "kind": "right",
+   "label": "If the plan breaks the appeal rules, you can skip ahead",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "If the plan does not follow the claims-and-appeals rules, you may go straight to external review (or court)",
+   "cite": "45 CFR 147.136(b)(2)(ii)(F)(1)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(2)(ii)(F)(1)",
+   "quote": "In the case of a plan or issuer that fails to strictly adhere to all the requirements of this paragraph (b)(2) with respect to a claim, the claimant is deemed to have exhausted the internal claims and appeals process of this paragraph (b), except as provided in paragraph (b)(2)(ii)(F)(2) of this section. Accordingly the claimant may initiate an external review under paragraph (c) or (d) of this section, as applicable.",
+   "notes": "Nonfederal governmental (state/local government) group health plans and group insurers. Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719. Minor (de minimis) violations that cause no harm do not count ((F)(2)); you can ask the plan to explain a violation within 10 days."
+  },
+  {
+   "id": "aca_individual_present_evidence_testimony",
+   "plans": [
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Present evidence and testimony; review your claim file",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "You may review the claim file and present evidence and testimony in your appeal",
+   "cite": "45 CFR 147.136(b)(3)(ii)(C)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(3)(ii)(C)",
+   "quote": "An issuer must allow a claimant to review the claim file and to present evidence and testimony as part of the internal claims and appeals process.",
+   "notes": "Individual-market and marketplace insurers. Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719. Any new evidence or new rationale must be sent to you free and in time to respond before the final decision ((C)(1)-(2))."
+  },
+  {
+   "id": "aca_individual_urgent_defined_by_provider",
+   "plans": [
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Your doctor decides whether your appeal is urgent",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "any",
+   "basis": "If your treating provider says the claim is urgent, the plan must treat it as urgent",
+   "cite": "45 CFR 147.136(b)(3)(ii)(B)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(3)(ii)(B)",
+   "quote": "a claim involving urgent care has the meaning given in 29 CFR 2560.503-1(m)(1), as determined by the attending provider, and the issuer shall defer to such determination of the attending provider.",
+   "notes": "Individual-market and marketplace insurers. Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719."
+  },
+  {
+   "id": "aca_individual_deemed_exhaustion",
+   "plans": [
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "If the plan breaks the appeal rules, you can skip ahead",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "If the plan does not follow the claims-and-appeals rules, you may go straight to external review (or court)",
+   "cite": "45 CFR 147.136(b)(3)(ii)(F)(1)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(3)(ii)(F)(1)",
+   "quote": "In the case of an issuer that fails to adhere to all the requirements of this paragraph (b)(3) with respect to a claim, the claimant is deemed to have exhausted the internal claims and appeals process of this paragraph (b), except as provided in paragraph (b)(3)(ii)(F)(2) of this section. Accordingly, the claimant may initiate an external review under paragraph (c) or (d) of this section, as applicable.",
+   "notes": "Individual-market and marketplace insurers. Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719. Minor (de minimis) violations that cause no harm do not count ((F)(2)); you can ask the plan to explain a violation within 10 days."
+  },
+  {
+   "id": "erisa_continued_coverage_pending_appeal",
+   "plans": [
+    "employer"
+   ],
+   "kind": "right",
+   "label": "Keep ongoing treatment while you appeal",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The plan cannot cut off an approved ongoing course of treatment without advance notice and a chance to appeal first",
+   "cite": "29 CFR 2590.715-2719(b)(2)(iii)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(b)(2)(iii)",
+   "quote": "A plan and issuer subject to the requirements of this paragraph (b)(2) are required to provide continued coverage pending the outcome of an appeal. For this purpose, the plan and issuer must comply with the requirements of 29 CFR 2560.503-1(f)(2)(ii), which generally provides that benefits for an ongoing course of treatment cannot be reduced or terminated without providing advance notice and an opportunity for advance review.",
+   "notes": "Private-employer (ERISA) plans. The underlying rule is 29 CFR 2560.503-1(f)(2)(ii)(A): a reduction or termination of approved ongoing treatment is itself a denial, noticed far enough in advance to appeal and get a decision before the cut-off. Requests to extend urgent ongoing treatment made 24+ hours before it ends must be decided within 24 hours (2560.503-1(f)(2)(ii)(B)). Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719."
+  },
+  {
+   "id": "aca_group_continued_coverage_pending_appeal",
+   "plans": [
+    "government_employer"
+   ],
+   "kind": "right",
+   "label": "Keep ongoing treatment while you appeal",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The plan cannot cut off an approved ongoing course of treatment without advance notice and a chance to appeal first",
+   "cite": "45 CFR 147.136(b)(2)(iii)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(2)(iii)",
+   "quote": "A plan and issuer subject to the requirements of this paragraph (b)(2) are required to provide continued coverage pending the outcome of an appeal. For this purpose, the plan and issuer must comply with the requirements of 29 CFR 2560.503-1(f)(2)(ii), which generally provides that benefits for an ongoing course of treatment cannot be reduced or terminated without providing advance notice and an opportunity for advance review.",
+   "notes": "Nonfederal governmental plans and group insurers. Incorporates 29 CFR 2560.503-1(f)(2)(ii). Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719."
+  },
+  {
+   "id": "aca_individual_continued_coverage_pending_appeal",
+   "plans": [
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Keep ongoing treatment while you appeal",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The insurer cannot cut off an approved ongoing course of treatment without advance notice and a chance to appeal first",
+   "cite": "45 CFR 147.136(b)(3)(iii)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(b)(3)(iii)",
+   "quote": "An issuer subject to the requirements of this paragraph (b)(3) is required to provide continued coverage pending the outcome of an appeal. For this purpose, the issuer must comply with the requirements of 29 CFR 2560.503-1(f)(2)(ii) as if the issuer were a group health plan, so that the issuer cannot reduce or terminate an ongoing course of treatment without providing advance notice and an opportunity for advance review.",
+   "notes": "Individual-market and marketplace insurers. Incorporates 29 CFR 2560.503-1(f)(2)(ii). Grandfathered plans (in place before March 23, 2010 and not materially changed) are generally exempt from the ACA appeal add-ons in 45 CFR 147.136 / 29 CFR 2590.715-2719."
+  },
+  {
+   "id": "erisa_external_review_request",
+   "plans": [
+    "employer"
+   ],
+   "kind": "external",
+   "label": "Ask an independent reviewer (external review)",
+   "days": 4,
+   "unit": "months",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "4 months after you receive the final denial",
+   "cite": "29 CFR 2590.715-2719(d)(2)(i)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(d)(2)(i)",
+   "quote": "A group health plan or health insurance issuer must allow a claimant to file a request for an external review with the plan or issuer if the request is filed within four months after the date of receipt of a notice of an adverse benefit determination or final internal adverse benefit determination. If there is no corresponding date four months after the date of receipt of such a notice, then the request must be filed by the first day of the fifth month following the receipt of the notice. For example, if the date of receipt of the notice is October 30, because there is no February 30, the request must be filed by March 1. If the last filing date would fall on a Saturday, Sunday, or Federal holiday, the last filing date is extended to the next day that is not a Saturday, Sunday, or Federal holiday.",
+   "notes": "Private-employer (ERISA) plans. Self-funded plans use this federal process; insured plans usually use the state process (see *_external_review_state_minimum). Calendar months, counted from RECEIPT of the notice. If no matching date exists 4 months later, the deadline is the 1st day of the 5th month (e.g. received Oct 30 -> due Mar 1). Weekend/federal-holiday deadlines roll to the next business day. Free to the patient. Only denials involving medical judgment, surprise-billing protections, or rescissions qualify ((d)(1)(i)); pure eligibility denials do not. Grandfathered plans get external review only for surprise-billing disputes ((a)(1)(ii))."
+  },
+  {
+   "id": "erisa_external_review_decision",
+   "plans": [
+    "employer"
+   ],
+   "kind": "decision",
+   "label": "Independent reviewer must decide",
+   "days": 45,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "45 days after the independent reviewer receives your request",
+   "cite": "29 CFR 2590.715-2719(d)(2)(iii)(B)(6)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(d)(2)(iii)(B)(6)",
+   "quote": "The assigned IRO must provide written notice of the final external review decision within 45 days after the IRO receives the request for the external review.",
+   "notes": "Private-employer (ERISA) plans. Self-funded plans use this federal process; insured plans usually use the state process (see *_external_review_state_minimum). If the reviewer overturns the denial, the plan must immediately cover or pay ((d)(2)(iv)). You have 10 business days after the IRO's eligibility notice to send extra information ((d)(2)(iii)(B)(2))."
+  },
+  {
+   "id": "erisa_expedited_external_review_decision",
+   "plans": [
+    "employer"
+   ],
+   "kind": "decision",
+   "label": "Independent reviewer must decide an urgent external review",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after the independent reviewer receives your urgent request",
+   "cite": "29 CFR 2590.715-2719(d)(3)(iv)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(d)(3)(iv)",
+   "quote": "The plan's or issuer's contract with the assigned IRO must require the IRO to provide notice of the final external review decision, in accordance with the requirements set forth in paragraph (d)(2)(iii)(B) of this section, as expeditiously as the claimant's medical condition or circumstances require, but in no event more than 72 hours after the IRO receives the request for an expedited external review.",
+   "notes": "Private-employer (ERISA) plans. Self-funded plans use this federal process; insured plans usually use the state process (see *_external_review_state_minimum). Expedited external review can be requested right when you get a denial if an expedited internal appeal is also filed and waiting would seriously jeopardize life, health or ability to regain maximum function, or after a final denial about an admission, continued stay or emergency care before discharge ((d)(3)(i))."
+  },
+  {
+   "id": "erisa_surprise_billing_external_review",
+   "plans": [
+    "employer"
+   ],
+   "kind": "right",
+   "label": "Surprise-billing disputes qualify for external review",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Denials about No Surprises Act protections (emergency, out-of-network at in-network facility, air ambulance) can go to external review",
+   "cite": "29 CFR 2590.715-2719(d)(1)(i)(B)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(d)(1)(i)(B)",
+   "quote": "An adverse benefit determination that involves consideration of whether a plan or issuer is complying with the surprise billing and cost-sharing protections set forth in ERISA sections 716 and 717 and §§ 2590.716-4 through 2590.716-5 and 2590.717-1; and",
+   "notes": "Private-employer (ERISA) plans. Self-funded plans use this federal process; insured plans usually use the state process (see *_external_review_state_minimum). This also applies to grandfathered plans ((a)(1)(ii))."
+  },
+  {
+   "id": "aca_external_review_request",
+   "plans": [
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "external",
+   "label": "Ask an independent reviewer (external review)",
+   "days": 4,
+   "unit": "months",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "4 months after you receive the final denial",
+   "cite": "45 CFR 147.136(d)(2)(i)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(d)(2)(i)",
+   "quote": "A group health plan or health insurance issuer must allow a claimant to file a request for an external review with the plan or issuer if the request is filed within four months after the date of receipt of a notice of an adverse benefit determination or final internal adverse benefit determination. If there is no corresponding date four months after the date of receipt of such a notice, then the request must be filed by the first day of the fifth month following the receipt of the notice. For example, if the date of receipt of the notice is October 30, because there is no February 30, the request must be filed by March 1. If the last filing date would fall on a Saturday, Sunday, or Federal holiday, the last filing date is extended to the next day that is not a Saturday, Sunday, or Federal holiday.",
+   "notes": "Nonfederal governmental plans and individual/marketplace insurers not covered by a state process (or using the HHS-administered process, 147.136(d)(4)). Calendar months, counted from RECEIPT of the notice. If no matching date exists 4 months later, the deadline is the 1st day of the 5th month (e.g. received Oct 30 -> due Mar 1). Weekend/federal-holiday deadlines roll to the next business day. Free to the patient. Only denials involving medical judgment, surprise-billing protections, or rescissions qualify ((d)(1)(i)); pure eligibility denials do not. Grandfathered plans get external review only for surprise-billing disputes ((a)(1)(ii))."
+  },
+  {
+   "id": "aca_external_review_decision",
+   "plans": [
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Independent reviewer must decide",
+   "days": 45,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "45 days after the independent reviewer receives your request",
+   "cite": "45 CFR 147.136(d)(2)(iii)(B)(6)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(d)(2)(iii)(B)(6)",
+   "quote": "The assigned IRO must provide written notice of the final external review decision within 45 days after the IRO receives the request for the external review.",
+   "notes": "Nonfederal governmental plans and individual/marketplace insurers not covered by a state process (or using the HHS-administered process, 147.136(d)(4)). If the reviewer overturns the denial, the plan must immediately cover or pay ((d)(2)(iv)). You have 10 business days after the IRO's eligibility notice to send extra information ((d)(2)(iii)(B)(2))."
+  },
+  {
+   "id": "aca_expedited_external_review_decision",
+   "plans": [
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Independent reviewer must decide an urgent external review",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after the independent reviewer receives your urgent request",
+   "cite": "45 CFR 147.136(d)(3)(iv)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(d)(3)(iv)",
+   "quote": "The plan's or issuer's contract with the assigned IRO must require the IRO to provide notice of the final external review decision, in accordance with the requirements set forth in paragraph (d)(2)(iii)(B) of this section, as expeditiously as the claimant's medical condition or circumstances require, but in no event more than 72 hours after the IRO receives the request for an expedited external review.",
+   "notes": "Nonfederal governmental plans and individual/marketplace insurers not covered by a state process (or using the HHS-administered process, 147.136(d)(4)). Expedited external review can be requested right when you get a denial if an expedited internal appeal is also filed and waiting would seriously jeopardize life, health or ability to regain maximum function, or after a final denial about an admission, continued stay or emergency care before discharge ((d)(3)(i))."
+  },
+  {
+   "id": "aca_surprise_billing_external_review",
+   "plans": [
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Surprise-billing disputes qualify for external review",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Denials about No Surprises Act protections (emergency, out-of-network at in-network facility, air ambulance) can go to external review",
+   "cite": "45 CFR 147.136(d)(1)(i)(B)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(d)(1)(i)(B)",
+   "quote": "An adverse benefit determination that involves consideration of whether a plan or issuer is complying with the surprise billing and cost-sharing protections set forth in PHS Act sections 2799A-1 and 2799A-2 and §§ 149.110 through 149.130; and",
+   "notes": "Nonfederal governmental plans and individual/marketplace insurers not covered by a state process (or using the HHS-administered process, 147.136(d)(4)). This also applies to grandfathered plans ((a)(1)(ii))."
+  },
+  {
+   "id": "erisa_external_review_state_minimum",
+   "plans": [
+    "employer"
+   ],
+   "kind": "external",
+   "label": "Ask your state for independent review (state process)",
+   "days": 4,
+   "unit": "months",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "At least 4 months after you receive the denial; your state may allow longer",
+   "cite": "29 CFR 2590.715-2719(c)(2)(vi)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.715-2719#p-2590.715-2719(c)(2)(vi)",
+   "quote": "The State process must allow at least four months after the receipt of a notice of an adverse benefit determination or final internal adverse benefit determination for a request for an external review to be filed.",
+   "notes": "Private-employer plans whose coverage is insured and subject to a state external review law (or self-funded plans that opted into one). This is a federal floor on state deadlines; check the state deadline on your notice (it may be longer, never shorter). State processes must decide standard reviews within 45 days ((c)(2)(xii)) and expedited reviews within 72 hours ((c)(2)(xiii)), and the plan/insurer pays the reviewer; a few states may keep a nominal filing fee of at most $25, refunded if you win ((c)(2)(iv))."
+  },
+  {
+   "id": "aca_external_review_state_minimum",
+   "plans": [
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "external",
+   "label": "Ask your state for independent review (state process)",
+   "days": 4,
+   "unit": "months",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "At least 4 months after you receive the denial; your state may allow longer",
+   "cite": "45 CFR 147.136(c)(2)(vi)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136#p-147.136(c)(2)(vi)",
+   "quote": "The State process must allow at least four months after the receipt of a notice of an adverse benefit determination or final internal adverse benefit determination for a request for an external review to be filed.",
+   "notes": "Insured coverage and nonfederal governmental plans subject to a state external review law. This is a federal floor on state deadlines; check the state deadline on your notice (it may be longer, never shorter). State processes must decide standard reviews within 45 days ((c)(2)(xii)) and expedited reviews within 72 hours ((c)(2)(xiii)), and the plan/insurer pays the reviewer; a few states may keep a nominal filing fee of at most $25, refunded if you win ((c)(2)(iv))."
+  },
+  {
+   "id": "erisa_emergency_no_prior_auth",
+   "plans": [
+    "employer"
+   ],
+   "kind": "right",
+   "label": "Emergency care needs no prior approval, even out of network",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Your plan cannot deny emergency care for lack of prior authorization or because the ER was out of network",
+   "cite": "29 CFR 2590.716-4(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.716-4#p-2590.716-4(b)(1)",
+   "quote": "Without the need for any prior authorization determination, even if the services are provided on an out-of-network basis.",
+   "notes": "Private-employer group health plans (DOL rule). Applies to grandfathered plans too. Plan years beginning on or after January 1, 2022. Out-of-network emergency cost-sharing cannot exceed in-network levels ((b)(3)(ii)), and coverage cannot be limited based on diagnosis codes alone ((b)(4))."
+  },
+  {
+   "id": "erisa_emergency_prudent_layperson",
+   "plans": [
+    "employer"
+   ],
+   "kind": "right",
+   "label": "Emergencies are judged by a reasonable person's view of your symptoms",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "An emergency is defined by symptoms a prudent layperson would think need immediate care, not by the final diagnosis",
+   "cite": "29 CFR 2590.716-4(c)(1)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2590.716-4#p-2590.716-4(c)(1)",
+   "quote": "Emergency medical condition means a medical condition, including a mental health condition or substance use disorder, manifesting itself by acute symptoms of sufficient severity (including severe pain) such that a prudent layperson, who possesses an average knowledge of health and medicine, could reasonably expect the absence of immediate medical attention to result in a condition described in clause (i), (ii), or (iii) of section 1867(e)(1)(A) of the Social Security Act (42 U.S.C. 1395dd(e)(1)(A)). (In that provision of the Social Security Act, clause (i) refers to placing the health of the individual (or, with respect to a pregnant woman, the health of the woman or her unborn child) in serious jeopardy; clause (ii) refers to serious impairment to bodily functions; and clause (iii) refers to serious dysfunction of any bodily organ or part.)",
+   "notes": "Private-employer group health plans (DOL rule). Applies to grandfathered plans too. Plan years beginning on or after January 1, 2022."
+  },
+  {
+   "id": "aca_emergency_no_prior_auth",
+   "plans": [
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Emergency care needs no prior approval, even out of network",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Your plan cannot deny emergency care for lack of prior authorization or because the ER was out of network",
+   "cite": "45 CFR 149.110(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-45/section-149.110#p-149.110(b)(1)",
+   "quote": "Without the need for any prior authorization determination, even if the services are provided on an out-of-network basis.",
+   "notes": "Nonfederal governmental plans and group/individual insurers. Applies to grandfathered plans too. Plan/policy years beginning on or after January 1, 2022. Out-of-network emergency cost-sharing cannot exceed in-network levels ((b)(3)(ii)), and coverage cannot be limited based on diagnosis codes alone ((b)(4))."
+  },
+  {
+   "id": "aca_emergency_prudent_layperson",
+   "plans": [
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "right",
+   "label": "Emergencies are judged by a reasonable person's view of your symptoms",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "An emergency is defined by symptoms a prudent layperson would think need immediate care, not by the final diagnosis",
+   "cite": "45 CFR 149.110(c)(1)",
+   "url": "https://www.ecfr.gov/current/title-45/section-149.110#p-149.110(c)(1)",
+   "quote": "Emergency medical condition means a medical condition, including a mental health condition or substance use disorder, manifesting itself by acute symptoms of sufficient severity (including severe pain) such that a prudent layperson, who possesses an average knowledge of health and medicine, could reasonably expect the absence of immediate medical attention to result in a condition described in clause (i), (ii), or (iii) of section 1867(e)(1)(A) of the Social Security Act (42 U.S.C. 1395dd(e)(1)(A)). (In that provision of the Social Security Act, clause (i) refers to placing the health of the individual (or, with respect to a pregnant woman, the health of the woman or her unborn child) in serious jeopardy; clause (ii) refers to serious impairment to bodily functions; and clause (iii) refers to serious dysfunction of any bodily organ or part.)",
+   "notes": "Nonfederal governmental plans and group/individual insurers. Applies to grandfathered plans too. Plan/policy years beginning on or after January 1, 2022."
+  },
+  {
+   "id": "ma_reconsideration_request",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "appeal",
+   "label": "Ask your Medicare Advantage plan to reconsider",
+   "days": 60,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "60 days from when you receive the denial (counted as 65 days from the notice date)",
+   "cite": "42 CFR 422.582(b)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.582#p-422.582(b)",
+   "quote": "Except as provided in paragraph (c) of this section, a request for reconsideration must be filed within 60 calendar days after receipt of the written organization determination notice.",
+   "notes": "Receipt is presumed 5 calendar days after the date on the notice unless shown otherwise, so with no other evidence the deadline is 65 days after the notice date. The request is filed when the plan (or the entity named on the notice) receives it ((b)(2)). Must be in writing unless the plan accepts oral requests ((a)). Since June 3, 2024 the rule counts from receipt; before that it was 60 days from the notice date.",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "ma_expedited_reconsideration_request",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "appeal",
+   "label": "Ask your Medicare Advantage plan for a fast (72-hour) reconsideration",
+   "days": 60,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "expedited",
+   "service": "preservice",
+   "basis": "60 days from when you receive the denial (counted as 65 days from the notice date)",
+   "cite": "42 CFR 422.584(b)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.584#p-422.584(b)",
+   "quote": "A request for reconsideration must be filed within 60 calendar days after receipt of the written organization determination notice.",
+   "notes": "Receipt is presumed 5 calendar days after the date on the notice unless shown otherwise, so with no other evidence the deadline is 65 days after the notice date. Can be made orally or in writing. Not available for payment of care already received ((a)). The plan must expedite if a physician says the standard timeframe could seriously jeopardize life, health or ability to regain maximum function ((c)(2)(ii)).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "ma_good_cause_late_filing",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "right",
+   "label": "Missed the deadline? Ask for more time for good cause",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The plan may accept a late reconsideration request if you show good cause",
+   "cite": "42 CFR 422.582(c)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.582#p-422.582(c)(1)",
+   "quote": "If a party or physician acting on behalf of an enrollee shows good cause, the MA organization may extend the timeframe for filing a request for reconsideration.",
+   "notes": "The late request must be in writing and say why it was not filed on time ((c)(2))."
+  },
+  {
+   "id": "ma_decision_preservice_30d",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide your reconsideration (service or item)",
+   "days": 30,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "preservice",
+   "basis": "30 days after the plan receives your request",
+   "cite": "42 CFR 422.590(a)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590#p-422.590(a)(1)",
+   "quote": "Except as provided in paragraph (f) of this section, if the MA organization makes a reconsidered determination that is completely favorable to the enrollee, the MA organization must issue the determination (and effectuate it in accordance with § 422.618(a)) as expeditiously as the enrollee's health condition requires, but no later than 30 calendar days from the date it receives the request for a standard reconsideration.",
+   "notes": "If the plan upholds the denial it must send the case to the Independent Review Entity within the same 30 days ((a)(2)). The plan may extend up to 14 days only if you ask, if it needs non-contract provider records and the delay is in your interest, or for extraordinary circumstances in your interest ((f)); it must tell you in writing and you can file an expedited grievance."
+  },
+  {
+   "id": "ma_decision_payment_60d",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide your payment reconsideration",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "postservice",
+   "basis": "60 days after the plan receives your request",
+   "cite": "42 CFR 422.590(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590#p-422.590(b)(1)",
+   "quote": "If the MA organization makes a reconsidered determination that is completely favorable to the enrollee, the MA organization must issue its reconsidered determination to the enrollee (and effectuate it in accordance with § 422.618(a)(2)) no later than 60 calendar days from the date it receives the request for a standard reconsideration.",
+   "notes": "If upheld, the case goes to the Independent Review Entity within the same 60 days ((b)(2)). No extensions for payment requests."
+  },
+  {
+   "id": "ma_decision_partb_drug_7d",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide your Part B drug reconsideration",
+   "days": 7,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "drug",
+   "basis": "7 days after the plan receives your request",
+   "cite": "42 CFR 422.590(c)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590#p-422.590(c)(1)",
+   "quote": "If the MA organization makes a reconsidered determination that is completely favorable to the enrollee, the MA organization must issue the determination (and effectuate it in accordance with § 422.618(a)(3)) as expeditiously as the enrollee's health condition requires, but no later than 7 calendar days from the date it receives the request for a standard reconsideration. This 7 calendar-day period may not be extended under the provisions in paragraph (f) of this section.",
+   "notes": "Part B drugs only (drugs covered under the medical benefit). No extension allowed."
+  },
+  {
+   "id": "ma_decision_expedited_72h",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide a fast reconsideration",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "preservice",
+   "basis": "72 hours after the plan receives your fast request",
+   "cite": "42 CFR 422.590(e)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590#p-422.590(e)(1)",
+   "quote": "Except as provided in paragraph (f) of this section, an MA organization that approves a request for expedited reconsideration must complete its reconsideration and give the enrollee (and the physician involved, as appropriate) notice of its decision as expeditiously as the enrollee's health condition requires but no later than 72 hours after receiving the request.",
+   "notes": "Services/items may be extended up to 14 days under (f). Part B drugs: also 72 hours, no extension ((e)(2)). If upheld, the case goes to the Independent Review Entity within 24 hours ((e)(5)). If the plan refuses to expedite, it must decide within the standard 30 days (7 for Part B drugs) counted from receipt of the fast request (422.584(d)(1))."
+  },
+  {
+   "id": "ma_auto_forward_ire",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "right",
+   "label": "If the plan upholds the denial, it goes to an independent reviewer automatically",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "You do not have to file again: an upheld denial is sent to the Independent Review Entity for you",
+   "cite": "42 CFR 422.592(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.592#p-422.592(a)",
+   "quote": "When the MA organization affirms, in whole or in part, its adverse organization determination, the issues that remain in dispute must be reviewed and resolved by an independent, outside entity that contracts with CMS.",
+   "notes": "The plan must forward the case file within its decision deadline (30 days service, 60 days payment, 7 days Part B drug, 24 hours after an expedited affirmation) (422.590(a)(2), (b)(2), (c)(2), (e)(5))."
+  },
+  {
+   "id": "ma_missed_deadline_goes_to_ire",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "right",
+   "label": "If the plan misses its deadline, the case goes to the independent reviewer",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "A late plan decision counts as a denial and must be sent to the Independent Review Entity",
+   "cite": "42 CFR 422.590(d)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590#p-422.590(d)",
+   "quote": "If the MA organization fails to provide the enrollee with a reconsidered determination within the timeframes specified in paragraph (a), (b), or (c) of this section, this failure constitutes an affirmation of its adverse organization determination, and the MA organization must submit the file to the independent entity in the same manner as described under paragraphs (a)(2), (b)(2), and (c)(2) of this section.",
+   "notes": "For expedited reconsiderations, see 422.590(g): the file must go to the IRE within 24 hours of the missed deadline."
+  },
+  {
+   "id": "ma_denial_specific_reasons",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "right",
+   "label": "The denial notice must give specific reasons",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "A Medicare Advantage denial must state the specific reasons and explain your appeal rights",
+   "cite": "42 CFR 422.568(e)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.568#p-422.568(e)",
+   "quote": "The notice of any denial under paragraph (d) of this section must— (1) Use approved notice language in a readable and understandable form; (2) State the specific reasons for the denial;",
+   "notes": "Expedited denial notices must also state specific reasons in understandable language (422.572(e)(1)). If the plan fails to give timely notice, that failure itself is an appealable denial (422.568(f))."
+  },
+  {
+   "id": "ma_present_evidence",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "right",
+   "label": "Present evidence in person or in writing",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The plan must give you a reasonable chance to present evidence and arguments, in person and in writing",
+   "cite": "42 CFR 422.586",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.586",
+   "quote": "The MA organization must provide the parties to the reconsideration with a reasonable opportunity to present evidence and allegations of fact or law, related to the issue in dispute, in person as well as in writing.",
+   "notes": "For expedited reconsiderations the window is short; the plan must tell you the conditions for submitting evidence."
+  },
+  {
+   "id": "ma_physician_reviewer",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "right",
+   "label": "A doctor with the right expertise must review medical-necessity denials",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Medical-necessity reconsiderations must be decided by a physician with expertise appropriate to the services at issue",
+   "cite": "42 CFR 422.590(h)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590#p-422.590(h)(2)",
+   "quote": "When the issue is the MA organization's denial of coverage based on a lack of medical necessity (or any substantively equivalent term used to describe the concept of medical necessity), the reconsidered determination must be made by a physician with expertise in the field of medicine that is appropriate for the services at issue.",
+   "notes": "The reviewer must not have been involved in the original decision ((h)(1)). The physician need not be the same specialty as your treating physician."
+  },
+  {
+   "id": "ma_alj_hearing_request",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "external",
+   "label": "Ask for a hearing before a judge (ALJ)",
+   "days": 60,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "60 days from when you receive the independent reviewer's decision (counted as 65 days from its date)",
+   "cite": "42 CFR 422.602(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.602#p-422.602(b)(1)",
+   "quote": "Except when an ALJ or attorney adjudicator extends the time frame as provided in part 405 of this chapter, a party must file a request for a hearing within 60 calendar days of receipt of the notice of a reconsidered determination.",
+   "notes": "Clock runs from the Independent Review Entity's reconsidered determination. Receipt is presumed 5 calendar days after the date on the notice unless shown otherwise, so with no other evidence the deadline is 65 days after the notice date. Requires the amount in controversy to meet the annually adjusted threshold (422.600).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "ma_inpatient_discharge_qio",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "appeal",
+   "label": "Challenge a hospital discharge (immediate review)",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "preservice",
+   "basis": "Call the Quality Improvement Organization no later than the day you are discharged",
+   "cite": "42 CFR 422.622(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.622#p-422.622(b)(1)",
+   "quote": "The request must be made no later than the day of discharge and may be in writing or by telephone.",
+   "notes": "Deadline is the day of discharge (not computable from a notice date). Timely requests protect you from hospital charges until noon of the day after the QIO decides ((f)). If you miss it you can still ask the plan for an expedited reconsideration, without that liability protection ((b)(5))."
+  },
+  {
+   "id": "ma_service_termination_fast_track",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "appeal",
+   "label": "Challenge the end of skilled nursing, home health, hospice or rehab care",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "preservice",
+   "basis": "By NOON of the day after you receive the termination notice",
+   "cite": "42 CFR 422.626(a)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.626#p-422.626(a)(1)",
+   "quote": "An enrollee who desires a fast-track appeal must submit a request for an appeal to an IRE under contract with CMS, in writing or by telephone, by noon of the first day after the day of delivery of the termination notice. If, due to an emergency, the IRE is closed and unable to accept the enrollee's request for a fast-track appeal, the enrollee must file a request by noon of the next day that the IRE is open for business.",
+   "notes": "Deadline is NOON of the first day after the termination notice is delivered, not end of day. Covers skilled nursing facility, home health, comprehensive outpatient rehab and hospice terminations. Late requests are still reviewed, without the timeframe and liability protections ((a)(2)). days/unit/from are null on purpose: this deadline applies only in this specific situation, so it must not be offered as the general appeal deadline."
+  },
+  {
+   "id": "partd_redetermination_request",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "appeal",
+   "label": "Ask your drug plan to reconsider (redetermination)",
+   "days": 60,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "standard",
+   "service": "drug",
+   "basis": "60 days from when you receive the denial (counted as 65 days from the notice date)",
+   "cite": "42 CFR 423.582(b)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.582#p-423.582(b)",
+   "quote": "Except as provided in paragraph (c) of this section, a request for a redetermination must be filed within 60 calendar days after receipt of the written coverage determination notice or the at-risk determination under a drug management program in accordance with § 423.153(f).",
+   "notes": "Receipt is presumed 5 calendar days after the date on the notice unless shown otherwise, so with no other evidence the deadline is 65 days after the notice date. Filed when the plan receives it ((b)(2)). Written unless the plan accepts oral requests ((a)). Also applies to Medicare Advantage plans that include drug coverage (MA-PD).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "partd_expedited_redetermination_request",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "appeal",
+   "label": "Ask your drug plan for a fast (72-hour) redetermination",
+   "days": 60,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "expedited",
+   "service": "drug",
+   "basis": "60 days from when you receive the denial (counted as 65 days from the notice date)",
+   "cite": "42 CFR 423.584(b)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.584#p-423.584(b)",
+   "quote": "A request for a redetermination must be filed within 60 calendar days after receipt of the written coverage determination notice or at-risk determination notice.",
+   "notes": "Receipt is presumed 5 calendar days after the date on the notice unless shown otherwise, so with no other evidence the deadline is 65 days after the notice date. Oral or written. Not for payment of drugs already received ((a)). The plan must expedite if your prescriber says the standard timeframe may seriously jeopardize your life, health or ability to regain maximum function ((c)(2)(ii)).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "partd_good_cause_late_filing",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "right",
+   "label": "Missed the deadline? Ask for more time for good cause",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "drug",
+   "basis": "The drug plan may accept a late redetermination request if you show good cause",
+   "cite": "42 CFR 423.582(c)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.582#p-423.582(c)(1)",
+   "quote": "If an enrollee or prescribing physician or other prescriber acting on behalf of an enrollee shows good cause, the Part D plan sponsor may extend the timeframe for filing a request for redetermination.",
+   "notes": "The late request must be in writing and say why it was not filed on time ((c)(2))."
+  },
+  {
+   "id": "partd_decision_standard_7d",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "decision",
+   "label": "Drug plan must decide your redetermination",
+   "days": 7,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "drug",
+   "basis": "7 days after the plan receives your request",
+   "cite": "42 CFR 423.590(a)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.590#p-423.590(a)(2)",
+   "quote": "If the Part D plan sponsor makes a redetermination that affirms, in whole or in part, its adverse coverage determination or at-risk determination, it must notify the enrollee in writing of its redetermination as expeditiously as the enrollee's health condition requires, but no later than 7 calendar days from the date it receives the request for a standard redetermination.",
+   "notes": "Same 7-day limit for favorable decisions ((a)(1)). No extensions."
+  },
+  {
+   "id": "partd_decision_payment_14d",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "decision",
+   "label": "Drug plan must decide your payment redetermination",
+   "days": 14,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "postservice",
+   "basis": "14 days after the plan receives your request",
+   "cite": "42 CFR 423.590(b)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.590#p-423.590(b)(2)",
+   "quote": "If the Part D plan sponsor affirms, in whole or in part, its adverse coverage determination, it must notify the enrollee in writing of its redetermination no later than 14 calendar days from the date it receives the request for redetermination.",
+   "notes": "Reimbursement for drugs you already paid for. Same 14-day limit for favorable decisions ((b)(1))."
+  },
+  {
+   "id": "partd_decision_expedited_72h",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "decision",
+   "label": "Drug plan must decide a fast redetermination",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "drug",
+   "basis": "72 hours after the plan receives your fast request",
+   "cite": "42 CFR 423.590(d)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.590#p-423.590(d)(1)",
+   "quote": "A Part D plan sponsor that approves a request for expedited redetermination must complete its redetermination and give the enrollee (and the prescribing physician or other prescriber involved, as appropriate), notice of its decision as expeditiously as the enrollee's health condition requires but no later than 72 hours after receiving the request.",
+   "notes": "No extensions."
+  },
+  {
+   "id": "partd_missed_deadline_goes_to_ire",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "right",
+   "label": "If the drug plan misses its deadline, the case goes to the independent reviewer",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "drug",
+   "basis": "A late redetermination counts as a denial and must be forwarded to the Independent Review Entity within 24 hours",
+   "cite": "42 CFR 423.590(c)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.590#p-423.590(c)",
+   "quote": "If the Part D plan sponsor fails to provide the enrollee with a redetermination within the timeframes specified in paragraphs (a) or (b) of this section, the failure constitutes an adverse redetermination decision, and the Part D plan sponsor must forward the enrollee's request to the IRE within 24 hours of the expiration of the adjudication timeframe.",
+   "notes": "Expedited: same rule under (e). Unlike Medicare Advantage, a timely Part D denial is NOT auto-forwarded; you must request IRE reconsideration yourself (423.600)."
+  },
+  {
+   "id": "partd_ire_reconsideration_request",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "external",
+   "label": "Ask the independent reviewer (IRE) to reconsider",
+   "days": 60,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "drug",
+   "basis": "60 days from when you receive the plan's redetermination (counted as 65 days from its date)",
+   "cite": "42 CFR 423.600(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.600#p-423.600(a)",
+   "quote": "The enrollee, or the enrollee's prescribing physician or other prescriber (acting on behalf of the enrollee) must file a written request for reconsideration with the IRE within 60 calendar days after receipt of the written redetermination by the Part D plan sponsor.",
+   "notes": "Clock runs from the plan's redetermination notice. Receipt is presumed 5 calendar days after the date on the notice unless shown otherwise, so with no other evidence the deadline is 65 days after the notice date. Filed when the IRE receives it ((a)(2)). For non-formulary drugs the prescriber must state that all formulary alternatives would be less effective and/or harmful ((c)). The IRE must meet the same 7-day/72-hour/14-day deadlines ((d)).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "partd_alj_hearing_request",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "external",
+   "label": "Ask for a hearing before a judge (ALJ)",
+   "days": 60,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "drug",
+   "basis": "60 days from when you receive the IRE's decision (counted as 65 days from its date)",
+   "cite": "42 CFR 423.2002(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.2002#p-423.2002(a)",
+   "quote": "An enrollee who is dissatisfied with the IRE reconsideration determination has a right to a hearing before an ALJ if— (1) The enrollee files a written request for an ALJ hearing within 60 calendar days after receipt of the written notice of the IRE's reconsideration; and",
+   "notes": "Clock runs from the IRE reconsideration notice; receipt presumed 5 days after its date ((d)). Amount in controversy threshold applies (423.2006). An expedited ALJ hearing can be requested within 60 days of the date of the IRE notice ((b)(2)).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "partd_denial_specific_reasons",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "right",
+   "label": "The drug plan's denial must give specific reasons",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "drug",
+   "basis": "An adverse redetermination notice must state the specific reasons and explain the next appeal step",
+   "cite": "42 CFR 423.590(g)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.590#p-423.590(g)",
+   "quote": "The notice of any adverse determination under paragraphs (a)(2), (b)(2), (d)(1) or (d)(2) of this section must— (1) Use approved notice language in a readable and understandable form; (2) State the specific reasons for the denial;",
+   "notes": "Coverage-determination denials have the same requirement (423.568(g), 423.572(c)(2)(ii))."
+  },
+  {
+   "id": "partd_present_evidence",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "right",
+   "label": "Present evidence in person or in writing",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "drug",
+   "basis": "The drug plan must give you and your prescriber a reasonable chance to present evidence, in person and in writing",
+   "cite": "42 CFR 423.586",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.586",
+   "quote": "The Part D plan sponsor must provide the enrollee or the prescribing physician or other prescriber, as appropriate, with a reasonable opportunity to present evidence and allegations of fact or law, related to the issue in dispute, in person as well as in writing.",
+   "notes": "For expedited redeterminations the window is short; the plan must tell you the conditions for submitting evidence."
+  },
+  {
+   "id": "partd_formulary_exception",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "right",
+   "label": "Ask the plan to cover a drug not on its list (formulary exception)",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "drug",
+   "basis": "The plan must cover an off-formulary drug (or waive step therapy / dose limits) if it is medically necessary, backed by your prescriber's statement",
+   "cite": "42 CFR 423.578(b)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.578#p-423.578(b)",
+   "quote": "The Part D plan sponsor must grant an exception whenever it determines that the drug is medically necessary, consistent with the physician's or other prescriber's statement under paragraph (b)(5) of this section, and that the drug would be covered but for the fact that it is an off-formulary drug. Formulary use includes the application of cost utilization tools, such as a dose restriction, including the dosage form, that causes a particular Part D drug not to be covered for the number of doses prescribed or a step therapy requirement that causes a particular Part D drug not to be covered until the requirements of the plan's coverage policy are met, or a therapeutic substitution requirement.",
+   "notes": "Requires the prescriber's oral or written supporting statement under 423.578(b)(5). An exception decision is a coverage determination and can be appealed (423.578(c)(1)). Once approved, refills are covered without re-approval while it is still prescribed and safe and your enrollment period has not ended ((c)(4))."
+  },
+  {
+   "id": "partd_exception_prescriber_statement",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "right",
+   "label": "What your prescriber's statement must say (formulary exception)",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "drug",
+   "basis": "Your prescriber must state the drug is medically necessary because alternatives are less effective, failed, or harmful",
+   "cite": "42 CFR 423.578(b)(5)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.578#p-423.578(b)(5)",
+   "quote": "A prescribing physician or other prescriber must provide an oral or written supporting statement that the requested prescription drug is medically necessary to treat the enrollee's disease or medical condition because— (i) All of the covered Part D drugs on any tier of a plan's formulary for treatment for the same condition would not be as effective for the enrollee as the non-formulary drug, would have adverse effects for the enrollee, or both; (ii) The prescription drug alternative(s) listed on the formulary or required to be used in accordance with step therapy requirements— (A) Has been ineffective in the treatment of the enrollee's disease or medical condition or, based on both sound clinical evidence and medical and scientific evidence and the known relevant physical or mental characteristics of the enrollee and known characteristics of the drug regimen, is likely to be ineffective or adversely affect the drug's effectiveness or patient compliance; or (B) Has caused or based on sound clinical evidence and medical and scientific evidence, is likely to cause an adverse reaction or other harm to the enrollee; or (iii) The number of doses that is available under a dose restriction for the prescription drug has been ineffective in the treatment of the enrollee's disease or medical condition or, based on both sound clinical evidence and medical and scientific evidence and the known relevant physical or mental characteristics of the enrollee and known characteristics of the drug regimen, is likely to be ineffective or adversely affect the drug's effectiveness or patient compliance.",
+   "notes": "The plan may ask for a written follow-up if the statement was oral ((b)(6)). A statement does not guarantee approval ((f))."
+  },
+  {
+   "id": "partd_tiering_exception",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "right",
+   "label": "Ask for a lower copay tier (tiering exception)",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "drug",
+   "basis": "You can ask to pay the preferred-tier price for a non-preferred drug if your prescriber says the cheaper options won't work as well or would harm you",
+   "cite": "42 CFR 423.578(a)(4)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.578#p-423.578(a)(4)",
+   "quote": "A prescribing physician or other prescriber must provide an oral or written supporting statement that the preferred drug(s) for the treatment of the enrollee's condition— (i) Would not be as effective for the enrollee as the requested drug; (ii) Would have adverse effects for the enrollee; or (iii) Both paragraphs (a)(4)(i) and (a)(4)(ii) of this section apply.",
+   "notes": "Plans may exclude specialty-tier drugs from tiering exceptions ((a)(6)(iii)). Approved exceptions are charged at the lowest applicable preferred tier ((c)(3)(ii))."
+  },
+  {
+   "id": "partd_exception_decision_72h",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide your drug exception request",
+   "days": 72,
+   "unit": "hours",
+   "from": null,
+   "track": "standard",
+   "service": "drug",
+   "basis": "72 hours after the plan receives your prescriber's supporting statement",
+   "cite": "42 CFR 423.568(b)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.568#p-423.568(b)",
+   "quote": "For an exceptions request, the Part D plan sponsor must notify the enrollee (and the prescribing physician or other prescriber involved, as appropriate) of its determination as expeditiously as the enrollee's health condition requires, but no later than 72 hours after receipt of the physician's or other prescriber's supporting statement.",
+   "notes": "Clock starts at receipt of the PRESCRIBER'S STATEMENT, not your request. If no statement arrives within 14 days of the request, the plan must decide within 72 hours after day 14. Ordinary (non-exception) drug coverage requests: 72 hours from receipt of the request. A missed deadline is a denial that must go to the IRE within 24 hours (423.578(c)(2))."
+  },
+  {
+   "id": "partd_exception_decision_expedited_24h",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "decision",
+   "label": "Plan must decide an urgent drug exception request",
+   "days": 24,
+   "unit": "hours",
+   "from": null,
+   "track": "expedited",
+   "service": "drug",
+   "basis": "24 hours after the plan receives your prescriber's supporting statement",
+   "cite": "42 CFR 423.572(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.572#p-423.572(a)",
+   "quote": "For an exceptions request, the Part D plan sponsor must notify the enrollee (and the prescribing physician or other prescriber involved, as appropriate) of its determination as expeditiously as the enrollee's health condition requires, but no later than 24 hours after receipt of the physician's or other prescriber's supporting statement.",
+   "notes": "Clock starts at receipt of the PRESCRIBER'S STATEMENT. If none arrives within 14 days, the plan must decide within 24 hours after day 14. Ordinary expedited coverage requests: 24 hours from receipt of the request."
+  },
+  {
+   "id": "om_redetermination_request",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "appeal",
+   "label": "Ask Medicare to reconsider (redetermination)",
+   "days": 120,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "any",
+   "service": "any",
+   "basis": "120 days from when you receive the notice (counted as 125 days from the notice date)",
+   "cite": "42 CFR 405.942(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.942#p-405.942(a)",
+   "quote": "Except as provided in paragraph (b) of this section, any request for redetermination must be filed within 120 calendar days from the date a party receives the notice of the initial determination.",
+   "notes": "Receipt is presumed 5 calendar days after the date of the notice (e.g. Medicare Summary Notice) unless shown otherwise ((a)(1)). Filed when the Medicare contractor receives it ((a)(2)).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "om_good_cause_late_filing",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "right",
+   "label": "Missed the deadline? Ask for more time for good cause",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Medicare may extend the deadline if you show good cause",
+   "cite": "42 CFR 405.942(b)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.942#p-405.942(b)",
+   "quote": "If the 120 calendar day period in which to file a request for a redetermination has expired and a party shows good cause, the contractor may extend the time frame for filing a request for redetermination.",
+   "notes": "Examples of good cause include serious illness, a death in the family, destroyed records, wrong information from the contractor, or never receiving the notice ((b)(3)). The same good-cause rules apply to late QIC requests (405.962(b)(3))."
+  },
+  {
+   "id": "om_redetermination_decision_60d",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "decision",
+   "label": "Medicare contractor must decide your redetermination",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "60 days after the contractor receives your request",
+   "cite": "42 CFR 405.950(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.950#p-405.950(a)",
+   "quote": "The contractor mails, or otherwise transmits, written notice of the redetermination or dismissal to the parties to the redetermination at their last known addresses within 60 calendar days of the date the contractor receives a timely filed request for redetermination.",
+   "notes": "Each extra evidence submission after filing extends the deadline up to 14 days ((b)(3)). For late-filed requests accepted for good cause, the clock starts when the extension is granted, if later ((b)(1))."
+  },
+  {
+   "id": "om_qic_reconsideration_request",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "external",
+   "label": "Ask the Qualified Independent Contractor (QIC) to reconsider",
+   "days": 180,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "180 days from when you receive the redetermination (counted as 185 days from its date)",
+   "cite": "42 CFR 405.962(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.962#p-405.962(a)",
+   "quote": "Except as provided in paragraph (b) of this section and in § 405.974(b)(1), regarding a request for QIC reconsideration of a contractor's dismissal of a redetermination request, any request for a reconsideration must be filed within 180 calendar days from the date the party receives the notice of the redetermination.",
+   "notes": "Clock runs from the redetermination notice; receipt presumed 5 days after its date ((a)(1)). Filed when the QIC receives it ((a)(2)).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "om_qic_decision_60d",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "decision",
+   "label": "QIC must decide your reconsideration",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "60 days after the QIC receives your request",
+   "cite": "42 CFR 405.970(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.970#p-405.970(a)",
+   "quote": "Within 60 calendar days of the date the QIC receives a timely filed request for reconsideration following a contractor redetermination or any additional time provided by paragraph (b) of this section, the QIC mails, or otherwise transmits to the parties at their last known addresses, written notice of— (1) The reconsideration;",
+   "notes": "If the QIC misses the deadline you can ask it to escalate the case to an ALJ (405.970(c)-(e), 405.1002(b))."
+  },
+  {
+   "id": "om_alj_hearing_request",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "external",
+   "label": "Ask for a hearing before a judge (ALJ)",
+   "days": 60,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "60 days from when you receive the QIC decision (counted as 65 days from its date)",
+   "cite": "42 CFR 405.1002(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.1002#p-405.1002(a)",
+   "quote": "A party to a QIC reconsideration has a right to a hearing before an ALJ if— (1) The party files a written request for an ALJ hearing within 60 calendar days after receipt of the notice of the QIC's reconsideration.",
+   "notes": "Receipt presumed 5 days after the reconsideration date ((a)(3)). Amount in controversy threshold applies (405.1006).",
+   "presumed_receipt_days": 5
+  },
+  {
+   "id": "om_inpatient_discharge_qio",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "appeal",
+   "label": "Challenge a hospital discharge (fast QIO review)",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "preservice",
+   "basis": "Contact the Quality Improvement Organization no later than the day you are discharged",
+   "cite": "42 CFR 405.1206(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.1206#p-405.1206(b)(1)",
+   "quote": "The request must be made no later than the day of discharge and may be in writing or by telephone.",
+   "notes": "Deadline is the day of discharge (not computable from a notice date). A timely request protects you from charges while the QIO decides ((f)). Late requests: still possible during the stay, or within 30 days after discharge, without that protection ((b)(5)-(6))."
+  },
+  {
+   "id": "om_service_termination_qio",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "appeal",
+   "label": "Challenge the end of skilled nursing, home health, hospice or rehab care",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "preservice",
+   "basis": "By NOON of the day after you receive the provider's termination notice",
+   "cite": "42 CFR 405.1202(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.1202#p-405.1202(b)(1)",
+   "quote": "A beneficiary who wishes to exercise the right to an expedited determination must submit a request for a determination to the QIO in the State in which the beneficiary is receiving those provider services, in writing or by telephone, by no later than noon of the calendar day following receipt of the provider's notice of termination. If the QIO is unable to accept the beneficiary's request, the beneficiary must submit the request by noon of the next day the QIO is available to accept a request.",
+   "notes": "Deadline is NOON of the calendar day after you receive the provider's notice, not end of day. Late requests are still decided, but without the 72-hour timeframe and liability protection ((b)(4)). days/unit/from are null on purpose: this deadline applies only in this specific situation, so it must not be offered as the general appeal deadline."
+  },
+  {
+   "id": "mmc_appeal_request",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "appeal",
+   "label": "Ask your Medicaid health plan to reconsider (appeal)",
+   "days": 60,
+   "unit": "days",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "60 days from the date printed on the denial notice",
+   "cite": "42 CFR 438.402(c)(2)(ii)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.402#p-438.402(c)(2)(ii)",
+   "quote": "Following receipt of a notification of an adverse benefit determination by an MCO, PIHP, or PAHP, an enrollee has 60 calendar days from the date on the adverse benefit determination notice in which to file a request for an appeal to the managed care plan.",
+   "notes": "Counts from the DATE ON THE NOTICE, not receipt. Only one level of plan appeal is allowed (438.402(b)). With your written consent (if state law permits) a provider or representative can file for you ((c)(1)(ii))."
+  },
+  {
+   "id": "mmc_oral_appeal",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "right",
+   "label": "You can appeal by phone",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "You may request a Medicaid plan appeal orally or in writing",
+   "cite": "42 CFR 438.402(c)(3)(ii)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.402#p-438.402(c)(3)(ii)",
+   "quote": "The enrollee may request an appeal either orally or in writing.",
+   "notes": "Oral inquiries seeking to appeal must be treated as appeals (438.406(b)(3))."
+  },
+  {
+   "id": "mmc_decision_standard_30d",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "decision",
+   "label": "Medicaid plan must decide your appeal",
+   "days": 30,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "30 days after the plan receives your appeal (your state may require faster)",
+   "cite": "42 CFR 438.408(b)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.408#p-438.408(b)(2)",
+   "quote": "For standard resolution of an appeal and notice to the affected parties, the State must establish a timeframe that is no longer than 30 calendar days from the day the MCO, PIHP, or PAHP receives the appeal. This timeframe may be extended under paragraph (c) of this section.",
+   "notes": "Federal maximum; states may set shorter. Extension of up to 14 days only if you ask or the plan shows the delay is in your interest ((c))."
+  },
+  {
+   "id": "mmc_decision_expedited_72h",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "decision",
+   "label": "Medicaid plan must decide an urgent appeal",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after the plan receives your urgent appeal (your state may require faster)",
+   "cite": "42 CFR 438.408(b)(3)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.408#p-438.408(b)(3)",
+   "quote": "For expedited resolution of an appeal and notice to affected parties, the State must establish a timeframe that is no longer than 72 hours after the MCO, PIHP, or PAHP receives the appeal. This timeframe may be extended under paragraph (c) of this section.",
+   "notes": "Expedited when the plan agrees, or your provider indicates, that the standard time could seriously jeopardize life, physical or mental health, or ability to attain, maintain or regain maximum function (438.410(a))."
+  },
+  {
+   "id": "mmc_deemed_exhaustion",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "right",
+   "label": "If the plan misses its deadline, go straight to a state fair hearing",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "If the plan fails the notice or timing rules, you are treated as having finished the plan appeal",
+   "cite": "42 CFR 438.408(c)(3)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.408#p-438.408(c)(3)",
+   "quote": "In the case of an MCO, PIHP, or PAHP that fails to adhere to the notice and timing requirements in this section, the enrollee is deemed to have exhausted the MCO's, PIHP's, or PAHP's appeals process. The enrollee may initiate a State fair hearing.",
+   "notes": ""
+  },
+  {
+   "id": "mmc_state_fair_hearing_request",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "external",
+   "label": "Ask for a state fair hearing",
+   "days": 90,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "At least 90 days (up to 120, set by your state) from the date of the plan's appeal decision",
+   "cite": "42 CFR 438.408(f)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.408#p-438.408(f)(2)",
+   "quote": "The enrollee must have no less than 90 calendar days and no more than 120 calendar days from the date of the MCO's, PIHP's, or PAHP's notice of resolution to request a State fair hearing.",
+   "notes": "Your state picks a deadline between 90 and 120 days; 90 is the safe default. Check the plan's appeal decision notice for your state's number. Counts from the date of the plan's notice of resolution. You must normally finish the plan appeal first ((f)(1)), unless deemed exhaustion applies."
+  },
+  {
+   "id": "mmc_continue_benefits_during_appeal",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "appeal",
+   "label": "Keep your services during the appeal: ask within 10 days",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Within 10 days of the plan sending the notice, or by the date the cut takes effect, whichever is later",
+   "cite": "42 CFR 438.420(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.420#p-438.420(a)",
+   "quote": "Timely files means files for continuation of benefits on or before the later of the following: (i) Within 10 calendar days of the MCO, PIHP, or PAHP sending the notice of adverse benefit determination. (ii) The intended effective date of the MCO's, PIHP's, or PAHP's proposed adverse benefit determination.",
+   "notes": "Applies only to reductions, suspensions or terminations of previously authorized services ordered by an authorized provider, where the authorization has not expired, and the appeal itself is timely ((b)). Providers cannot request continuation for you (438.402(c)(1)(ii)). If you lose, the plan may recover the cost of continued services per state policy ((d)). days/unit/from are null on purpose: this deadline applies only in this specific situation, so it must not be offered as the general appeal deadline."
+  },
+  {
+   "id": "mmc_continue_benefits_through_hearing",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "external",
+   "label": "Keep your services through the state fair hearing: ask within 10 days",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "Within 10 days after the plan sends its appeal decision, request both the fair hearing and continued benefits",
+   "cite": "42 CFR 438.420(c)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.420#p-438.420(c)(2)",
+   "quote": "The enrollee fails to request a state fair hearing and continuation of benefits within 10 calendar days after the MCO, PIHP, or PAHP sends the notice of an adverse resolution to the enrollee's appeal under § 438.408(d)(2).",
+   "notes": "Benefits continued during the plan appeal stop if you do not do this within 10 days ((c)). Separate from the 90-120 day deadline to request the hearing itself. days/unit/from are null on purpose: this deadline applies only in this specific situation, so it must not be offered as the general appeal deadline."
+  },
+  {
+   "id": "mmc_free_case_file",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "right",
+   "label": "Get your case file free, before the decision",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The plan must give you your case file, medical records and any new evidence, free and in time to respond",
+   "cite": "42 CFR 438.406(b)(5)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.406#p-438.406(b)(5)",
+   "quote": "Provide the enrollee and his or her representative the enrollee's case file, including medical records, other documents and records, and any new or additional evidence considered, relied upon, or generated by the MCO, PIHP or PAHP (or at the direction of the MCO, PIHP or PAHP) in connection with the appeal of the adverse benefit determination. This information must be provided free of charge and sufficiently in advance of the resolution timeframe for appeals as specified in § 438.408(b) and (c).",
+   "notes": ""
+  },
+  {
+   "id": "mmc_present_evidence",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "right",
+   "label": "Present evidence and testimony in person or in writing",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "You get a reasonable chance, in person and in writing, to present evidence and testimony and make arguments",
+   "cite": "42 CFR 438.406(b)(4)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.406#p-438.406(b)(4)",
+   "quote": "Provide the enrollee a reasonable opportunity, in person and in writing, to present evidence and testimony and make legal and factual arguments.",
+   "notes": "Decision-makers must be uninvolved in the earlier decision and, for medical-necessity or clinical issues, have appropriate clinical expertise (438.406(b)(2))."
+  },
+  {
+   "id": "mmc_denial_reasons_and_documents",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "right",
+   "label": "The denial must give reasons and offer free copies of documents",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The notice must explain the reasons and your right to free copies of all relevant documents, including medical necessity criteria",
+   "cite": "42 CFR 438.404(b)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.404#p-438.404(b)(2)",
+   "quote": "The reasons for the adverse benefit determination, including the right of the enrollee to be provided upon request and free of charge, reasonable access to and copies of all documents, records, and other information relevant to the enrollee's adverse benefit determination. Such information includes medical necessity criteria, and any processes, strategies, or evidentiary standards used in setting coverage limits.",
+   "notes": "The notice must also explain how to request continued benefits and expedited appeals (438.404(b)(5)-(6))."
+  },
+  {
+   "id": "medicaid_fair_hearing_request",
+   "plans": [
+    "medicaid"
+   ],
+   "kind": "appeal",
+   "label": "Ask for a state Medicaid fair hearing",
+   "days": 90,
+   "unit": "days",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "Up to 90 days from the date the notice was mailed; your state may set a shorter deadline",
+   "cite": "42 CFR 431.221(d)",
+   "url": "https://www.ecfr.gov/current/title-42/section-431.221#p-431.221(d)",
+   "quote": "The agency must allow the applicant or beneficiary a reasonable time, not to exceed 90 days from the date that notice of action is mailed, to request a hearings.",
+   "notes": "90 days is a federal MAXIMUM, not a minimum: states may allow less. Always check the deadline printed on the state's notice. Counts from the date the notice is mailed. (The word 'hearings' is as printed in the regulation.) Medicaid managed care enrollees use 438.408(f)(2) instead."
+  },
+  {
+   "id": "medicaid_keep_services_hearing_before_action",
+   "plans": [
+    "medicaid"
+   ],
+   "kind": "appeal",
+   "label": "Keep your services: request a hearing before the change takes effect",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "If you request a hearing before the date of action on your notice, services cannot be cut until the hearing decision",
+   "cite": "42 CFR 431.230(a)",
+   "url": "https://www.ecfr.gov/current/title-42/section-431.230#p-431.230(a)",
+   "quote": "If the agency sends the 10-day or 5-day notice as required under § 431.211 or § 431.214 of this subpart, and the beneficiary requests a hearing before the date of action, the agency may not terminate or reduce services until a decision is rendered after the hearing unless",
+   "notes": "Deadline is the 'date of action' printed on the notice (normally at least 10 days after mailing, 431.211). The agency may reinstate services if you request within 10 days after the date of action (431.231(a)). If you lose, the state may recover the cost ((b))."
+  },
+  {
+   "id": "medicaid_advance_notice_10d",
+   "plans": [
+    "medicaid",
+    "medicaid_managed_care"
+   ],
+   "kind": "right",
+   "label": "10 days' advance notice before Medicaid cuts services",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "The agency must send notice at least 10 days before reducing or ending your benefits (limited exceptions)",
+   "cite": "42 CFR 431.211",
+   "url": "https://www.ecfr.gov/current/title-42/section-431.211",
+   "quote": "The State or local agency must send a notice at least 10 days before the date of action, except as permitted under §§ 431.213 and 431.214.",
+   "notes": "Medicaid managed care plans must follow the same timing for terminations, suspensions or reductions (438.404(c)(1))."
+  },
+  {
+   "id": "medicaid_hearing_decision_90d",
+   "plans": [
+    "medicaid"
+   ],
+   "kind": "decision",
+   "label": "State must decide your fair hearing",
+   "days": 90,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "Ordinarily within 90 days after the agency receives your hearing request",
+   "cite": "42 CFR 431.244(f)",
+   "url": "https://www.ecfr.gov/current/title-42/section-431.244#p-431.244(f)",
+   "quote": "The agency must take final administrative action as follows: (1) Ordinarily, within 90 days from: (i) The date the enrollee filed an MCO, PIHP, or PAHP appeal, not including the number of days the enrollee took to subsequently file for a State fair hearing; or (ii) For all other fair hearings, the date the agency receives a request for a fair hearing in accordance with § 431.221(a)(1).",
+   "notes": "For managed care enrollees the 90 days run from the date the plan appeal was filed, excluding the days taken to request the hearing ((f)(1)(i)). Expedited hearings: 3 working days after the agency gets the plan's case file for managed care service denials ((f)(2)); see (f)(3) for fee-for-service. Delays allowed only for appellant requests or emergencies ((f)(4))."
+  },
+  {
+   "id": "medicaid_expedited_fair_hearing",
+   "plans": [
+    "medicaid",
+    "medicaid_managed_care"
+   ],
+   "kind": "right",
+   "label": "Ask for an expedited fair hearing",
+   "days": null,
+   "unit": null,
+   "from": null,
+   "track": "expedited",
+   "service": "any",
+   "basis": "The state must offer a faster hearing when the normal timeline could jeopardize your life, health or function",
+   "cite": "42 CFR 431.224(a)(1)",
+   "url": "https://www.ecfr.gov/current/title-42/section-431.224#p-431.224(a)(1)",
+   "quote": "The agency must establish and maintain an expedited fair hearing process for individuals to request an expedited fair hearing, if the agency determines that the time otherwise permitted for a hearing under § 431.244(f)(1) could jeopardize the individual's life, health or ability to attain, maintain, or regain maximum function.",
+   "notes": "Decision timeframes for expedited hearings are in 431.244(f)(2)-(3)."
+  },
+  {
+   "id": "fehb_carrier_reconsideration",
+   "plans": [
+    "fehb"
+   ],
+   "kind": "appeal",
+   "label": "Ask your FEHB plan to reconsider",
+   "days": 6,
+   "unit": "months",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "6 months from the date of the denial notice",
+   "cite": "5 CFR 890.105(b)(1)",
+   "url": "https://www.ecfr.gov/current/title-5/section-890.105#p-890.105(b)(1)",
+   "quote": "The covered individual has 6 months from the date of the notice to the covered individual that a claim (or a portion of a claim) was denied by the carrier in which to submit a written request for reconsideration to the carrier.",
+   "notes": "Calendar months from the DATE OF THE NOTICE. Must be in writing and give reasons in terms of the plan brochure ((c)(1)). May be extended if circumstances beyond your control prevented a timely request."
+  },
+  {
+   "id": "fehb_carrier_decision_30d",
+   "plans": [
+    "fehb"
+   ],
+   "kind": "decision",
+   "label": "FEHB plan must answer your reconsideration",
+   "days": 30,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "30 days after the plan receives your request",
+   "cite": "5 CFR 890.105(b)(2)",
+   "url": "https://www.ecfr.gov/current/title-5/section-890.105#p-890.105(b)(2)",
+   "quote": "The carrier has 30 days after the date of receipt of a timely-filed request for reconsideration to: (i) Affirm the denial in writing to the covered individual; (ii) Pay the bill or provide the service; or",
+   "notes": "Within 30 days the carrier must affirm in writing, pay/provide, or ask for more information ((b)(2)(iii)); if it asks, it has 30 days after receiving the information. Its affirmation must give specific and detailed reasons ((d)(1))."
+  },
+  {
+   "id": "fehb_opm_review_request",
+   "plans": [
+    "fehb"
+   ],
+   "kind": "external",
+   "label": "Ask OPM to review your FEHB denial",
+   "days": 90,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "90 days from the date of the plan's notice upholding the denial",
+   "cite": "5 CFR 890.105(e)(1)",
+   "url": "https://www.ecfr.gov/current/title-5/section-890.105#p-890.105(e)(1)",
+   "quote": "Such a request to OPM must be made: (i) Within 90 days after the date of the carrier's notice to the covered individual that the denial was affirmed;",
+   "notes": "Counts from the DATE of the carrier's notice. Include a copy of the denial and supporting documents ((d)(3)). OPM may extend if you were not told the limit or were prevented by circumstances beyond your control ((e)(1)(iii))."
+  },
+  {
+   "id": "fehb_opm_review_if_no_response",
+   "plans": [
+    "fehb"
+   ],
+   "kind": "external",
+   "label": "Plan didn't answer? Ask OPM to review",
+   "days": 120,
+   "unit": "days",
+   "from": null,
+   "track": "any",
+   "service": "any",
+   "basis": "120 days after the date you sent your timely reconsideration request, if the plan never responded",
+   "cite": "5 CFR 890.105(e)(1)(ii)",
+   "url": "https://www.ecfr.gov/current/title-5/section-890.105#p-890.105(e)(1)(ii)",
+   "quote": "If the carrier fails to respond to the covered individual as provided in paragraph (b)(2) of this section, within 120 days after the date of the covered individual's timely request for reconsideration by the carrier; or",
+   "notes": "Clock runs from the date of YOUR reconsideration request (not the date the plan received it). If the carrier asked for more information instead, the limit is 120 days after that request ((e)(1)(iii))."
+  },
+  {
+   "id": "fehb_opm_decision_90d",
+   "plans": [
+    "fehb"
+   ],
+   "kind": "decision",
+   "label": "OPM must decide or update you",
+   "days": 90,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "90 days after OPM receives your request: a decision or a status notice",
+   "cite": "5 CFR 890.105(e)(4)",
+   "url": "https://www.ecfr.gov/current/title-5/section-890.105#p-890.105(e)(4)",
+   "quote": "Within 90 days after receipt of the request for review, OPM will either: (i) Give a written notice of its decision to the covered individual and the carrier; or (ii) Notify the individual of the status of the review.",
+   "notes": "OPM may decide on the information it has if requested evidence is late. You must finish carrier reconsideration and OPM review before suing ((a)(1))."
+  },
+  {
+   "id": "tricare_reconsideration_request",
+   "plans": [
+    "tricare"
+   ],
+   "kind": "appeal",
+   "label": "Ask TRICARE to reconsider",
+   "days": 90,
+   "unit": "days",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "Mail within 90 days after the date of the denial notice",
+   "cite": "32 CFR 199.10(b)(1)(iii)",
+   "url": "https://www.ecfr.gov/current/title-32/section-199.10#p-199.10(b)(1)(iii)",
+   "quote": "The request must be mailed within 90 days after the date of the notice of initial determination.",
+   "notes": "Deemed filed on the POSTMARK date (or date received if no postmark) ((b)(1)(iv)). Must be in writing, state the matter in dispute and include a copy of the initial determination (e.g. EOB) ((b)(1)(i)). Medical-necessity (peer review organization) reconsiderations also use 90 days (32 CFR 199.15(h))."
+  },
+  {
+   "id": "tricare_reconsideration_decision_60d",
+   "plans": [
+    "tricare"
+   ],
+   "kind": "decision",
+   "label": "TRICARE contractor should decide your reconsideration",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "Normally within 60 days after the contractor receives your request",
+   "cite": "32 CFR 199.10(b)(3)",
+   "url": "https://www.ecfr.gov/current/title-32/section-199.10#p-199.10(b)(3)",
+   "quote": "OCHAMPUSEUR, the CHAMPUS contractor, or CHAMPUS peer review organization normally shall issue its reconsideration determination no later than 60 days from the date of receipt of the request for reconsideration by OCHAMPUSEUR, the CHAMPUS contractor, or the CHAMPUS peer review organization.",
+   "notes": "The regulation says 'normally' - a target, not a hard limit."
+  },
+  {
+   "id": "tricare_formal_review_request",
+   "plans": [
+    "tricare"
+   ],
+   "kind": "external",
+   "label": "Ask for TRICARE formal review",
+   "days": 60,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "Mail within 60 days after the date of the reconsideration decision",
+   "cite": "32 CFR 199.10(c)(1)(iii)",
+   "url": "https://www.ecfr.gov/current/title-32/section-199.10#p-199.10(c)(1)(iii)",
+   "quote": "The request shall be mailed within 60 days after the date of the notice of the reconsideration determination or OCHAMPUS initial determination being appealed.",
+   "notes": "Deemed filed on the postmark date ((c)(1)(iv)). Requires $50 or more in dispute ((b)(5)(i)). Peer review organization (medical necessity) reconsiderations skip formal review and go to hearing (199.15(i))."
+  },
+  {
+   "id": "tricare_hearing_request",
+   "plans": [
+    "tricare"
+   ],
+   "kind": "external",
+   "label": "Ask for a TRICARE hearing",
+   "days": 60,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "Mail within 60 days after the date of the formal review decision",
+   "cite": "32 CFR 199.10(d)(1)(iii)",
+   "url": "https://www.ecfr.gov/current/title-32/section-199.10#p-199.10(d)(1)(iii)",
+   "quote": "The request shall be mailed within 60 days after the date of the notice of the initial determination or formal review determination being appealed.",
+   "notes": "Deemed filed on the postmark date ((d)(1)(iv)). Requires $300 or more in dispute ((c)(5)(ii))."
+  }
+ ]
+}

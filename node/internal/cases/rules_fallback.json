@@ -1,0 +1,375 @@
+{
+ "version": "fallback",
+ "rules": [
+  {
+   "id": "group_internal_appeal",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "appeal",
+   "label": "File your appeal with the plan",
+   "days": 180,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "any",
+   "service": "any",
+   "basis": "180 days from when you got the denial",
+   "cite": "29 CFR 2560.503-1(h)(3)(i)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "group_decision_urgent",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Plan decides an urgent appeal",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after they get your appeal",
+   "cite": "29 CFR 2560.503-1(i)(2)(i)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "group_decision_pre",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Plan decides",
+   "days": 30,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "preservice",
+   "basis": "30 days after they get your appeal",
+   "cite": "29 CFR 2560.503-1(i)(2)(ii)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "group_decision_post",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "decision",
+   "label": "Plan decides",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "postservice",
+   "basis": "60 days after they get your appeal",
+   "cite": "29 CFR 2560.503-1(i)(2)(iii)",
+   "url": "https://www.ecfr.gov/current/title-29/section-2560.503-1",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "group_external",
+   "plans": [
+    "employer",
+    "government_employer",
+    "marketplace"
+   ],
+   "kind": "external",
+   "label": "Ask for an independent external review",
+   "days": 4,
+   "unit": "months",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "4 months from the final denial",
+   "cite": "45 CFR 147.136(d)",
+   "url": "https://www.ecfr.gov/current/title-45/section-147.136",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "ma_reconsideration",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "appeal",
+   "label": "Ask your plan to reconsider",
+   "days": 65,
+   "unit": "days",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "65 days from the date on your notice",
+   "cite": "42 CFR 422.582",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.582",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "ma_decision_pre",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "decision",
+   "label": "Plan decides",
+   "days": 30,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "preservice",
+   "basis": "30 days after they get your request",
+   "cite": "42 CFR 422.590",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "ma_decision_post",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "decision",
+   "label": "Plan decides",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "postservice",
+   "basis": "60 days after they get your request",
+   "cite": "42 CFR 422.590",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "ma_decision_fast",
+   "plans": [
+    "medicare_advantage"
+   ],
+   "kind": "decision",
+   "label": "Plan decides a fast appeal",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after they get your request",
+   "cite": "42 CFR 422.590",
+   "url": "https://www.ecfr.gov/current/title-42/section-422.590",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "pd_redetermination",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "appeal",
+   "label": "Ask your drug plan to reconsider",
+   "days": 65,
+   "unit": "days",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "65 days from the date on your notice",
+   "cite": "42 CFR 423.582",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.582",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "pd_decision",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "decision",
+   "label": "Plan decides",
+   "days": 7,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "7 days after they get your request",
+   "cite": "42 CFR 423.590",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.590",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "pd_decision_fast",
+   "plans": [
+    "medicare_part_d"
+   ],
+   "kind": "decision",
+   "label": "Plan decides a fast appeal",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after they get your request",
+   "cite": "42 CFR 423.590",
+   "url": "https://www.ecfr.gov/current/title-42/section-423.590",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "om_redetermination",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "appeal",
+   "label": "Ask Medicare for a redetermination",
+   "days": 120,
+   "unit": "days",
+   "from": "notice_received",
+   "track": "any",
+   "service": "any",
+   "basis": "120 days from when you receive the notice (Medicare assumes 5 days after its date)",
+   "cite": "42 CFR 405.942",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.942",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "om_decision",
+   "plans": [
+    "original_medicare"
+   ],
+   "kind": "decision",
+   "label": "Medicare decides",
+   "days": 60,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "any",
+   "service": "any",
+   "basis": "60 days after they get your request",
+   "cite": "42 CFR 405.950",
+   "url": "https://www.ecfr.gov/current/title-42/section-405.950",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "mmc_appeal",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "appeal",
+   "label": "Appeal to your Medicaid health plan",
+   "days": 60,
+   "unit": "days",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "60 days from the date on your notice",
+   "cite": "42 CFR 438.402(c)(2)(ii)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.402",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "mmc_decision",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "decision",
+   "label": "Plan decides",
+   "days": 30,
+   "unit": "days",
+   "from": "appeal_received",
+   "track": "standard",
+   "service": "any",
+   "basis": "30 days after they get your appeal",
+   "cite": "42 CFR 438.408(b)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.408",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "mmc_decision_fast",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "decision",
+   "label": "Plan decides a fast appeal",
+   "days": 72,
+   "unit": "hours",
+   "from": "appeal_received",
+   "track": "expedited",
+   "service": "any",
+   "basis": "72 hours after they get your appeal",
+   "cite": "42 CFR 438.408(b)(3)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.408",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "mmc_fair_hearing",
+   "plans": [
+    "medicaid_managed_care"
+   ],
+   "kind": "external",
+   "label": "Ask your state for a fair hearing",
+   "days": 120,
+   "unit": "days",
+   "from": "final_denial",
+   "track": "any",
+   "service": "any",
+   "basis": "120 days from the plan's appeal decision",
+   "cite": "42 CFR 438.408(f)(2)",
+   "url": "https://www.ecfr.gov/current/title-42/section-438.408",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "medicaid_fair_hearing",
+   "plans": [
+    "medicaid"
+   ],
+   "kind": "appeal",
+   "label": "Ask your state for a fair hearing",
+   "days": 90,
+   "unit": "days",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "up to 90 days from the date the notice was mailed (your state may allow less)",
+   "cite": "42 CFR 431.221(d)",
+   "url": "https://www.ecfr.gov/current/title-42/section-431.221",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  },
+  {
+   "id": "fehb_reconsider",
+   "plans": [
+    "fehb"
+   ],
+   "kind": "appeal",
+   "label": "Ask your plan to reconsider",
+   "days": 6,
+   "unit": "months",
+   "from": "notice_date",
+   "track": "any",
+   "service": "any",
+   "basis": "6 months from the date of the denial",
+   "cite": "5 CFR 890.105",
+   "url": "https://www.ecfr.gov/current/title-5/section-890.105",
+   "quote": "",
+   "notes": "fallback; replaced by rules.json"
+  }
+ ]
+}

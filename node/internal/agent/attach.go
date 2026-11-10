@@ -133,3 +133,30 @@ func (r *Runner) attachRecent(m *Message, tl *protolog.ThreadLog, trig *protolog
 		}
 	}
 }
+
+// File is a document's bytes, sent to a model alongside a message.
+type File struct {
+	Name string
+	Type string
+	Data []byte
+}
+
+// UserMessage is a user turn that carries files as parts: images as images,
+// PDFs as files, and text as labelled text. Callers outside the agent use it
+// to put a document in front of a model without going through a thread.
+func UserMessage(text string, files ...File) Message {
+	m := Message{Role: "user", Content: text}
+	for _, f := range files {
+		switch {
+		case strings.HasPrefix(f.Type, "image/"):
+			m.parts = append(m.parts, part{Type: "text", Text: "Attached: " + f.Name},
+				part{Type: "image_url", ImageURL: map[string]any{"url": "data:" + f.Type + ";base64," + base64.StdEncoding.EncodeToString(f.Data)}})
+		case f.Type == "application/pdf":
+			m.parts = append(m.parts, part{Type: "file", File: map[string]any{"filename": f.Name,
+				"file_data": "data:application/pdf;base64," + base64.StdEncoding.EncodeToString(f.Data)}})
+		default:
+			m.parts = append(m.parts, part{Type: "text", Text: "Attached: " + f.Name + "\n" + string(f.Data)})
+		}
+	}
+	return m
+}
