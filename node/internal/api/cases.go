@@ -923,6 +923,12 @@ func (h *Host) remindOnce() {
 	if h.Mail == nil {
 		return
 	}
+	// One bad case must not take the whole host down.
+	defer func() {
+		if r := recover(); r != nil {
+			h.logf("cases: reminders: %v", r)
+		}
+	}()
 	entries, err := os.ReadDir(h.Root)
 	if err != nil {
 		return
