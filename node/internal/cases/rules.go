@@ -555,8 +555,15 @@ func Refresh(c *Case, now time.Time) {
 		ApplyAnswer(c, "plan_source", v)
 	}
 	c.Plan.Label = PlanLabel(c.Plan.Type)
-	c.Denial.Label = CategoryLabel(c.Denial.Category)
+	c.Denial.Label = ""
+	if c.Denial.Category != "" {
+		c.Denial.Label = CategoryLabel(c.Denial.Category)
+	}
 	c.Questions = Questions(c)
+	if c.Status == StatusReading && c.Denial.Category == "" {
+		// Nothing read yet: don't ask what the letter may already say.
+		c.Questions = []Question{}
+	}
 	c.Deadlines = Deadlines(c, now)
 	c.NextDeadline = Next(c.Deadlines)
 	c.Steps = Steps(c)

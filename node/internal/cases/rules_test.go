@@ -62,3 +62,17 @@ func TestDeadlinesEveryPlan(t *testing.T) {
 		}
 	}
 }
+
+func TestNoQuestionsBeforeFirstRead(t *testing.T) {
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+	c := &Case{Status: StatusReading, Answers: map[string]string{}, StepsDone: map[string]bool{}}
+	Refresh(c, now)
+	if len(c.Questions) != 0 || c.Denial.Label != "" {
+		t.Fatalf("asked before reading: %+v, label %q", c.Questions, c.Denial.Label)
+	}
+	c.Status = StatusReady
+	Refresh(c, now)
+	if len(c.Questions) == 0 {
+		t.Fatalf("after reading, an unsure plan and no notice date should be asked")
+	}
+}
