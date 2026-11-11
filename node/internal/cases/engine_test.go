@@ -140,3 +140,21 @@ func TestMedicareAdvantageDeadline(t *testing.T) {
 		t.Fatalf("stated deadline should win: %+v", c.NextDeadline)
 	}
 }
+
+func TestLoadedCaseHasMaps(t *testing.T) {
+	dir := t.TempDir()
+	st := For(dir)
+	c := &Case{ID: NewID()}
+	if err := st.Put(c); err != nil {
+		t.Fatal(err)
+	}
+	// Sending before any step is ticked must not hit a nil map.
+	if _, err := st.Update(c.ID, func(c *Case) error {
+		c.StepsDone["send"] = true
+		c.Answers["story"] = "x"
+		c.Reminded["a:b:0"] = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -418,6 +418,16 @@ func (s *Store) get(id string) (*Case, error) {
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return nil, err
 	}
+	// Empty maps are left out of case.json; handlers write into them.
+	if c.Answers == nil {
+		c.Answers = map[string]string{}
+	}
+	if c.StepsDone == nil {
+		c.StepsDone = map[string]bool{}
+	}
+	if c.Reminded == nil {
+		c.Reminded = map[string]bool{}
+	}
 	return &c, nil
 }
 
