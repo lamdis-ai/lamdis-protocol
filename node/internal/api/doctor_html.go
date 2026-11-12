@@ -103,4 +103,4 @@ up.onclick=function(){
 }
 
 // markSVG is the Lamdis mark, small.
-const markSVG = `<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor"/><rect x="3" y="11" width="7" height="7" rx="1.5" fill="currentColor" opacity=".8"/><rect x="11" y="11" width="7" height="7" rx="1.5" fill="currentColor" opacity=".6"/><rect x="3" y="19" width="15" height="2.5" rx="1.25" fill="currentColor" opacity=".5"/></svg>`
+const markSVG = `<svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7.2" fill="#FFB22E"/><g stroke="#1A1814" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 5.6H16.6L20.6 9.6V23.4Q20.6 24.6 19.4 24.6H8.6Q7.4 24.6 7.4 23.4V6.8Q7.4 5.6 8.6 5.6Z" fill="#fff"/><path d="M16.6 5.6V8.6Q16.6 9.6 17.6 9.6H20.6" fill="none"/><path d="M10.4 13.4H15.6M10.4 17H16.8" fill="none"/><circle cx="21.4" cy="22.2" r="5.6" fill="#1A1814"/><path d="M18.9 22.3L20.6 24L23.9 20.6" fill="none" stroke="#fff" stroke-width="1.8"/></g></svg>`
