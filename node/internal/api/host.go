@@ -492,7 +492,8 @@ func (h *Host) resolve(r *http.Request) (*Account, error) {
 	}
 	claims, err := h.Cognito.Verify(tok)
 	if err != nil {
-		return nil, err
+		// Usually a session that ran out; the page drops it and starts over.
+		return nil, fmt.Errorf("sign in again")
 	}
 	if !claims.EmailVerified {
 		return nil, fmt.Errorf("confirm your email address first")

@@ -155,17 +155,28 @@ function start(){
   return fetch("/app/api/start",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})
     .then(function(r){return r.json()}).then(function(j){if(!j.token)throw new Error(j.error||"Could not start.");setToken("lamdis.guest",j.token);return j.token});
 }
-function api(path,opts){
+function api(path,opts,retried){
   opts=opts||{};
+  var used="";
   return start().then(function(tok){
+    used=tok;
     var h={"Authorization":"Bearer "+tok};
     if(opts.json!==undefined){h["Content-Type"]="application/json";opts.body=JSON.stringify(opts.json)}
     return fetch("/app/api/"+path,{method:opts.method||(opts.body?"POST":"GET"),headers:h,body:opts.body});
   }).then(function(r){
-    if(r.status===401){try{localStorage.removeItem("lamdis.guest");localStorage.removeItem("lamdis.session")}catch(e){}}
+    if(r.status===401&&!retried){
+      // Drop only the token that failed (an old sign-in must not take a visitor's cases with it), then try once more.
+      var wasSession=false;
+      try{
+        if(localStorage.getItem("lamdis.session")===used){localStorage.removeItem("lamdis.session");wasSession=true}
+        else if(localStorage.getItem("lamdis.guest")===used){localStorage.removeItem("lamdis.guest")}
+      }catch(e){}
+      if(wasSession)state.signedOut=true;
+      return api(path,opts,true);
+    }
     var ct=r.headers.get("Content-Type")||"";
     if(ct.indexOf("json")<0)return r.text().then(function(t){if(!r.ok)throw new Error("Something went wrong.");return t});
-    return r.json().then(function(j){if(!r.ok||j.error)throw new Error(j.error||"Something went wrong.");return j});
+    return r.json().then(function(j){if(!r.ok||j.error)throw new Error(r.status===401?"Please reload the page.":(j.error||"Something went wrong."));return j});
   });
 }
 
@@ -212,12 +223,14 @@ function renderStart(showList,error){
   }
   var heading=(showList&&state.cases&&state.cases.length)?'<h2 style="margin-top:28px">Start a new case</h2>':
     '<h1>Your insurance said no. Let’s appeal.</h1><p class="lede">Add the denial letter. Lamdis finds your deadline, explains the decision in plain words, and drafts an appeal in which every fact is checked against your own documents. Free.</p>';
-  view.innerHTML=(error?errBox(error):"")+list+heading+
+  var expired=state.signedOut?'<div class="card" role="status"><b>Your sign-in ran out.</b> <span class="muted">Sign in again to see the cases you saved.</span> <button class="btn ghost" type="button" id="resign">Sign in</button></div>':"";
+  view.innerHTML=(error?errBox(error):"")+expired+list+heading+
     '<div class="drop" id="drop"><div class="big">Add your denial letter</div><p class="muted small">Photos of each page, or the PDF. All pages, if there are several.</p>'+
     '<div class="row" style="justify-content:center;margin-top:12px"><label class="btn" for="cam">Take photos</label><label class="btn ghost" for="pick">Choose files</label></div>'+
     '<input class="sr" type="file" id="cam" accept="image/*" capture="environment" multiple><input class="sr" type="file" id="pick" accept="application/pdf,image/*" multiple>'+
     '<div class="thumbs" id="thumbs"></div><div id="go" style="margin-top:16px"></div></div>'+
     '<div class="trust"><div><b>Private</b>Your documents are used only for your case. Never sold, never used for ads.</div><div><b>Checked</b>Every fact in your letter is matched, word for word, to your documents.</div><div><b>Yours to delete</b>Delete a case, or everything, any time.</div></div>';
+  var rs=document.getElementById("resign");if(rs)rs.onclick=function(){document.getElementById("signin").click()};
   var drop=document.getElementById("drop");
   ["cam","pick"].forEach(function(id){document.getElementById(id).onchange=function(e){addPages(e.target.files);e.target.value=""}});
   drop.ondragover=function(e){e.preventDefault();drop.classList.add("over")};
